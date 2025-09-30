@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VR Data Collector</title>
+  <link rel="stylesheet" href="src/styles/main.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <h1>Variable Resolution Data Collector</h1>
+      <div class="header-actions">
+        <button id="settingsBtn" class="btn btn-icon" title="Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M12 1v6m0 6v6m4.22-10.22l1.42-1.42m-1.42 10.88l1.42 1.42M20 12h-6m-6 0H2m10.22-4.22L10.8 6.36m1.42 10.88l-1.42 1.42"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <nav class="nav">
+          <button class="nav-item active" data-view="youtube">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+            </svg>
+            YouTube
+          </button>
+          <button class="nav-item" data-view="twitter" disabled>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/>
+            </svg>
+            Twitter
+          </button>
+          <button class="nav-item" data-view="reddit" disabled>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/>
+            </svg>
+            Reddit
+          </button>
+          <button class="nav-item" data-view="collections">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+            </svg>
+            Collections
+          </button>
+        </nav>
+      </aside>
+
+      <!-- Content Area -->
+      <section class="content">
+        <!-- YouTube View -->
+        <div id="youtubeView" class="view active">
+          <div class="search-section">
+            <h2>YouTube Data Collection</h2>
+            <div class="search-form">
+              <div class="form-group">
+                <label for="searchTerm">Search Term</label>
+                <input type="text" id="searchTerm" placeholder="e.g., ADHD, mental health, climate change" />
+              </div>
+              
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="maxResults">Max Videos</label>
+                  <input type="number" id="maxResults" min="1" max="500" value="50" />
+                </div>
+                
+                <div class="form-group">
+                  <label for="dateRange">Date Range</label>
+                  <select id="dateRange">
+                    <option value="all">All Time</option>
+                    <option value="today">Today</option>
+                    <option value="week">This Week</option>
+                    <option value="month" selected>This Month</option>
+                    <option value="year">This Year</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="orderBy">Order By</label>
+                <select id="orderBy">
+                  <option value="relevance">Relevance</option>
+                  <option value="date">Upload Date</option>
+                  <option value="viewCount" selected>View Count</option>
+                  <option value="rating">Rating</option>
+                </select>
+              </div>
+
+              <div class="form-group checkbox-group">
+                <label>
+                  <input type="checkbox" id="includeComments" checked />
+                  <span>Include Comments</span>
+                </label>
+                <input type="number" id="maxComments" min="1" max="1000" value="100" placeholder="Max comments" />
+              </div>
+
+              <div class="form-group checkbox-group">
+                <label>
+                  <input type="checkbox" id="downloadVideo" />
+                  <span>Download Videos</span>
+                </label>
+                <select id="videoQuality">
+                  <option value="lowest">Lowest Quality</option>
+                  <option value="360p">360p</option>
+                  <option value="720p" selected>720p</option>
+                  <option value="1080p">1080p</option>
+                  <option value="highest">Highest Available</option>
+                </select>
+              </div>
+
+              <button id="searchBtn" class="btn btn-primary">
+                Search YouTube
+              </button>
+            </div>
+          </div>
+
+          <!-- Search Results -->
+          <div id="searchResults" class="search-results" style="display: none;">
+            <h3>Search Results</h3>
+            <div class="results-actions">
+              <button id="selectAllBtn" class="btn btn-sm">Select All</button>
+              <button id="deselectAllBtn" class="btn btn-sm">Deselect All</button>
+              <button id="startCollectionBtn" class="btn btn-primary" disabled>
+                Start Collection (<span id="selectedCount">0</span> selected)
+              </button>
+            </div>
+            <div id="resultsList" class="results-list"></div>
+          </div>
+
+          <!-- Collection Progress -->
+          <div id="collectionProgress" class="collection-progress" style="display: none;">
+            <h3>Collection Progress</h3>
+            <div class="progress-stats">
+              <div class="stat">
+                <span class="label">Status:</span>
+                <span id="collectionStatus" class="value">Initializing...</span>
+              </div>
+              <div class="stat">
+                <span class="label">Progress:</span>
+                <span id="progressText" class="value">0 / 0</span>
+              </div>
+              <div class="stat">
+                <span class="label">Time Elapsed:</span>
+                <span id="timeElapsed" class="value">00:00</span>
+              </div>
+            </div>
+            <div class="progress-bar">
+              <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+            </div>
+            <div class="progress-actions">
+              <button id="pauseBtn" class="btn">Pause</button>
+              <button id="cancelBtn" class="btn btn-danger">Cancel</button>
+            </div>
+            <div id="collectionLog" class="collection-log"></div>
+          </div>
+        </div>
+
+        <!-- Collections View -->
+        <div id="collectionsView" class="view">
+          <h2>Saved Collections</h2>
+          <div id="collectionsList" class="collections-list"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal" style="display: none;">
+      <div class="modal-content">
+        <h2>Settings</h2>
+        <div class="settings-form">
+          <div class="form-group">
+            <label for="youtubeApiKey">YouTube API Key</label>
+            <input type="password" id="youtubeApiKey" placeholder="Enter your YouTube Data API v3 key" />
+            <small>Get your API key from <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank">Google Cloud Console</a></small>
+          </div>
+          
+          <div class="form-group">
+            <label for="outputDir">Output Directory</label>
+            <div class="input-group">
+              <input type="text" id="outputDir" readonly placeholder="Select output directory" />
+              <button id="selectDirBtn" class="btn">Browse</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="supabaseUrl">Supabase URL (Optional)</label>
+            <input type="text" id="supabaseUrl" placeholder="https://your-project.supabase.co" />
+          </div>
+
+          <div class="form-group">
+            <label for="supabaseKey">Supabase Anon Key (Optional)</label>
+            <input type="password" id="supabaseKey" placeholder="Your Supabase anonymous key" />
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button id="saveSettingsBtn" class="btn btn-primary">Save Settings</button>
+          <button id="closeSettingsBtn" class="btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="src/renderer.js"></script>
+</body>
+</html>

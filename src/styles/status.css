@@ -1,0 +1,195 @@
+/* Status indicators and tool availability */
+
+.transcription-status {
+  display: block;
+  margin-top: 0.25rem;
+  font-weight: 500;
+}
+
+.transcription-status.available {
+  color: var(--success);
+}
+
+.transcription-status.unavailable {
+  color: var(--warning);
+}
+
+.transcription-status.checking {
+  color: var(--text-secondary);
+}
+
+.gpu-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  margin-top: 1rem;
+}
+
+.gpu-status .status-icon {
+  font-size: 20px;
+}
+
+.gpu-status.gpu-available .status-icon {
+  color: var(--success);
+}
+
+.gpu-status.cpu-only .status-icon {
+  color: var(--warning);
+}
+
+/* Tool status panel */
+.tool-status-panel {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  max-width: 300px;
+  z-index: 100;
+  transition: all 0.3s;
+}
+
+.tool-status-panel.collapsed {
+  padding: 0.5rem;
+  cursor: pointer;
+}
+
+.tool-status-panel h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tool-status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tool-status-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 13px;
+}
+
+.tool-status-item .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tool-status-item.available .status-dot {
+  background: var(--success);
+}
+
+.tool-status-item.unavailable .status-dot {
+  background: var(--danger);
+}
+
+.tool-status-item.optional .status-dot {
+  background: var(--warning);
+}
+
+/* Download method indicator */
+.download-method {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  font-size: 11px;
+  margin-left: 0.5rem;
+}
+
+.download-method.yt-dlp {
+  background: var(--success);
+  color: white;
+}
+
+.download-method.youtube-dl {
+  background: var(--warning);
+  color: white;
+}
+
+.download-method.api-only {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+/* Capability badges */
+.capability-badges {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.capability-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.capability-badge.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.capability-badge .badge-icon {
+  font-size: 14px;
+}
+
+/* Settings recommendations */
+.settings-recommendations {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.settings-recommendations h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 14px;
+  color: var(--warning);
+}
+
+.recommendation-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.recommendation-list li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.recommendation-list li:last-child {
+  border-bottom: none;
+}
+
+.recommendation-list code {
+  background: var(--bg-secondary);
+  padding: 0.125rem 0.25rem;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 12px;
+}

@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+
+# User data & settings (contains API keys!)
+*.db
+*.sqlite
+*.sqlite3
+collections.db
+settings.json
+
+# Downloaded media
+downloads/
+media/
+videos/
+collections/
+output/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor directories
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build outputs
+dist/
+build/
+out/
+
+# Logs
+logs/
+*.log
+
+# Electron userData (contains encrypted API keys)
+electron-userData/

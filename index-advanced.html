@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: file:; media-src 'self' file:; connect-src 'self' https:">
+  <title>VR Data Collector</title>
+  <link rel="stylesheet" href="src/styles/main.css">
+  <link rel="stylesheet" href="src/styles/advanced.css">
+  <link rel="stylesheet" href="src/styles/status.css">
+    <link rel="stylesheet" href="src/styles/tool-installer.css">
+    <link rel="stylesheet" href="src/styles/collections.css">
+    <link rel="stylesheet" href="src/styles/collection-viewer.css">
+    <link rel="stylesheet" href="src/styles/rating-projects.css">
+  </head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <h1>Variable Resolution Data Collector</h1>
+      <div class="header-actions">
+        <button id="openOutputHeaderBtn" class="btn btn-icon" title="Open output folder">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"></path>
+          </svg>
+        </button>
+        <button id="settingsBtn" class="btn btn-icon" title="Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M12 1v6m0 6v6m4.22-10.22l1.42-1.42m-1.42 10.88l1.42 1.42M20 12h-6m-6 0H2m10.22-4.22L10.8 6.36m1.42 10.88l-1.42 1.42"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <nav class="nav">
+          <button class="nav-item active" data-view="youtube">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+            </svg>
+            YouTube
+          </button>
+          <button class="nav-item" data-view="collections">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+            </svg>
+            Collections
+          </button>
+          <button class="nav-item" data-view="ai-analysis">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+              <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+            AI Analysis
+          </button>
+          <button class="nav-item" data-view="export">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Export
+          </button>
+        </nav>
+      </aside>
+
+      <!-- Content Area -->
+      <section class="content">
+        <!-- YouTube View -->
+        <div id="youtubeView" class="view active">
+          <!-- Tab Navigation -->
+          <div class="tabs">
+            <button class="tab-btn active" data-tab="basic">Basic Search</button>
+            <button class="tab-btn" data-tab="advanced">Advanced Options</button>
+            <button class="tab-btn" data-tab="extraction">Data Extraction</button>
+          </div>
+
+          <!-- Basic Search Tab -->
+          <div id="basicTab" class="tab-content active">
+            <div class="search-section">
+              <h2>YouTube Data Collection</h2>
+              <div class="search-form">
+                <div class="form-group">
+                  <label for="searchTerm">Search Term</label>
+                  <input type="text" id="searchTerm" placeholder="e.g., ADHD, mental health, climate change" />
+                  <small>Enter keywords to search for YouTube videos</small>
+                </div>
+                
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="maxResults">Max Videos</label>
+                    <input type="number" id="maxResults" min="1" max="500" value="50" />
+                    <small>Number of videos to search for</small>
+                  </div>
+                  
+                  <div class="form-group">
+                    <label for="dateRange">Date Range</label>
+                    <select id="dateRange">
+                      <option value="all">All Time</option>
+                      <option value="today">Today</option>
+                      <option value="week">This Week</option>
+                      <option value="month" selected>This Month</option>
+                      <option value="year">This Year</option>
+                      <option value="custom">Custom Range</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="orderBy">Order By</label>
+                  <select id="orderBy">
+                    <option value="relevance">Relevance</option>
+                    <option value="date">Upload Date</option>
+                    <option value="viewCount" selected>View Count</option>
+                    <option value="rating">Rating</option>
+                    <option value="title">Title (A-Z)</option>
+                  </select>
+                  <small>How to sort search results</small>
+                </div>
+
+                <button id="searchBtn" class="btn btn-primary">
+                  Search YouTube
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Advanced Options Tab -->
+          <div id="advancedTab" class="tab-content">
+            <div class="advanced-section">
+              <h2>Advanced Search Options</h2>
+              
+              <div class="option-group">
+                <h3>Video Filters</h3>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="videoDuration">Video Duration</label>
+                    <select id="videoDuration">
+                      <option value="any">Any Duration</option>
+                      <option value="short">< 4 minutes</option>
+                      <option value="medium">4-20 minutes</option>
+                      <option value="long">> 20 minutes</option>
+                    </select>
+                  </div>
+                  
+                  <div class="form-group">
+                    <label for="videoDefinition">Video Quality</label>
+                    <select id="videoDefinition">
+                      <option value="any">Any Quality</option>
+                      <option value="high">HD Only</option>
+                      <option value="standard">Standard</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="minViews">Minimum Views</label>
+                    <input type="number" id="minViews" placeholder="e.g., 10000" />
+                  </div>
+                  
+                  <div class="form-group">
+                    <label for="maxViews">Maximum Views</label>
+                    <input type="number" id="maxViews" placeholder="e.g., 1000000" />
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="videoLanguage">Video Language</label>
+                  <select id="videoLanguage">
+                    <option value="">Any Language</option>
+                    <option value="en" selected>English</option>
+                    <option value="es">Spanish</option>
+                    <option value="fr">French</option>
+                    <option value="de">German</option>
+                    <option value="ja">Japanese</option>
+                    <option value="ko">Korean</option>
+                    <option value="zh">Chinese</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label for="channelType">Channel Type</label>
+                  <select id="channelType">
+                    <option value="any">Any Channel</option>
+                    <option value="show">TV Shows</option>
+                    <option value="movie">Movies</option>
+                  </select>
+                </div>
+
+                <div class="form-group checkbox-group">
+                  <label>
+                    <input type="checkbox" id="embeddable" />
+                    <span>Embeddable videos only</span>
+                  </label>
+                  <small>Videos that can be played outside YouTube</small>
+                </div>
+
+                <div class="form-group checkbox-group">
+                  <label>
+                    <input type="checkbox" id="syndicated" checked />
+                    <span>Include syndicated videos</span>
+                  </label>
+                  <small>Videos that can be played outside youtube.com</small>
+                </div>
+              </div>
+
+              <div class="option-group">
+                <h3>API Configuration</h3>
+                <div class="form-group">
+                  <label for="apiQuotaLimit">API Quota Limit</label>
+                  <input type="number" id="apiQuotaLimit" value="1000" min="1" max="10000" />
+                  <small>Stop collection when this many API units are used</small>
+                </div>
+
+                <div class="form-group">
+                  <label for="rateLimitDelay">Rate Limit Delay (ms)</label>
+                  <input type="number" id="rateLimitDelay" value="500" min="0" max="5000" />
+                  <small>Delay between API requests to avoid rate limits</small>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Data Extraction Tab -->
+          <div id="extractionTab" class="tab-content">
+            <div class="extraction-section">
+              <h2>Data Extraction Settings</h2>
+              
+              <div class="option-group">
+                <h3>Video Metadata</h3>
+                <div class="checkbox-list">
+                  <label class="checkbox-item">
+                    <input type="checkbox" id="extractTitle" checked />
+                    <span>Title</span>
+                  </label>
+                  <label class="checkbox-item">
+                    <input type="checkbox" id="extractDescription" checked />
+                    <span>Full Description</span>
+                  </label>
+                  <label class="checkbox-item">
+                    <input type="checkbox" id="extractTags" checked />
+                    <span>Tags</span>
+                  </label>
+                  <label class="checkbox-item">
+                    <input type="checkbox" id="extractThumbnails" checked />
+                    <span>Thumbnails (all resolutions)</span>
+                  </label>
+                  <label class="checkbox-item">
+                    <input type="checkbox" id="extractCaptions" />
+                    <span>Closed Captions/Subtitles</span>
+                  </label>
+                  <label class="checkbox-item">
+                    <input type="checkbox" id="extractStatistics" checked />
+                    <span>Statistics (views, likes, etc.)</span>
+                  </label>
+                  <label class="checkbox-item">
+                    <input type="checkbox" id="extractPublishDate" checked />
+                    <span>Publish Date & Time</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="option-group">
+                <h3>Channel Information</h3>
+                <div class="checkbox-list">
+                  <label class="checkbox-item">
+                    <input type="checkbox" id="extractChannelTitle" checked />
+                    <span>Channel Name</span>
+                  </label>
+                  <label class="checkbox-item">
+                    <input type="checkbox" id="extractChannelId" checked />
+                    <span>Channel ID</span>
+                  </label>
+                  <label class="checkbox-item">
+                    <input type="checkbox" id="extractChannelStats" />
+                    <span>Channel Statistics</span>
+                  </label>
+                  <label class="checkbox-item">
+                    <input type="checkbox" id="extractChannelDescription" />
+                    <span>Channel Description</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="option-group">
+                <h3>Comment Settings</h3>
+                <div class="form-group checkbox-group">
+                  <label>
+                    <input type="checkbox" id="includeComments" checked />
+                    <span>Extract Comments</span>
+                  </label>
+                </div>
+                
+                <div id="commentOptions" class="sub-options">
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label for="maxComments">Max Comments per Video</label>
+                      <input type="number" id="maxComments" min="1" max="10000" value="100" />
+                    </div>
+                    
+                    <div class="form-group">
+                      <label for="commentSort">Comment Sort Order</label>
+                      <select id="commentSort">
+                        <option value="relevance">Relevance</option>
+                        <option value="time">Newest First</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="minCommentLikes">Min Comment Likes</label>
+                    <input type="number" id="minCommentLikes" placeholder="0" value="0" />
+                    <small>Only collect comments with at least this many likes</small>
+                  </div>
+
+                  <div class="checkbox-list">
+                    <label class="checkbox-item">
+                      <input type="checkbox" id="includeReplies" />
+                      <span>Include Reply Threads</span>
+                    </label>
+                    <label class="checkbox-item">
+                      <input type="checkbox" id="commentAuthorChannelId" checked />
+                      <span>Comment Author Channel ID</span>
+                    </label>
+                    <label class="checkbox-item">
+                      <input type="checkbox" id="commentTimestamps" checked />
+                      <span>Comment Timestamps</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="option-group">
+                <h3>Video File Download</h3>
+                <div class="form-group checkbox-group">
+                  <label>
+                    <input type="checkbox" id="downloadVideo" />
+                    <span>Download Video Files</span>
+                  </label>
+                </div>
+                
+                <div id="downloadOptions" class="sub-options" style="display: none;">
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label for="videoQuality">Video Quality</label>
+                      <select id="videoQuality">
+                        <option value="lowest">Lowest Quality (fast)</option>
+                        <option value="360p">360p</option>
+                        <option value="480p" selected>480p</option>
+                        <option value="720p">720p HD</option>
+                        <option value="1080p">1080p Full HD</option>
+                        <option value="highest">Highest Available</option>
+                      </select>
+                    </div>
+                    
+                    <div class="form-group">
+                      <label for="videoFormat">Video Format</label>
+                      <select id="videoFormat">
+                        <option value="mp4" selected>MP4</option>
+                        <option value="webm">WebM</option>
+                        <option value="any">Best Available</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="maxFileSize">Max File Size (MB)</label>
+                    <input type="number" id="maxFileSize" value="500" min="10" max="5000" />
+                    <small>Skip videos larger than this size</small>
+                  </div>
+
+                  <div class="checkbox-list">
+                    <label class="checkbox-item">
+                      <input type="checkbox" id="extractAudioOnly" />
+                      <span>Extract Audio Only</span>
+                    </label>
+                    <label class="checkbox-item">
+                      <input type="checkbox" id="downloadThumbnail" checked />
+                      <span>Download Thumbnail Image</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="option-group">
+                <h3>Processing Options</h3>
+                <div class="form-group">
+                  <label for="textProcessing">Text Processing</label>
+                  <select id="textProcessing">
+                    <option value="none">No Processing</option>
+                    <option value="clean">Clean Text (remove emojis, links)</option>
+                    <option value="sentiment">Include Sentiment Analysis</option>
+                  </select>
+                </div>
+
+                <div class="form-group checkbox-group">
+                  <label>
+                    <input type="checkbox" id="skipDuplicates" checked />
+                    <span>Skip duplicate videos</span>
+                  </label>
+                  <small>Based on video ID</small>
+                </div>
+
+                <div class="form-group checkbox-group">
+                  <label>
+                    <input type="checkbox" id="continueOnError" checked />
+                    <span>Continue on errors</span>
+                  </label>
+                  <small>Don't stop collection if one video fails</small>
+                </div>
+              </div>
+
+              <div class="option-group">
+                <h3>Transcription Settings (Optional)</h3>
+                <div class="form-group checkbox-group">
+                  <label>
+                    <input type="checkbox" id="enableTranscription" />
+                    <span>Enable Whisper Transcription</span>
+                  </label>
+                  <small class="transcription-status" id="transcriptionStatus">Checking availability...</small>
+                </div>
+                
+                <div id="transcriptionOptions" class="sub-options" style="display: none;">
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label for="whisperModel">Whisper Model</label>
+                      <select id="whisperModel">
+                        <option value="tiny">Tiny (39M, fastest)</option>
+                        <option value="base" selected>Base (74M, balanced)</option>
+                        <option value="small">Small (244M, better)</option>
+                        <option value="medium">Medium (769M, good)</option>
+                        <option value="large">Large (1550M, best)</option>
+                      </select>
+                    </div>
+                    
+                    <div class="form-group">
+                      <label for="whisperDevice">Processing Device</label>
+                      <select id="whisperDevice">
+                        <option value="auto" selected>Auto-detect</option>
+                        <option value="cuda">NVIDIA GPU (CUDA)</option>
+                        <option value="mps">Apple Silicon (Metal)</option>
+                        <option value="cpu">CPU Only</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="whisperLanguage">Language</label>
+                    <select id="whisperLanguage">
+                      <option value="auto">Auto-detect</option>
+                      <option value="en" selected>English</option>
+                      <option value="es">Spanish</option>
+                      <option value="fr">French</option>
+                      <option value="de">German</option>
+                      <option value="ja">Japanese</option>
+                      <option value="ko">Korean</option>
+                      <option value="zh">Chinese</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group checkbox-group">
+                    <label>
+                      <input type="checkbox" id="whisperTimestamps" checked />
+                      <span>Include word-level timestamps</span>
+                    </label>
+                  </div>
+                  
+                  <div class="form-group checkbox-group">
+                    <label>
+                      <input type="checkbox" id="enableVideoChunking" checked />
+                      <span>Create video chunks based on transcription segments</span>
+                    </label>
+                    <small>Splits videos into smaller files matching transcript segments (requires more storage)</small>
+                  </div>
+
+                  <div class="gpu-status" id="gpuStatus">
+                    <span class="status-icon">🖥️</span>
+                    <span class="status-text">GPU Status: Checking...</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="save-preset">
+                <button id="savePresetBtn" class="btn">Save as Preset</button>
+                <select id="loadPreset">
+                  <option value="">Load Preset...</option>
+                  <option value="minimal">Minimal (Titles Only)</option>
+                  <option value="metadata">Metadata Only</option>
+                  <option value="full">Full Collection</option>
+                  <option value="research">Research Grade</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Search Results -->
+          <div id="searchResults" class="search-results" style="display: none;">
+            <h3>Search Results</h3>
+            <div class="results-header">
+              <div class="results-actions">
+                <button id="selectAllBtn" class="btn btn-sm">Select All</button>
+                <button id="deselectAllBtn" class="btn btn-sm">Deselect All</button>
+                <select id="bulkAction" class="bulk-select">
+                  <option value="">Bulk Actions...</option>
+                  <option value="select-hd">Select HD Only</option>
+                  <option value="select-popular">Select Popular (>100k views)</option>
+                  <option value="select-recent">Select Recent (< 1 month)</option>
+                </select>
+              </div>
+              <div class="results-summary">
+                <span id="resultsCount">0 videos found</span>
+                <button id="startCollectionBtn" class="btn btn-primary" disabled>
+                  Start Collection (<span id="selectedCount">0</span> selected)
+                </button>
+              </div>
+            </div>
+            <div id="resultsList" class="results-list"></div>
+          </div>
+
+          <!-- Collection Progress -->
+          <div id="collectionProgress" class="collection-progress" style="display: none;">
+            <h3>Collection Progress</h3>
+            <div class="progress-stats">
+              <div class="stat">
+                <span class="label">Status:</span>
+                <span id="collectionStatus" class="value">Initializing...</span>
+              </div>
+              <div class="stat">
+                <span class="label">Videos:</span>
+                <span id="progressText" class="value">0 / 0</span>
+              </div>
+              <div class="stat">
+                <span class="label">Comments:</span>
+                <span id="commentsProgress" class="value">0</span>
+              </div>
+              <div class="stat">
+                <span class="label">API Units:</span>
+                <span id="apiUnitsUsed" class="value">0</span>
+              </div>
+              <div class="stat">
+                <span class="label">Time Elapsed:</span>
+                <span id="timeElapsed" class="value">00:00</span>
+              </div>
+              <div class="stat">
+                <span class="label">Est. Remaining:</span>
+                <span id="timeRemaining" class="value">--:--</span>
+              </div>
+            </div>
+            <div class="progress-bar">
+              <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+            </div>
+            <div class="progress-actions">
+              <button id="pauseBtn" class="btn">Pause</button>
+              <button id="cancelBtn" class="btn btn-danger">Cancel</button>
+              <button id="openOutputBtn" class="btn" title="Open output folder">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 5px;">
+                  <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"></path>
+                  <path d="M12 11v6"></path>
+                  <path d="M9 14l3-3 3 3"></path>
+                </svg>
+                Open Folder
+              </button>
+            </div>
+            <div id="collectionLog" class="collection-log"></div>
+          </div>
+        </div>
+
+        <!-- Collections View -->
+        <div id="collectionsView" class="view">
+          <h2>Saved Collections</h2>
+          <div class="collections-header">
+            <div class="filter-options">
+              <input type="text" id="collectionSearch" placeholder="Search collections..." />
+              <select id="collectionFilter">
+                <option value="all">All Collections</option>
+                <option value="today">Today</option>
+                <option value="week">This Week</option>
+                <option value="month">This Month</option>
+              </select>
+            </div>
+            <div class="collection-stats">
+              <span id="totalCollections">0 collections</span>
+              <span id="totalVideos">0 videos</span>
+              <span id="totalComments">0 comments</span>
+            </div>
+          </div>
+          <div id="collectionsList" class="collections-list"></div>
+        </div>
+
+        <!-- AI Analysis View -->
+        <div id="ai-analysisView" class="view">
+          <div class="rating-projects-container">
+            <!-- Header with Stats -->
+            <div class="view-header">
+              <h2>🤖 Rating Projects</h2>
+              <div class="header-actions">
+                <button class="btn btn-primary" id="create-project-btn">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  Create New Project
+                </button>
+              </div>
+            </div>
+            
+            <!-- Stats Summary -->
+            <div class="stats-bar">
+              <div class="stat-item">
+                <span class="stat-value" id="totalProjects">0</span>
+                <span class="stat-label">projects</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-value" id="totalRated">0</span>
+                <span class="stat-label">items rated</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-value" id="avgSuccessRate">0%</span>
+                <span class="stat-label">avg success rate</span>
+              </div>
+            </div>
+            
+            <!-- Search/Filter Bar -->
+            <div class="filter-bar">
+              <input type="text" id="project-search" class="search-input" placeholder="Search projects...">
+              <select id="project-filter-status" class="filter-select">
+                <option value="">All Statuses</option>
+                <option value="completed">Completed</option>
+                <option value="partial">Partial</option>
+                <option value="in_progress">In Progress</option>
+              </select>
+            </div>
+            
+            <!-- Projects Gallery -->
+            <div id="rating-projects-gallery" class="projects-gallery">
+              <div class="empty-state">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                  <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                  <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+                <p>No rating projects yet</p>
+                <button class="btn btn-primary" onclick="document.getElementById('create-project-btn').click()">
+                  Create Your First Project
+                </button>
+              </div>
+            </div>
+            
+            <!-- Create New Rating Project Modal -->
+            <div id="create-project-modal" class="modal" style="display: none;">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h3>Create New Rating Project</h3>
+                  <button class="close-btn" id="close-create-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                  <!-- Collection Selection -->
+                  <div class="form-group">
+                    <label for="ai-collection-select">Select Collection:</label>
+                    <select id="ai-collection-select" class="form-control">
+                      <option value="">Choose a collection...</option>
+                    </select>
+                  </div>
+              
+                  <div class="form-group">
+                    <label for="project-name">Project Name:</label>
+                    <input type="text" id="project-name" class="form-control" placeholder="e.g., Mental Health Stigma Analysis">
+                  </div>
+              
+              <div class="form-group">
+                <label for="research-intent">What are you looking for? (Research Intent)</label>
+                <textarea id="research-intent" class="form-control" rows="4" 
+                  placeholder="Describe what content is relevant to your research. Be specific about topics, themes, or patterns you want to identify."></textarea>
+              </div>
+              
+              <div class="form-group">
+                <label>Rating Scale:</label>
+                <div class="radio-group">
+                  <label class="radio-label">
+                    <input type="radio" name="rating-scale" value="binary" checked>
+                    <span>Relevant / Not Relevant</span>
+                  </label>
+                  <label class="radio-label">
+                    <input type="radio" name="rating-scale" value="ternary">
+                    <span>High / Medium / Low Relevance</span>
+                  </label>
+                  <label class="radio-label">
+                    <input type="radio" name="rating-scale" value="five_point">
+                    <span>5-Point Scale (1-5)</span>
+                  </label>
+                </div>
+              </div>
+              
+              <div class="form-group">
+                <label>Content to Rate:</label>
+                <div class="checkbox-group">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="rate-chunks" checked>
+                    <span>Video Chunks <span class="item-count" id="chunks-count">(0 items)</span></span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="rate-comments" checked>
+                    <span>Comments <span class="item-count" id="comments-count">(0 items)</span></span>
+                  </label>
+                </div>
+              </div>
+              
+              <details class="advanced-options">
+                <summary>⚙️ Rate Limiting & Performance</summary>
+                <div class="advanced-content">
+                  <div class="form-group">
+                    <label for="concurrent-requests">Concurrent Requests:</label>
+                    <input type="number" id="concurrent-requests" class="form-control" value="5" min="1" max="20">
+                    <small>⚠️ How many API calls at once (lower = more stable, 5 recommended)</small>
+                  </div>
+                  
+                  <div class="form-group">
+                    <label for="batch-size">Batch Size:</label>
+                    <input type="number" id="batch-size" class="form-control" value="50" min="10" max="200">
+                    <small>Items processed before progress update (doesn't affect speed)</small>
+                  </div>
+                  
+                  <div class="form-group">
+                    <label for="retry-delay">Retry Delay (seconds):</label>
+                    <input type="number" id="retry-delay" class="form-control" value="2" min="1" max="10" step="0.5">
+                    <small>Wait time between retries (with exponential backoff)</small>
+                  </div>
+                  
+                  <div class="form-group">
+                    <label class="checkbox-label">
+                      <input type="checkbox" id="include-confidence" checked>
+                      <span>Include confidence scores</span>
+                    </label>
+                  </div>
+                </div>
+              </details>
+              
+              <div class="cost-estimate">
+                Estimated: <span id="items-estimate">0 items</span> × ~$0.00015 = <span id="cost-estimate">$0.00</span>
+              </div>
+              
+                  <div class="button-group">
+                    <button class="btn btn-primary" id="start-rating-btn">Start Rating</button>
+                    <button class="btn btn-secondary" id="preview-rating-btn">🔍 Preview First 5</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Rating Progress Section (Inline) -->
+            <div id="rating-progress-section" class="rating-progress-panel" style="display: none;">
+              <div class="progress-panel-header">
+                <h3>⚡ Rating in Progress: <span id="progress-project-name"></span></h3>
+                <button class="close-btn" id="minimize-rating-btn" title="Minimize (rating continues in background)">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                </button>
+              </div>
+              
+              <div class="progress-section">
+                <div class="progress-bar-modern">
+                  <div class="progress-fill-modern" id="rating-progress-fill"></div>
+                </div>
+                <div class="progress-stats">
+                  <span id="rating-progress-text" class="progress-stat-main">0 / 0 (0%)</span>
+                  <span id="rating-time-estimate" class="progress-stat-time">Est. remaining: calculating...</span>
+                </div>
+              </div>
+              
+              <div class="rating-stream-container">
+                <h4>Live Updates</h4>
+                <div class="rating-stream" id="rating-stream">
+                  <!-- Live updates will appear here -->
+                </div>
+              </div>
+              
+              <div class="rating-distribution-container">
+                <h4>Distribution</h4>
+                <div id="rating-distribution-bars"></div>
+              </div>
+              
+              <div class="progress-actions">
+                <button class="btn btn-warning btn-sm" id="pause-rating-btn">⏸ Pause</button>
+                <button class="btn btn-danger btn-sm" id="cancel-rating-btn">✕ Cancel</button>
+                <button class="btn btn-secondary btn-sm" id="export-current-btn">💾 Export Current</button>
+              </div>
+              
+              <div class="progress-note">
+                <small>💡 Tip: You can minimize this panel. Rating continues in the background.</small>
+              </div>
+            </div>
+            
+            <!-- Rating Project Viewer (slides in from right) -->
+            <div id="rating-project-viewer" class="rating-viewer" style="display: none;">
+              <div class="rating-viewer-header">
+                <button class="btn btn-secondary btn-sm" id="close-rating-viewer">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                  </svg>
+                  Back to Projects
+                </button>
+                <h2 id="rating-viewer-title">Project Name</h2>
+                <div class="rating-viewer-actions">
+                  <button class="btn btn-secondary btn-sm" id="export-project-btn">💾 Export</button>
+                  <button class="btn btn-warning btn-sm" id="retry-failed-btn" style="display:none;">🔄 Retry Failed</button>
+                </div>
+              </div>
+              
+              <div class="rating-viewer-stats">
+                <div class="stat-card">
+                  <span class="stat-label">Total Rated</span>
+                  <span class="stat-value" id="viewer-total">0</span>
+                </div>
+                <div class="stat-card">
+                  <span class="stat-label">Success Rate</span>
+                  <span class="stat-value success" id="viewer-success-rate">0%</span>
+                </div>
+                <div class="stat-card">
+                  <span class="stat-label">Avg Score</span>
+                  <span class="stat-value" id="viewer-avg-score">0.00</span>
+                </div>
+                <div class="stat-card">
+                  <span class="stat-label">Failed</span>
+                  <span class="stat-value failed" id="viewer-failed">0</span>
+                </div>
+              </div>
+              
+              <div class="rating-viewer-tabs">
+                <button class="rating-tab active" data-tab="overview">📊 Overview</button>
+                <button class="rating-tab" data-tab="ratings">📋 Ratings</button>
+                <button class="rating-tab" data-tab="failed">❌ Failed</button>
+              </div>
+              
+              <div class="rating-viewer-content">
+                <!-- Overview Tab -->
+                <div class="rating-tab-content active" id="overview-tab">
+                  <div class="overview-section">
+                    <h3>Research Intent</h3>
+                    <div class="research-intent-box" id="viewer-research-intent"></div>
+                  </div>
+                  
+                  <div class="overview-section">
+                    <h3>Score Distribution</h3>
+                    <div class="distribution-chart" id="viewer-distribution">
+                      <!-- Will be populated -->
+                    </div>
+                  </div>
+                  
+                  <div class="overview-section">
+                    <h3>Content Type Breakdown</h3>
+                    <div class="type-breakdown" id="viewer-type-breakdown">
+                      <!-- Will be populated -->
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Ratings Browser Tab -->
+                <div class="rating-tab-content" id="ratings-tab">
+                  <div class="ratings-filter-bar">
+                    <input type="text" class="search-input" id="ratings-search" placeholder="🔍 Search ratings...">
+                    <select class="filter-select" id="ratings-filter-score">
+                      <option value="all">All Scores</option>
+                      <option value="high">High (>0.7)</option>
+                      <option value="medium">Medium (0.4-0.7)</option>
+                      <option value="low">Low (<0.4)</option>
+                    </select>
+                    <select class="filter-select" id="ratings-filter-type">
+                      <option value="all">All Types</option>
+                      <option value="video_chunk">Video Chunks</option>
+                      <option value="comment">Comments</option>
+                    </select>
+                  </div>
+                  
+                  <div class="ratings-list" id="ratings-list">
+                    <!-- Will be populated with rating cards -->
+                  </div>
+                </div>
+                
+                <!-- Failed Items Tab -->
+                <div class="rating-tab-content" id="failed-tab">
+                  <div class="failed-items-header">
+                    <p>These items failed to be rated. You can retry them individually or all at once.</p>
+                  </div>
+                  <div class="failed-items-list" id="failed-items-list">
+                    <!-- Will be populated with failed items -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Export View -->
+        <div id="exportView" class="view">
+          <h2>Export Data</h2>
+          <div class="export-options">
+            <div class="export-format">
+              <h3>Export to CARDS Format</h3>
+              <p>Export your collected data in CARDS 2.0 format for use with Variable Resolution BWS rating system.</p>
+              <button id="exportCardsBtn" class="btn btn-primary">Export to CARDS</button>
+            </div>
+            <div class="export-format">
+              <h3>Export to CSV</h3>
+              <p>Export data as CSV files for analysis in Excel, R, or Python.</p>
+              <button id="exportCsvBtn" class="btn">Export to CSV</button>
+            </div>
+            <div class="export-format">
+              <h3>Export to Supabase</h3>
+              <p>Upload directly to your Supabase instance for online rating.</p>
+              <button id="exportSupabaseBtn" class="btn">Export to Supabase</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal" style="display: none;">
+      <div class="modal-content">
+        <h2>Settings</h2>
+        <div class="settings-form">
+          <h3>API Configuration</h3>
+          <div class="form-group">
+            <label for="youtubeApiKey">YouTube API Key</label>
+            <input type="password" id="youtubeApiKey" placeholder="Enter your YouTube Data API v3 key" />
+            <small>Get your API key from <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank">Google Cloud Console</a></small>
+          </div>
+
+          <div class="form-group">
+            <label>API Key Status</label>
+            <div class="api-status">
+              <span id="apiKeyStatus" class="status-indicator">Not Set</span>
+              <button id="testApiBtn" class="btn btn-sm">Test API Key</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="geminiApiKey">Gemini API Key (for AI Analysis)</label>
+            <input type="password" id="geminiApiKey" placeholder="Enter your Gemini API key" />
+            <small>Get your API key from <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a></small>
+          </div>
+
+          <div class="form-group">
+            <label>Gemini API Status</label>
+            <div class="api-status">
+              <span id="geminiApiStatus" class="status-indicator">Not Set</span>
+              <button id="testGeminiBtn" class="btn btn-sm">Test Gemini</button>
+            </div>
+          </div>
+          
+          <h3>Storage Settings</h3>
+          <div class="form-group">
+            <label for="outputDir">Output Directory</label>
+            <div class="input-group">
+              <input type="text" id="outputDir" readonly placeholder="Select output directory" />
+              <button id="selectDirBtn" class="btn">Browse</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="storageLimit">Storage Limit (GB)</label>
+            <input type="number" id="storageLimit" value="50" min="1" max="1000" />
+            <small>Stop collection when this much disk space is used</small>
+          </div>
+
+          <h3>Supabase Integration (Optional)</h3>
+          <div class="form-group">
+            <label for="supabaseUrl">Supabase URL</label>
+            <input type="text" id="supabaseUrl" placeholder="https://your-project.supabase.co" />
+          </div>
+
+          <div class="form-group">
+            <label for="supabaseKey">Supabase Anon Key</label>
+            <input type="password" id="supabaseKey" placeholder="Your Supabase anonymous key" />
+          </div>
+
+          <h3>Advanced Settings</h3>
+          <div class="form-group">
+            <label for="concurrency">Concurrent Downloads</label>
+            <input type="number" id="concurrency" value="3" min="1" max="10" />
+            <small>Number of simultaneous video downloads</small>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label>
+              <input type="checkbox" id="autoRetry" checked />
+              <span>Auto-retry failed downloads</span>
+            </label>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label>
+              <input type="checkbox" id="enableLogging" checked />
+              <span>Enable detailed logging</span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button id="saveSettingsBtn" class="btn btn-primary">Save Settings</button>
+          <button id="closeSettingsBtn" class="btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="src/components/fixed-tool-checker.js"></script>
+  <script src="src/components/tool-installer.js"></script>
+  <script src="src/components/collection-viewer.js"></script>
+  <script src="src/components/enhanced-viewer.js"></script>
+  <script src="src/components/gallery-viewer.js"></script>
+  <script src="src/components/modern-single-page.js"></script>
+  <script src="src/renderer-advanced.js"></script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+{
+  "name": "vr-collector",
+  "version": "1.0.0",
+  "description": "Offline Data Collector for Variable Resolution - YouTube & Multi-source",
+  "main": "main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build-linux": "electron-builder --linux",
+    "build-mac": "electron-builder --mac",
+    "build-all": "electron-builder -mwl"
+  },
+  "keywords": [
+    "youtube",
+    "data-collection",
+    "research",
+    "offline"
+  ],
+  "author": "Variable Resolution Team",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "googleapis": "^128.0.0",
+    "sqlite3": "^5.1.6"
+  },
+  "build": {
+    "appId": "com.variableresolution.collector",
+    "productName": "VR Data Collector",
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    }
+  }
+}

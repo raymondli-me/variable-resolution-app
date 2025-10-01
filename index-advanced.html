@@ -1160,11 +1160,15 @@
                     <div class="bws-rating-title">
                       <h2 id="bws-rating-exp-name">BWS Rating</h2>
                       <p id="bws-rating-exp-desc" class="subtitle"></p>
+                      <p id="bws-rating-rater-info" class="subtitle" style="display: none; color: #0ea5e9; font-size: 0.85rem;"></p>
                     </div>
                     <div class="bws-rating-progress-wrapper">
                       <div class="bws-rating-progress-info">
                         <span id="bws-rating-progress-text">0 / 0 (0%)</span>
-                        <button id="bws-rating-close-btn" class="btn btn-secondary" title="Exit rating">← Exit</button>
+                        <div class="bws-rating-header-buttons">
+                          <button id="bws-rating-pause-btn" class="btn btn-secondary" title="Pause and take a break">⏸️ Pause</button>
+                          <button id="bws-rating-close-btn" class="btn btn-secondary" title="Exit rating">← Exit</button>
+                        </div>
                       </div>
                       <div class="bws-rating-progress-bar">
                         <div id="bws-rating-progress-fill" class="bws-rating-progress-fill"></div>
@@ -1197,6 +1201,38 @@
                 </div>
               </div>
               <!-- End BWS Rating Interface -->
+
+              <!-- BWS Video Detail Modal -->
+              <div id="bws-video-detail-modal" class="bws-video-detail-modal" style="display: none;" onclick="if(event.target === this) closeBWSVideoDetailModal()">
+                <div class="bws-video-detail-content">
+                  <button class="modal-close-btn" onclick="closeBWSVideoDetailModal()" title="Close">&times;</button>
+
+                  <h3 id="bws-modal-title">Video Detail</h3>
+
+                  <div class="bws-modal-video-wrapper">
+                    <video id="bws-modal-video" class="bws-modal-video" controls loop>
+                      <source type="video/mp4">
+                    </video>
+                  </div>
+
+                  <div class="bws-modal-info">
+                    <div class="bws-modal-section">
+                      <h4>📝 Transcript</h4>
+                      <p id="bws-modal-transcript" class="bws-modal-transcript"></p>
+                    </div>
+
+                    <div class="bws-modal-section">
+                      <h4>📊 Metadata</h4>
+                      <div id="bws-modal-meta" class="bws-modal-meta"></div>
+                    </div>
+                  </div>
+
+                  <button class="btn btn-primary" onclick="closeBWSVideoDetailModal()" style="margin-top: 1rem;">
+                    ← Back to Comparison
+                  </button>
+                </div>
+              </div>
+              <!-- End BWS Video Detail Modal -->
 
               <!-- AI Rating Progress Overlay -->
               <div id="bws-ai-progress-overlay" class="bws-ai-progress-overlay" style="display: none;">
@@ -1254,8 +1290,15 @@
                     </div>
                   </div>
 
-                  <!-- Export Actions -->
+                  <!-- Export Actions and Rater Selector -->
                   <div class="bws-results-actions">
+                    <div class="bws-rater-selector-wrapper" style="display: none;">
+                      <label for="bws-rater-selector" style="margin-right: 0.5rem; font-weight: 600;">View Scores:</label>
+                      <select id="bws-rater-selector" class="form-control" style="display: inline-block; width: auto; min-width: 200px;">
+                        <option value="combined">🔀 Combined (All Raters)</option>
+                      </select>
+                    </div>
+                    <div style="flex: 1;"></div>
                     <button id="bws-export-csv" class="btn btn-secondary">📄 Export CSV</button>
                     <button id="bws-export-json" class="btn btn-secondary">📦 Export JSON</button>
                   </div>
@@ -1267,7 +1310,8 @@
                         <tr>
                           <th data-sort="rank" class="sortable">Rank <span class="sort-arrow">↕</span></th>
                           <th>Item</th>
-                          <th data-sort="score" class="sortable">Score <span class="sort-arrow">↕</span></th>
+                          <th data-sort="score_bt" class="sortable">BT Score <span class="sort-arrow">↕</span></th>
+                          <th data-sort="score" class="sortable">Count <span class="sort-arrow">↕</span></th>
                           <th data-sort="best" class="sortable">Best <span class="sort-arrow">↕</span></th>
                           <th data-sort="worst" class="sortable">Worst <span class="sort-arrow">↕</span></th>
                           <th data-sort="appearances" class="sortable">Appearances <span class="sort-arrow">↕</span></th>

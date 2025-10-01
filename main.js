@@ -2753,19 +2753,21 @@ ipcMain.handle('bws:saveJudgment', async (event, judgmentData) => {
 });
 
 // Calculate scores for experiment
-ipcMain.handle('bws:calculateScores', async (event, { experimentId }) => {
+ipcMain.handle('bws:calculateScores', async (event, { experimentId, raterId = null }) => {
   try {
     const dbPath = path.join(app.getPath('userData'), 'collections.db');
     const db = require('./src/database/db');
     await db.initialize(dbPath);
 
-    const scores = await db.calculateBWSCountingScores(experimentId);
+    const scores = await db.calculateBWSScores(experimentId, raterId);
 
-    // Update experiment status to completed
-    await db.updateBWSExperiment(experimentId, {
-      status: 'completed',
-      completed_at: new Date().toISOString()
-    });
+    // Only update experiment status to completed when calculating combined scores
+    if (!raterId) {
+      await db.updateBWSExperiment(experimentId, {
+        status: 'completed',
+        completed_at: new Date().toISOString()
+      });
+    }
 
     return { success: true, scores };
   } catch (error) {
@@ -2775,13 +2777,13 @@ ipcMain.handle('bws:calculateScores', async (event, { experimentId }) => {
 });
 
 // Get scores for experiment
-ipcMain.handle('bws:getScores', async (event, { experimentId }) => {
+ipcMain.handle('bws:getScores', async (event, { experimentId, raterId = 'combined' }) => {
   try {
     const dbPath = path.join(app.getPath('userData'), 'collections.db');
     const db = require('./src/database/db');
     await db.initialize(dbPath);
 
-    const scores = await db.getBWSScores(experimentId);
+    const scores = await db.getBWSScores(experimentId, raterId);
 
     return { success: true, scores };
   } catch (error) {
@@ -2803,6 +2805,22 @@ ipcMain.handle('bws:deleteExperiment', async (event, { experimentId }) => {
   } catch (error) {
     console.error('Error deleting BWS experiment:', error);
     return { success: false, error: error.message };
+  }
+});
+
+// Get rater judgment count (for multi-rater support)
+ipcMain.handle('bws:getRaterJudgmentCount', async (event, { experimentId, raterId }) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    const count = await db.getRaterJudgmentCount(experimentId, raterId);
+
+    return { success: true, count };
+  } catch (error) {
+    console.error('Error getting rater judgment count:', error);
+    return { success: false, error: error.message, count: 0 };
   }
 });
 

@@ -97,7 +97,8 @@ contextBridge.exposeInMainWorld('api', {
     calculateScores: (params) => ipcRenderer.invoke('bws:calculateScores', params),
     getScores: (params) => ipcRenderer.invoke('bws:getScores', params),
     deleteExperiment: (params) => ipcRenderer.invoke('bws:deleteExperiment', params),
-    startAIRating: (params) => ipcRenderer.invoke('bws:startAIRating', params)
+    startAIRating: (params) => ipcRenderer.invoke('bws:startAIRating', params),
+    getRaterJudgmentCount: (params) => ipcRenderer.invoke('bws:getRaterJudgmentCount', params)
   },
 
   // Platform info

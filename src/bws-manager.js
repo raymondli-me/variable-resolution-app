@@ -464,7 +464,12 @@ function createBWSExperimentCard(exp) {
       <div class="project-card-actions">
         ${exp.status === 'draft' || exp.status === 'in_progress' ?
           `<button class="btn btn-sm btn-primary" onclick="startBWSRating(${exp.id})">Start Rating</button>` :
-          `<button class="btn btn-sm btn-secondary" onclick="viewBWSResults(${exp.id})">View Results</button>`
+          `<button class="btn btn-sm btn-secondary" onclick="viewBWSResults(${exp.id})">View Results</button>
+           ${exp.status === 'completed' && exp.rater_type === 'ai' ?
+             `<button class="btn btn-sm btn-primary" onclick="addHumanRatingsToExperiment(${exp.id})" title="Add human ratings to this experiment">
+               👤 Add Human Ratings
+             </button>` : ''
+           }`
         }
         <button class="btn btn-sm btn-secondary" onclick="deleteBWSExperiment(${exp.id})">Delete</button>
       </div>
@@ -571,9 +576,51 @@ async function startAIBWSRating(experimentId, experiment) {
 }
 
 /**
+ * Add human ratings to a completed AI experiment
+ */
+async function addHumanRatingsToExperiment(experimentId) {
+  try {
+    // Load experiment details
+    const expResult = await window.api.bws.getExperiment({ experimentId });
+
+    if (!expResult.success) {
+      showNotification(`Failed to load experiment: ${expResult.error}`, 'error');
+      return;
+    }
+
+    const experiment = expResult.experiment;
+
+    // Count human judgments already made
+    const humanJudgmentsResult = await window.api.bws.getRaterJudgmentCount({
+      experimentId,
+      raterId: 'human-user'
+    });
+
+    const humanJudgments = humanJudgmentsResult.success ? humanJudgmentsResult.count : 0;
+    const totalTuples = experiment.total_tuples || 0;
+    const remaining = totalTuples - humanJudgments;
+
+    // Show confirmation with progress info
+    const message = humanJudgments > 0
+      ? `Add human ratings to "${experiment.name}"?\n\nYou've already completed ${humanJudgments}/${totalTuples} comparisons.\n${remaining} remaining.`
+      : `Add human ratings to "${experiment.name}"?\n\nThis will let you rate the same ${totalTuples} comparisons that AI completed.\nYour ratings will be combined for multi-rater analysis.`;
+
+    const confirmed = confirm(message);
+    if (!confirmed) return;
+
+    // Start human rating with rater_id tracking
+    await startHumanBWSRating(experimentId, experiment, 'human-user');
+
+  } catch (error) {
+    console.error('Error adding human ratings:', error);
+    showNotification('Failed to start human rating', 'error');
+  }
+}
+
+/**
  * Start Human BWS Rating
  */
-async function startHumanBWSRating(experimentId, experiment) {
+async function startHumanBWSRating(experimentId, experiment, raterId = 'human-user') {
   try {
     // Update status to in_progress if draft
     if (experiment.status === 'draft') {
@@ -583,7 +630,7 @@ async function startHumanBWSRating(experimentId, experiment) {
       });
     }
 
-    // Initialize rating state
+    // Initialize rating state with rater tracking
     bwsRatingState = {
       experimentId,
       experiment,
@@ -592,7 +639,9 @@ async function startHumanBWSRating(experimentId, experiment) {
       selectedBest: null,
       selectedWorst: null,
       totalJudgments: experiment.total_judgments || 0,
-      totalTuples: experiment.total_tuples || 0
+      totalTuples: experiment.total_tuples || 0,
+      raterId: raterId,  // Track rater ID for multi-rater support
+      raterType: 'human'
     };
 
     // Setup event listeners for rating interface
@@ -605,7 +654,14 @@ async function startHumanBWSRating(experimentId, experiment) {
     document.getElementById('bws-rating-exp-name').textContent = experiment.name;
     document.getElementById('bws-rating-exp-desc').textContent = experiment.research_intent;
 
-    // Load first tuple
+    // Add rater info to header
+    const raterInfo = document.getElementById('bws-rating-rater-info');
+    if (raterInfo) {
+      raterInfo.textContent = `Rating as: ${raterId}`;
+      raterInfo.style.display = 'block';
+    }
+
+    // Load first tuple (filtered by rater)
     await loadNextBWSTuple();
 
   } catch (error) {
@@ -722,6 +778,13 @@ function setupRatingInterfaceListeners() {
     document.getElementById('bws-rating-close-btn').addEventListener('click', closeBWSRating);
   }
 
+  // Pause button
+  const pauseBtn = document.getElementById('bws-rating-pause-btn');
+  if (pauseBtn) {
+    pauseBtn.replaceWith(pauseBtn.cloneNode(true));
+    document.getElementById('bws-rating-pause-btn').addEventListener('click', pauseBWSRating);
+  }
+
   // Submit button
   const submitBtn = document.getElementById('bws-rating-submit-btn');
   if (submitBtn) {
@@ -745,14 +808,17 @@ function setupRatingInterfaceListeners() {
  */
 async function loadNextBWSTuple() {
   try {
+    // Pause all videos from previous tuple
+    pauseAllBWSVideos();
+
     // Show loading
     document.getElementById('bws-rating-loading').style.display = 'flex';
 
     // Get next tuple
     const result = await window.api.bws.getNextTuple({
       experimentId: bwsRatingState.experimentId,
-      raterType: bwsRatingState.experiment.rater_type,
-      raterId: bwsRatingState.experiment.rater_type === 'human' ? 'user-1' : 'ai-gemini'
+      raterType: bwsRatingState.raterType || 'human',
+      raterId: bwsRatingState.raterId || 'human-user'
     });
 
     // Hide loading
@@ -801,6 +867,19 @@ function renderBWSItemCards(items) {
 
   grid.innerHTML = '';
 
+  // Apply smart layout class based on tuple size
+  grid.className = 'bws-rating-items-grid';
+  if (items.length === 2) {
+    grid.classList.add('grid-2-items');
+  } else if (items.length === 3) {
+    grid.classList.add('grid-3-items');
+  } else if (items.length === 4) {
+    grid.classList.add('grid-4-items');
+  }
+
+  // Check if all items are video chunks
+  const allVideos = items.every(item => item.item_type !== 'comment' && item.file_path);
+
   items.forEach((item, index) => {
     const card = document.createElement('div');
     card.className = 'bws-item-card';
@@ -808,18 +887,55 @@ function renderBWSItemCards(items) {
 
     // Determine item type and content
     const isComment = item.item_type === 'comment';
+    const isVideo = !isComment && item.file_path;
     const content = isComment ? item.text : item.transcript_text;
     const typeLabel = isComment ? 'Comment' : 'Video Chunk';
+    const duration = isVideo ? item.end_time - item.start_time : 0;
 
     card.innerHTML = `
       <div class="bws-item-header">
         <span class="bws-item-number">${index + 1}</span>
         <span class="bws-item-type">${typeLabel}</span>
+        ${isVideo ? `<span class="bws-item-duration">${duration.toFixed(1)}s</span>` : ''}
       </div>
 
-      <div class="bws-item-content">
-        ${content || 'No content available'}
-      </div>
+      ${isVideo ? `
+        <!-- Video Player Container -->
+        <div class="bws-video-container" data-index="${index}">
+          <video
+            class="bws-video-player"
+            loop
+            muted
+            playsinline
+            data-index="${index}"
+            data-start="${item.start_time}"
+            data-end="${item.end_time}"
+          >
+            <source src="file://${item.file_path}" type="video/mp4">
+          </video>
+
+          <!-- Audio indicator (hidden, updated by JS) -->
+          <div class="bws-audio-indicator">🔇</div>
+
+          <!-- Subtle progress bar at bottom -->
+          <div class="bws-video-progress-bar">
+            <div class="bws-video-progress-fill" data-index="${index}"></div>
+          </div>
+        </div>
+
+        <!-- Transcript (always visible) -->
+        <div class="bws-transcript">
+          <div class="bws-transcript-label">📝 Transcript</div>
+          <div class="bws-transcript-text">
+            ${content || 'No transcript available'}
+          </div>
+        </div>
+      ` : `
+        <!-- Text Content (for comments) -->
+        <div class="bws-item-content">
+          ${content || 'No content available'}
+        </div>
+      `}
 
       ${isComment ? `
         <div class="bws-item-meta">
@@ -844,6 +960,241 @@ function renderBWSItemCards(items) {
     `;
 
     grid.appendChild(card);
+  });
+
+  // Start videos after DOM insertion (staggered for performance)
+  if (allVideos) {
+    startBWSVideos();
+  }
+}
+
+/**
+ * Start all BWS videos (staggered for performance)
+ */
+function startBWSVideos() {
+  const videos = document.querySelectorAll('.bws-video-player');
+
+  console.log(`[startBWSVideos] Starting ${videos.length} videos with staggered loading`);
+
+  videos.forEach((video, index) => {
+    // Stagger by 100ms each to avoid overwhelming decoder
+    setTimeout(() => {
+      video.play().catch(err => {
+        console.error(`Failed to auto-play video ${index}:`, err);
+        // Fallback: show play button overlay
+        const container = video.closest('.bws-video-container');
+        if (container) {
+          container.classList.add('needs-interaction');
+        }
+      });
+
+      // All videos start muted (hover for audio)
+      video.muted = true;
+    }, index * 100);
+  });
+
+  // Setup hover interactions for audio
+  setupVideoHoverInteractions();
+
+  // Setup progress bar updates
+  setupVideoProgressBars();
+}
+
+/**
+ * Setup hover interactions for video cards
+ */
+function setupVideoHoverInteractions() {
+  const videoContainers = document.querySelectorAll('.bws-video-container');
+
+  videoContainers.forEach((container, index) => {
+    const video = container.querySelector('.bws-video-player');
+
+    // Hover = enlarge + audio
+    container.addEventListener('mouseenter', () => {
+      container.style.transform = 'scale(1.15)';
+      container.style.zIndex = '10';
+
+      // Unmute this video, mute others
+      document.querySelectorAll('.bws-video-player').forEach(v => v.muted = true);
+      video.muted = false;
+
+      // Update button states
+      updateAudioButtonStates(index);
+    });
+
+    container.addEventListener('mouseleave', () => {
+      container.style.transform = 'scale(1)';
+      container.style.zIndex = '1';
+      video.muted = true;
+
+      // Reset button states
+      updateAudioButtonStates(-1);
+    });
+
+    // Click = open full-size modal
+    container.addEventListener('click', () => {
+      openVideoDetailModal(index);
+    });
+  });
+}
+
+/**
+ * Update audio indicator visual states
+ */
+function updateAudioButtonStates(activeIndex) {
+  const audioIndicators = document.querySelectorAll('.bws-audio-indicator');
+  audioIndicators.forEach((indicator, i) => {
+    indicator.textContent = i === activeIndex ? '🔊' : '🔇';
+    indicator.classList.toggle('active', i === activeIndex);
+  });
+}
+
+/**
+ * Setup video progress bars (subtle playback progress indicators)
+ */
+function setupVideoProgressBars() {
+  const videos = document.querySelectorAll('.bws-video-player');
+
+  videos.forEach((video, index) => {
+    const progressFill = document.querySelector(`.bws-video-progress-fill[data-index="${index}"]`);
+
+    if (!progressFill) return;
+
+    // Update progress bar on timeupdate
+    video.addEventListener('timeupdate', () => {
+      if (video.duration > 0) {
+        const percentage = (video.currentTime / video.duration) * 100;
+        progressFill.style.width = `${percentage}%`;
+      }
+    });
+
+    // Reset on loop
+    video.addEventListener('ended', () => {
+      progressFill.style.width = '0%';
+    });
+  });
+
+  console.log(`[setupVideoProgressBars] Setup progress tracking for ${videos.length} videos`);
+}
+
+/**
+ * Open video detail modal for close inspection
+ */
+function openVideoDetailModal(index) {
+  const items = bwsRatingState.currentTupleData?.items || [];
+  const item = items[index];
+
+  if (!item || item.item_type === 'comment') return;
+
+  const modal = document.getElementById('bws-video-detail-modal');
+  if (!modal) {
+    console.error('Video detail modal not found');
+    return;
+  }
+
+  // Pause all grid videos
+  pauseAllBWSVideos();
+
+  // Populate modal
+  const modalVideo = document.getElementById('bws-modal-video');
+  const modalTranscript = document.getElementById('bws-modal-transcript');
+  const modalMeta = document.getElementById('bws-modal-meta');
+  const modalTitle = document.getElementById('bws-modal-title');
+
+  modalVideo.src = `file://${item.file_path}`;
+  modalVideo.loop = true;
+  modalVideo.controls = true;
+
+  modalTitle.textContent = `Item ${index + 1}: Video Chunk`;
+  modalTranscript.textContent = item.transcript_text || 'No transcript available';
+
+  const duration = item.end_time - item.start_time;
+  modalMeta.innerHTML = `
+    <span>⏱️ ${formatTimestamp(item.start_time)} - ${formatTimestamp(item.end_time)} (${duration.toFixed(1)}s)</span>
+    <span>📊 Score: ${(item.relevance_score || 0).toFixed(2)}</span>
+  `;
+
+  // Show modal
+  modal.style.display = 'flex';
+
+  // Play video
+  modalVideo.play().catch(err => console.error('Modal video play failed:', err));
+
+  console.log(`[openVideoDetailModal] Opened detail view for video ${index}`);
+}
+
+/**
+ * Close video detail modal
+ */
+function closeBWSVideoDetailModal() {
+  const modal = document.getElementById('bws-video-detail-modal');
+  const modalVideo = document.getElementById('bws-modal-video');
+
+  if (modal) {
+    modal.style.display = 'none';
+  }
+
+  if (modalVideo) {
+    modalVideo.pause();
+    modalVideo.src = '';
+  }
+
+  // Resume grid videos
+  document.querySelectorAll('.bws-video-player').forEach(v => v.play());
+
+  console.log('[closeBWSVideoDetailModal] Closed detail view');
+}
+
+/**
+ * Toggle audio for a specific video (mute all others)
+ */
+function toggleBWSAudio(index) {
+  const videos = document.querySelectorAll('.bws-video-player');
+  const audioButtons = document.querySelectorAll('.bws-audio-toggle');
+
+  videos.forEach((video, i) => {
+    if (i === index) {
+      video.muted = false;
+      console.log(`[toggleBWSAudio] Unmuted video ${index}`);
+    } else {
+      video.muted = true;
+    }
+  });
+
+  // Update button states
+  audioButtons.forEach((btn, i) => {
+    btn.textContent = i === index ? '🔊' : '🔇';
+    btn.classList.toggle('active', i === index);
+  });
+}
+
+/**
+ * Toggle pause/play for a specific video
+ */
+function toggleBWSPause(index) {
+  const video = document.querySelector(`.bws-video-player[data-index="${index}"]`);
+  const pauseBtn = document.querySelector(`.bws-pause-toggle[data-index="${index}"]`);
+
+  if (!video || !pauseBtn) return;
+
+  if (video.paused) {
+    video.play();
+    pauseBtn.textContent = '⏸️';
+    console.log(`[toggleBWSPause] Playing video ${index}`);
+  } else {
+    video.pause();
+    pauseBtn.textContent = '▶️';
+    console.log(`[toggleBWSPause] Paused video ${index}`);
+  }
+}
+
+/**
+ * Pause all BWS videos (called on submit)
+ */
+function pauseAllBWSVideos() {
+  const videos = document.querySelectorAll('.bws-video-player');
+  videos.forEach(video => {
+    video.pause();
   });
 }
 
@@ -1032,8 +1383,8 @@ async function submitBWSJudgment() {
 
     const result = await window.api.bws.saveJudgment({
       tuple_id: bwsRatingState.currentTuple.id,
-      rater_type: bwsRatingState.experiment.rater_type,
-      rater_id: bwsRatingState.experiment.rater_type === 'human' ? 'user-1' : 'ai-gemini',
+      rater_type: bwsRatingState.raterType || 'human',
+      rater_id: bwsRatingState.raterId || 'human-user',
       best_item_id: bestItemId,
       worst_item_id: worstItemId,
       reasoning: null,
@@ -1084,17 +1435,54 @@ function updateBWSRatingProgress() {
  */
 async function finishBWSRating() {
   try {
-    // Calculate scores
-    const result = await window.api.bws.calculateScores({
-      experimentId: bwsRatingState.experimentId
+    const experimentId = bwsRatingState.experimentId;
+    const raterId = bwsRatingState.raterId;
+
+    showNotification('Calculating scores...', 'info');
+
+    // Calculate combined scores (all raters)
+    const combinedResult = await window.api.bws.calculateScores({
+      experimentId,
+      raterId: null  // null = combined
     });
 
-    if (!result.success) {
-      showNotification(`Failed to calculate scores: ${result.error}`, 'error');
+    if (!combinedResult.success) {
+      showNotification(`Failed to calculate combined scores: ${combinedResult.error}`, 'error');
       return;
     }
 
-    showNotification(`Experiment complete! ${result.scores?.length || 0} items ranked.`, 'success');
+    // Calculate rater-specific scores
+    if (raterId) {
+      const raterResult = await window.api.bws.calculateScores({
+        experimentId,
+        raterId: raterId
+      });
+
+      if (!raterResult.success) {
+        console.error(`Failed to calculate ${raterId} scores:`, raterResult.error);
+      }
+    }
+
+    // If this was human rating, also calculate AI-only scores if AI judgments exist
+    if (raterId === 'human-user') {
+      const aiCount = await window.api.bws.getRaterJudgmentCount({
+        experimentId,
+        raterId: 'gemini-2.5-flash'
+      });
+
+      if (aiCount.success && aiCount.count > 0) {
+        const aiResult = await window.api.bws.calculateScores({
+          experimentId,
+          raterId: 'gemini-2.5-flash'
+        });
+
+        if (!aiResult.success) {
+          console.error('Failed to calculate AI scores:', aiResult.error);
+        }
+      }
+    }
+
+    showNotification(`Experiment complete! ${combinedResult.scores?.length || 0} items ranked.`, 'success');
 
     // Close rating interface
     closeBWSRating();
@@ -1109,10 +1497,35 @@ async function finishBWSRating() {
 }
 
 /**
+ * Pause BWS rating (take a break)
+ */
+function pauseBWSRating() {
+  // Pause all videos
+  pauseAllBWSVideos();
+
+  // Hide interface
+  document.getElementById('bws-rating-interface').style.display = 'none';
+
+  // Remove keyboard listener temporarily
+  document.removeEventListener('keydown', handleRatingKeyboard);
+
+  // Show notification with resume option
+  showNotification('Rating paused. Your progress is saved. Return to the experiment to resume.', 'info');
+
+  console.log('[pauseBWSRating] Paused rating for experiment', bwsRatingState.experimentId);
+
+  // Note: We keep bwsRatingState intact so user can resume from the same tuple
+  // The experiment will show as "in_progress" in the gallery with a "Start Rating" button
+}
+
+/**
  * Close BWS rating interface
  */
 function closeBWSRating() {
   if (confirm('Are you sure you want to exit? Progress is saved automatically.')) {
+    // Pause all videos
+    pauseAllBWSVideos();
+
     // Remove keyboard listener
     document.removeEventListener('keydown', handleRatingKeyboard);
 
@@ -1150,19 +1563,22 @@ function formatTimestamp(seconds) {
  * BWS Results State
  */
 let bwsResultsState = {
+  experimentId: null,
+  experiment: null,
   scores: [],
   sortColumn: 'rank',
-  sortDirection: 'asc'
+  sortDirection: 'asc',
+  currentRaterId: 'combined'
 };
 
 /**
  * View BWS results
  */
-async function viewBWSResults(experimentId) {
+async function viewBWSResults(experimentId, raterId = 'combined') {
   try {
     // Load experiment and scores
     const expResult = await window.api.bws.getExperiment({ experimentId });
-    const scoresResult = await window.api.bws.getScores({ experimentId });
+    const scoresResult = await window.api.bws.getScores({ experimentId, raterId });
 
     if (!expResult.success || !scoresResult.success) {
       showNotification('Failed to load results', 'error');
@@ -1172,10 +1588,13 @@ async function viewBWSResults(experimentId) {
     const experiment = expResult.experiment;
     const scores = scoresResult.scores || [];
 
-    // Store in state for sorting
+    // Store in state for sorting and view switching
+    bwsResultsState.experimentId = experimentId;
+    bwsResultsState.experiment = experiment;
     bwsResultsState.scores = scores;
     bwsResultsState.sortColumn = 'rank';
     bwsResultsState.sortDirection = 'asc';
+    bwsResultsState.currentRaterId = raterId;
 
     // Show results overlay
     document.getElementById('bws-results-overlay').style.display = 'flex';
@@ -1183,6 +1602,9 @@ async function viewBWSResults(experimentId) {
     // Update header
     document.getElementById('bws-results-title').textContent = `Results: ${experiment.name}`;
     document.getElementById('bws-results-subtitle').textContent = experiment.research_intent;
+
+    // Setup rater selector dropdown
+    setupRaterSelector(experimentId);
 
     // Update stats
     document.getElementById('bws-results-total').textContent = scores.length;
@@ -1210,6 +1632,92 @@ async function viewBWSResults(experimentId) {
 }
 
 /**
+ * Setup rater selector dropdown
+ */
+async function setupRaterSelector(experimentId) {
+  const selector = document.getElementById('bws-rater-selector');
+  if (!selector) {
+    console.warn('Rater selector element not found - skipping setup');
+    return;
+  }
+
+  // Check if human judgments exist
+  const humanCount = await window.api.bws.getRaterJudgmentCount({
+    experimentId,
+    raterId: 'human-user'
+  });
+
+  // Check if AI judgments exist
+  const aiCount = await window.api.bws.getRaterJudgmentCount({
+    experimentId,
+    raterId: 'gemini-2.5-flash'
+  });
+
+  const hasHuman = humanCount.success && humanCount.count > 0;
+  const hasAI = aiCount.success && aiCount.count > 0;
+
+  // Build selector options
+  let options = '<option value="combined">🔀 Combined (All Raters)</option>';
+
+  if (hasAI) {
+    options += '<option value="gemini-2.5-flash">🤖 AI Only (Gemini)</option>';
+  }
+
+  if (hasHuman) {
+    options += '<option value="human-user">👤 Human Only</option>';
+  }
+
+  selector.innerHTML = options;
+  selector.value = bwsResultsState.currentRaterId;
+
+  // Setup change listener
+  selector.onchange = (e) => switchRaterView(e.target.value);
+
+  // Show selector if multiple raters exist
+  if (hasHuman && hasAI) {
+    selector.parentElement.style.display = 'block';
+  } else {
+    selector.parentElement.style.display = 'none';
+  }
+}
+
+/**
+ * Switch rater view (reload scores for different rater)
+ */
+async function switchRaterView(raterId) {
+  try {
+    // Load scores for selected rater
+    const result = await window.api.bws.getScores({
+      experimentId: bwsResultsState.experimentId,
+      raterId: raterId
+    });
+
+    if (!result.success) {
+      showNotification(`Failed to load ${raterId} scores`, 'error');
+      return;
+    }
+
+    // Update state
+    bwsResultsState.scores = result.scores || [];
+    bwsResultsState.currentRaterId = raterId;
+    bwsResultsState.sortColumn = 'rank';
+    bwsResultsState.sortDirection = 'asc';
+
+    // Re-render table
+    renderBWSResultsTable(result.scores);
+
+    // Update stats
+    document.getElementById('bws-results-total').textContent = result.scores.length;
+
+    console.log(`[switchRaterView] Switched to ${raterId} view (${result.scores.length} items)`);
+
+  } catch (error) {
+    console.error('Error switching rater view:', error);
+    showNotification('Failed to switch rater view', 'error');
+  }
+}
+
+/**
  * Render BWS results table
  */
 function renderBWSResultsTable(scores) {
@@ -1226,6 +1734,15 @@ function renderBWSResultsTable(scores) {
     let scoreClass = 'bws-score-neutral';
     if (scoreValue > 0) scoreClass = 'bws-score-positive';
     if (scoreValue < 0) scoreClass = 'bws-score-negative';
+
+    // Format Bradley-Terry score with confidence interval
+    let btScoreDisplay = 'N/A';
+    if (score.score_bt !== null && score.score_bt !== undefined) {
+      const btScore = score.score_bt.toFixed(2);
+      const ciLower = score.confidence_interval_lower?.toFixed(2) || '?';
+      const ciUpper = score.confidence_interval_upper?.toFixed(2) || '?';
+      btScoreDisplay = `<span class="bws-bt-score">${btScore}</span><br><span class="bws-bt-ci">[${ciLower}, ${ciUpper}]</span>`;
+    }
 
     // Get item content - check both comment_text and chunk_text
     const isComment = score.comment_text != null;
@@ -1249,6 +1766,7 @@ function renderBWSResultsTable(scores) {
           ${isComment ? `<span>👤 ${score.author_name || 'Unknown'}</span>` : ''}
         </div>
       </td>
+      <td class="bws-bt-score-cell">${btScoreDisplay}</td>
       <td class="${scoreClass}">${scoreValue > 0 ? '+' : ''}${scoreValue}</td>
       <td class="bws-score-positive">${score.num_best || 0}</td>
       <td class="bws-score-negative">${score.num_worst || 0}</td>
@@ -1293,6 +1811,10 @@ function sortBWSResults(column) {
       case 'rank':
         aVal = a.rank;
         bVal = b.rank;
+        break;
+      case 'score_bt':
+        aVal = a.score_bt !== null && a.score_bt !== undefined ? a.score_bt : -999;
+        bVal = b.score_bt !== null && b.score_bt !== undefined ? b.score_bt : -999;
         break;
       case 'score':
         aVal = a.score_counting || 0;

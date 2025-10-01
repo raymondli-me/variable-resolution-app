@@ -892,6 +892,21 @@ class Database {
   }
 
   /**
+   * Get count of judgments for a specific rater (multi-rater support)
+   */
+  async getRaterJudgmentCount(experimentId, raterId) {
+    const result = await this.get(`
+      SELECT COUNT(*) as count
+      FROM bws_judgments j
+      JOIN bws_tuples t ON j.tuple_id = t.id
+      WHERE t.experiment_id = ?
+        AND j.rater_id = ?
+    `, [experimentId, raterId]);
+
+    return result ? result.count : 0;
+  }
+
+  /**
    * Calculate counting scores for an experiment
    */
   async calculateBWSCountingScores(experimentId) {
@@ -946,17 +961,25 @@ class Database {
 
   /**
    * Save BWS scores to database
+   * @param {number} experimentId - The experiment ID
+   * @param {Array} scores - Array of score objects
+   * @param {string|null} raterId - Optional rater ID (null = combined)
    */
-  async saveBWSScores(experimentId, scores) {
-    // Delete existing scores for this experiment
-    await this.run('DELETE FROM bws_scores WHERE experiment_id = ?', [experimentId]);
+  async saveBWSScores(experimentId, scores, raterId = null) {
+    // Delete existing scores for this experiment and rater combination
+    if (raterId) {
+      await this.run('DELETE FROM bws_scores WHERE experiment_id = ? AND rater_id = ?', [experimentId, raterId]);
+    } else {
+      await this.run('DELETE FROM bws_scores WHERE experiment_id = ? AND rater_id IS NULL', [experimentId]);
+    }
 
     // Insert new scores
     const sql = `
       INSERT INTO bws_scores (
-        experiment_id, item_id, score_counting, num_appearances,
-        num_best, num_worst, rank
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        experiment_id, item_id, score_counting, score_bt,
+        confidence_interval_lower, confidence_interval_upper,
+        num_appearances, num_best, num_worst, rank, rater_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     for (const score of scores) {
@@ -964,18 +987,271 @@ class Database {
         experimentId,
         score.item_id,
         score.score_counting,
+        score.score_bt || null,
+        score.confidence_interval_lower || null,
+        score.confidence_interval_upper || null,
         score.num_appearances,
         score.num_best,
         score.num_worst,
-        score.rank
+        score.rank,
+        raterId
       ]);
     }
   }
 
   /**
-   * Get scores for an experiment
+   * Extract pairwise comparisons from BWS judgments
+   * Returns: { wins: Map<itemPair, count>, totals: Map<itemPair, count> }
    */
-  async getBWSScores(experimentId) {
+  extractPairwiseComparisons(judgments) {
+    const wins = new Map();
+    const totals = new Map();
+
+    // Helper to create consistent pair key
+    const pairKey = (id1, id2) => {
+      const [a, b] = id1 < id2 ? [id1, id2] : [id2, id1];
+      return `${a}_${b}`;
+    };
+
+    for (const judgment of judgments) {
+      const itemIds = JSON.parse(judgment.item_ids);
+      const bestId = judgment.best_item_id;
+      const worstId = judgment.worst_item_id;
+
+      // Extract definite pairwise wins
+      // Best beats all others
+      for (const otherId of itemIds) {
+        if (otherId !== bestId) {
+          const key = pairKey(bestId, otherId);
+          wins.set(key, (wins.get(key) || 0) + (bestId < otherId ? 1 : 0));
+          totals.set(key, (totals.get(key) || 0) + 1);
+        }
+      }
+
+      // All others beat worst
+      for (const otherId of itemIds) {
+        if (otherId !== worstId && otherId !== bestId) {
+          const key = pairKey(otherId, worstId);
+          wins.set(key, (wins.get(key) || 0) + (otherId < worstId ? 1 : 0));
+          totals.set(key, (totals.get(key) || 0) + 1);
+        }
+      }
+    }
+
+    return { wins, totals };
+  }
+
+  /**
+   * Calculate Bradley-Terry scores using iterative algorithm
+   * Returns: Map<itemId, { strength, stdError }>
+   */
+  calculateBradleyTerryScores(itemIds, pairwiseData) {
+    const { wins, totals } = pairwiseData;
+
+    // Initialize all items with equal strength
+    const strengths = new Map();
+    itemIds.forEach(id => strengths.set(id, 1.0));
+
+    // Helper to get win count for item i vs item j
+    const getWins = (id1, id2) => {
+      const key = id1 < id2 ? `${id1}_${id2}` : `${id2}_${id1}`;
+      const w = wins.get(key) || 0;
+      const t = totals.get(key) || 0;
+      if (id1 < id2) {
+        return w; // id1 wins
+      } else {
+        return t - w; // id2 wins (total minus id1 wins)
+      }
+    };
+
+    const getTotalComparisons = (id1, id2) => {
+      const key = id1 < id2 ? `${id1}_${id2}` : `${id2}_${id1}`;
+      return totals.get(key) || 0;
+    };
+
+    // Iterative algorithm
+    const maxIterations = 100;
+    const convergenceThreshold = 1e-6;
+
+    for (let iter = 0; iter < maxIterations; iter++) {
+      const newStrengths = new Map();
+      let maxChange = 0;
+
+      for (const itemId of itemIds) {
+        let numerator = 0;
+        let denominator = 0;
+
+        // Sum over all opponents
+        for (const opponentId of itemIds) {
+          if (itemId !== opponentId) {
+            const winsAgainst = getWins(itemId, opponentId);
+            const totalGames = getTotalComparisons(itemId, opponentId);
+
+            if (totalGames > 0) {
+              numerator += winsAgainst;
+              denominator += totalGames / (strengths.get(itemId) + strengths.get(opponentId));
+            }
+          }
+        }
+
+        // Update strength (avoid division by zero)
+        const newStrength = denominator > 0 ? numerator / denominator : strengths.get(itemId);
+        newStrengths.set(itemId, newStrength);
+
+        // Track convergence
+        const change = Math.abs(newStrength - strengths.get(itemId));
+        maxChange = Math.max(maxChange, change);
+      }
+
+      // Update strengths
+      for (const [id, strength] of newStrengths) {
+        strengths.set(id, strength);
+      }
+
+      // Check convergence
+      if (maxChange < convergenceThreshold) {
+        console.log(`[Bradley-Terry] Converged after ${iter + 1} iterations`);
+        break;
+      }
+    }
+
+    // Normalize scores (scale so sum = number of items)
+    const totalStrength = Array.from(strengths.values()).reduce((sum, s) => sum + s, 0);
+    const normalizationFactor = itemIds.length / totalStrength;
+
+    for (const [id, strength] of strengths) {
+      strengths.set(id, strength * normalizationFactor);
+    }
+
+    // Calculate standard errors (simplified approximation)
+    const stdErrors = new Map();
+    for (const itemId of itemIds) {
+      let totalComps = 0;
+      for (const opponentId of itemIds) {
+        if (itemId !== opponentId) {
+          totalComps += getTotalComparisons(itemId, opponentId);
+        }
+      }
+
+      // Simplified SE: inverse square root of comparisons
+      // More comparisons = lower standard error
+      const se = totalComps > 0 ? Math.sqrt(1 / totalComps) : 1.0;
+      stdErrors.set(itemId, se);
+    }
+
+    // Return combined results
+    const results = new Map();
+    for (const itemId of itemIds) {
+      results.set(itemId, {
+        strength: strengths.get(itemId),
+        stdError: stdErrors.get(itemId)
+      });
+    }
+
+    return results;
+  }
+
+  /**
+   * Calculate BWS scores with both counting and Bradley-Terry methods
+   * @param {number} experimentId - The experiment ID
+   * @param {string|null} raterId - Optional rater ID to filter judgments (null = combined/all raters)
+   */
+  async calculateBWSScores(experimentId, raterId = null) {
+    // Get all judgments
+    let judgments = await this.getBWSJudgments(experimentId);
+
+    // Filter by rater if specified
+    if (raterId) {
+      judgments = judgments.filter(j => j.rater_id === raterId);
+    }
+
+    if (judgments.length === 0) {
+      throw new Error(`No judgments found for this experiment${raterId ? ` with rater_id=${raterId}` : ''}`);
+    }
+
+    console.log(`[calculateBWSScores] Calculating scores for experiment ${experimentId}${raterId ? ` (rater: ${raterId})` : ' (combined)'} with ${judgments.length} judgments`);
+
+    // Count appearances, best, and worst for each item (Counting method)
+    const scores = {};
+
+    for (const judgment of judgments) {
+      const itemIds = JSON.parse(judgment.item_ids);
+
+      // Track appearances
+      for (const itemId of itemIds) {
+        if (!scores[itemId]) {
+          scores[itemId] = {
+            item_id: itemId,
+            num_appearances: 0,
+            num_best: 0,
+            num_worst: 0
+          };
+        }
+        scores[itemId].num_appearances++;
+      }
+
+      // Track best/worst
+      if (scores[judgment.best_item_id]) {
+        scores[judgment.best_item_id].num_best++;
+      }
+      if (scores[judgment.worst_item_id]) {
+        scores[judgment.worst_item_id].num_worst++;
+      }
+    }
+
+    // Calculate counting scores
+    const items = Object.values(scores);
+    for (const item of items) {
+      item.score_counting = item.num_best - item.num_worst;
+    }
+
+    // Calculate Bradley-Terry scores
+    const itemIds = items.map(item => item.item_id);
+    const pairwiseData = this.extractPairwiseComparisons(judgments);
+    const btResults = this.calculateBradleyTerryScores(itemIds, pairwiseData);
+
+    // Merge BT scores with counting scores
+    for (const item of items) {
+      const btResult = btResults.get(item.item_id);
+      if (btResult) {
+        item.score_bt = btResult.strength;
+
+        // Calculate 95% confidence interval (1.96 * SE)
+        const margin = 1.96 * btResult.stdError;
+        item.confidence_interval_lower = btResult.strength - margin;
+        item.confidence_interval_upper = btResult.strength + margin;
+      }
+    }
+
+    // Sort by Bradley-Terry score (fallback to counting if BT not available)
+    items.sort((a, b) => {
+      const scoreA = a.score_bt !== undefined ? a.score_bt : a.score_counting;
+      const scoreB = b.score_bt !== undefined ? b.score_bt : b.score_counting;
+      return scoreB - scoreA;
+    });
+
+    // Assign ranks
+    items.forEach((item, index) => {
+      item.rank = index + 1;
+    });
+
+    // Save to database with rater_id
+    await this.saveBWSScores(experimentId, items, raterId);
+
+    console.log(`[calculateBWSScores] Saved ${items.length} scores for ${raterId || 'combined'}`);
+
+    return items;
+  }
+
+  /**
+   * Get scores for an experiment
+   * @param {number} experimentId - The experiment ID
+   * @param {string|null} raterId - Optional rater ID to filter ('combined', 'gemini-2.5-flash', 'human-user', or null for combined)
+   */
+  async getBWSScores(experimentId, raterId = 'combined') {
+    // Convert 'combined' string to NULL for database query
+    const raterFilter = raterId === 'combined' ? null : raterId;
+
     return await this.all(`
       SELECT
         s.*,
@@ -991,8 +1267,9 @@ class Database {
       LEFT JOIN comments c ON s.item_id = c.id
       LEFT JOIN video_chunks vc ON s.item_id = vc.id
       WHERE s.experiment_id = ?
+        AND (? IS NULL AND s.rater_id IS NULL OR s.rater_id = ?)
       ORDER BY s.rank
-    `, [experimentId]);
+    `, [experimentId, raterFilter, raterFilter]);
   }
 
   /**

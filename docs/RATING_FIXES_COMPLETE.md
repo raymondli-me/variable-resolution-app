@@ -352,3 +352,4 @@ When you restart the app, you'll see:
 *Fixes completed: September 30, 2025*  
 *Status: ✅ Ready to test*  
 *Next: Restart app and try Preview!*
+

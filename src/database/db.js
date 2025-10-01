@@ -343,8 +343,8 @@ class Database {
     const result = await this.run(`
       INSERT INTO rating_projects (
         collection_id, project_name, research_intent, rating_scale,
-        gemini_model, total_items, settings
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        gemini_model, total_items, settings, parent_project_id, filter_criteria
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       project.collectionId,
       project.projectName,
@@ -352,9 +352,11 @@ class Database {
       project.ratingScale,
       project.geminiModel || 'gemini-2.5-flash',
       project.totalItems || 0,
-      JSON.stringify(project.settings || {})
+      JSON.stringify(project.settings || {}),
+      project.parentProjectId || null,  // NEW: parent project reference
+      project.filterCriteria ? JSON.stringify(project.filterCriteria) : null  // NEW: filter config
     ]);
-    
+
     return result.id;
   }
   
@@ -425,9 +427,101 @@ class Database {
     `, [projectId]);
   }
   
-  async getItemsForRating(collectionId, includeChunks, includeComments) {
+  async getItemsForRating(collectionId, includeChunks, includeComments, projectId = null) {
     const items = [];
-    
+
+    // If projectId provided, check if it's a child project (has parent_project_id)
+    if (projectId) {
+      const project = await this.getRatingProject(projectId);
+
+      if (project && project.parent_project_id) {
+        console.log(`[Database] Project ${projectId} is a child project, fetching from parent ${project.parent_project_id}`);
+
+        // This is a CHILD PROJECT - fetch from parent's ratings
+        const filterCriteria = project.filter_criteria ? JSON.parse(project.filter_criteria) : {};
+        const minScore = filterCriteria.min_score || 0.0;
+        const maxScore = filterCriteria.max_score || 1.0;
+        const allowedTypes = filterCriteria.content_types || ['video_chunk', 'comment'];
+
+        console.log(`[Database] Filter criteria: min_score=${minScore}, max_score=${maxScore}, types=${allowedTypes.join(',')}`);
+
+        // Get successful ratings from parent project that match filter criteria
+        const parentRatings = await this.all(`
+          SELECT
+            r.*,
+            c.text as comment_text,
+            c.author_name as comment_author,
+            c.like_count as comment_likes,
+            c.video_id as comment_video_id,
+            vc.transcript_text as chunk_text,
+            vc.start_time as chunk_start,
+            vc.end_time as chunk_end,
+            vc.file_path as chunk_file_path,
+            vc.video_id as chunk_video_id,
+            vc.chunk_number,
+            v.title as video_title,
+            v.channel_title
+          FROM relevance_ratings r
+          LEFT JOIN comments c ON r.item_type = 'comment' AND r.item_id = c.id
+          LEFT JOIN video_chunks vc ON r.item_type = 'video_chunk' AND r.item_id = vc.id
+          LEFT JOIN videos v ON (c.video_id = v.id OR vc.video_id = v.id)
+          WHERE r.project_id = ?
+            AND r.status = 'success'
+            AND r.relevance_score >= ?
+            AND r.relevance_score <= ?
+          ORDER BY r.relevance_score DESC
+        `, [project.parent_project_id, minScore, maxScore]);
+
+        console.log(`[Database] Found ${parentRatings.length} ratings from parent project matching criteria`);
+
+        // Convert parent ratings back to items format
+        for (const rating of parentRatings) {
+          if (!allowedTypes.includes(rating.item_type)) {
+            continue; // Skip if type not in filter
+          }
+
+          if (rating.item_type === 'video_chunk') {
+            if (includeChunks && rating.chunk_file_path) {
+              items.push({
+                type: 'video_chunk',
+                id: rating.item_id,
+                video_id: rating.chunk_video_id,
+                chunk_number: rating.chunk_number,
+                file_path: rating.chunk_file_path,
+                start_time: rating.chunk_start,
+                end_time: rating.chunk_end,
+                transcript_text: rating.chunk_text,
+                video_title: rating.video_title,
+                channel_title: rating.channel_title,
+                parent_rating_score: rating.relevance_score,  // Include parent's score for reference
+                parent_rating_reasoning: rating.reasoning
+              });
+            }
+          } else if (rating.item_type === 'comment') {
+            if (includeComments && rating.comment_text) {
+              items.push({
+                type: 'comment',
+                id: rating.item_id,
+                text: rating.comment_text,
+                author_name: rating.comment_author,
+                like_count: rating.comment_likes,
+                video_id: rating.comment_video_id,
+                video_title: rating.video_title,
+                parent_rating_score: rating.relevance_score,
+                parent_rating_reasoning: rating.reasoning
+              });
+            }
+          }
+        }
+
+        console.log(`[Database] Returning ${items.length} items from parent project for child project`);
+        return items;
+      }
+    }
+
+    // ROOT PROJECT or no projectId - fetch from collection as before
+    console.log(`[Database] Fetching items from collection ${collectionId} (root project)`);
+
     if (includeChunks) {
       const chunks = await this.all(`
         SELECT vc.*, v.title as video_title, v.channel_title
@@ -435,14 +529,14 @@ class Database {
         JOIN videos v ON vc.video_id = v.id
         WHERE vc.collection_id = ?
       `, [collectionId]);
-      
+
       items.push(...chunks.map(chunk => ({
         type: 'video_chunk',
         id: `chunk_${chunk.video_id}_${chunk.chunk_number}`,
         ...chunk
       })));
     }
-    
+
     if (includeComments) {
       const comments = await this.all(`
         SELECT c.*, v.title as video_title
@@ -450,34 +544,90 @@ class Database {
         JOIN videos v ON c.video_id = v.id
         WHERE c.collection_id = ?
       `, [collectionId]);
-      
+
       items.push(...comments.map(comment => ({
         type: 'comment',
         id: comment.id,
         ...comment
       })));
     }
-    
+
+    console.log(`[Database] Returning ${items.length} items from collection for root project`);
     return items;
   }
   
   // Get failed ratings for a project (for retry functionality)
   async getFailedRatings(projectId) {
     return await this.all(
-      `SELECT * FROM relevance_ratings 
+      `SELECT * FROM relevance_ratings
        WHERE project_id = ? AND status = 'failed'
        ORDER BY created_at DESC`,
       [projectId]
     );
   }
-  
+
   // Increment failed items count
   async incrementFailedItems(projectId) {
     return await this.run(
-      `UPDATE rating_projects 
-       SET failed_items = failed_items + 1 
+      `UPDATE rating_projects
+       SET failed_items = failed_items + 1
        WHERE id = ?`,
       [projectId]
+    );
+  }
+
+  // Get child projects of a given project
+  async getChildProjects(projectId) {
+    return await this.all(
+      `SELECT * FROM rating_projects
+       WHERE parent_project_id = ?
+       ORDER BY created_at DESC`,
+      [projectId]
+    );
+  }
+
+  // Get full lineage of a project (from root to current)
+  async getRatingProjectLineage(projectId) {
+    const lineage = [];
+    let currentId = projectId;
+
+    // Traverse up the parent chain (max 20 levels to prevent infinite loops)
+    for (let i = 0; i < 20; i++) {
+      const project = await this.getRatingProject(currentId);
+
+      if (!project) {
+        break; // Project not found
+      }
+
+      lineage.unshift(project); // Add to beginning of array
+
+      if (!project.parent_project_id) {
+        break; // Reached root project
+      }
+
+      currentId = project.parent_project_id;
+    }
+
+    return lineage;
+  }
+
+  // Check if creating a child project would create a circular reference
+  async wouldCreateCircularReference(parentProjectId, childProjectId) {
+    if (parentProjectId === childProjectId) {
+      return true; // Self-reference
+    }
+
+    const lineage = await this.getRatingProjectLineage(parentProjectId);
+    return lineage.some(p => p.id === childProjectId);
+  }
+
+  // Get all root projects for a collection (projects with no parent)
+  async getRootProjects(collectionId) {
+    return await this.all(
+      `SELECT * FROM rating_projects
+       WHERE collection_id = ? AND parent_project_id IS NULL
+       ORDER BY created_at DESC`,
+      [collectionId]
     );
   }
   
@@ -519,6 +669,364 @@ class Database {
         return acc;
       }, {})
     };
+  }
+
+  // ========================================
+  // BWS (Best-Worst Scaling) Methods
+  // ========================================
+
+  /**
+   * Create a new BWS experiment
+   */
+  async createBWSExperiment(experimentData) {
+    const {
+      name,
+      rating_project_id,
+      item_type,
+      tuple_size,
+      tuple_count,
+      design_method,
+      scoring_method,
+      rater_type,
+      research_intent,
+      status = 'draft'
+    } = experimentData;
+
+    const result = await this.run(`
+      INSERT INTO bws_experiments (
+        name, rating_project_id, item_type, tuple_size, tuple_count,
+        design_method, scoring_method, rater_type, research_intent, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      name, rating_project_id, item_type, tuple_size, tuple_count,
+      design_method, scoring_method, rater_type, research_intent, status
+    ]);
+
+    return result.id;
+  }
+
+  /**
+   * Get all BWS experiments
+   */
+  async getAllBWSExperiments() {
+    return await this.all(`
+      SELECT
+        e.*,
+        rp.project_name as rating_project_name,
+        rp.collection_id,
+        (SELECT COUNT(*) FROM bws_tuples WHERE experiment_id = e.id) as tuples_generated,
+        (SELECT COUNT(*) FROM bws_judgments j JOIN bws_tuples t ON j.tuple_id = t.id WHERE t.experiment_id = e.id) as judgments_count
+      FROM bws_experiments e
+      LEFT JOIN rating_projects rp ON e.rating_project_id = rp.id
+      ORDER BY e.created_at DESC
+    `);
+  }
+
+  /**
+   * Get BWS experiment by ID
+   */
+  async getBWSExperiment(experimentId) {
+    return await this.get(`
+      SELECT
+        e.*,
+        rp.project_name as rating_project_name,
+        rp.collection_id,
+        (SELECT COUNT(*) FROM bws_tuples WHERE experiment_id = e.id) as tuples_generated,
+        (SELECT COUNT(*) FROM bws_judgments j JOIN bws_tuples t ON j.tuple_id = t.id WHERE t.experiment_id = e.id) as judgments_count
+      FROM bws_experiments e
+      LEFT JOIN rating_projects rp ON e.rating_project_id = rp.id
+      WHERE e.id = ?
+    `, [experimentId]);
+  }
+
+  /**
+   * Update BWS experiment
+   */
+  async updateBWSExperiment(experimentId, updates) {
+    const allowedFields = ['name', 'status', 'total_cost', 'completed_at'];
+    const fields = Object.keys(updates).filter(k => allowedFields.includes(k));
+
+    if (fields.length === 0) return;
+
+    const setClause = fields.map(f => `${f} = ?`).join(', ');
+    const values = fields.map(f => updates[f]);
+
+    await this.run(
+      `UPDATE bws_experiments SET ${setClause} WHERE id = ?`,
+      [...values, experimentId]
+    );
+  }
+
+  /**
+   * Save generated tuples for an experiment
+   */
+  async saveBWSTuples(experimentId, tuples) {
+    const sql = `
+      INSERT INTO bws_tuples (experiment_id, tuple_index, item_ids)
+      VALUES (?, ?, ?)
+    `;
+
+    for (let i = 0; i < tuples.length; i++) {
+      const itemIds = JSON.stringify(tuples[i]);
+      await this.run(sql, [experimentId, i, itemIds]);
+    }
+
+    return tuples.length;
+  }
+
+  /**
+   * Get tuples for an experiment
+   */
+  async getBWSTuples(experimentId) {
+    const rows = await this.all(`
+      SELECT * FROM bws_tuples
+      WHERE experiment_id = ?
+      ORDER BY tuple_index
+    `, [experimentId]);
+
+    // Parse JSON item_ids
+    return rows.map(row => ({
+      ...row,
+      item_ids: JSON.parse(row.item_ids)
+    }));
+  }
+
+  /**
+   * Get a specific tuple with its items
+   */
+  async getBWSTupleWithItems(tupleId) {
+    const tuple = await this.get(`
+      SELECT * FROM bws_tuples WHERE id = ?
+    `, [tupleId]);
+
+    if (!tuple) return null;
+
+    tuple.item_ids = JSON.parse(tuple.item_ids);
+
+    // Fetch actual items (comments or video chunks)
+    const items = [];
+    for (const itemId of tuple.item_ids) {
+      // Try comments first
+      let item = await this.get('SELECT *, "comment" as item_type FROM comments WHERE id = ?', [itemId]);
+
+      // If not found, try video chunks
+      if (!item) {
+        item = await this.get('SELECT *, "video_chunk" as item_type FROM video_chunks WHERE id = ?', [itemId]);
+      }
+
+      if (item) items.push(item);
+    }
+
+    tuple.items = items;
+    return tuple;
+  }
+
+  /**
+   * Get next unrated tuple for a rater
+   */
+  async getNextBWSTuple(experimentId, raterType, raterId) {
+    // Get all tuple IDs for this experiment
+    const allTuples = await this.all(`
+      SELECT id FROM bws_tuples
+      WHERE experiment_id = ?
+      ORDER BY tuple_index
+    `, [experimentId]);
+
+    // Get tuples already rated by this rater
+    const ratedTupleIds = await this.all(`
+      SELECT DISTINCT t.id
+      FROM bws_tuples t
+      JOIN bws_judgments j ON j.tuple_id = t.id
+      WHERE t.experiment_id = ? AND j.rater_type = ? AND j.rater_id = ?
+    `, [experimentId, raterType, raterId]);
+
+    const ratedIds = new Set(ratedTupleIds.map(r => r.id));
+    const unratedTuple = allTuples.find(t => !ratedIds.has(t.id));
+
+    if (!unratedTuple) return null;
+
+    // Get full tuple with items
+    return await this.getBWSTupleWithItems(unratedTuple.id);
+  }
+
+  /**
+   * Save a BWS judgment
+   */
+  async saveBWSJudgment(judgmentData) {
+    const {
+      tuple_id,
+      rater_type,
+      rater_id,
+      best_item_id,
+      worst_item_id,
+      reasoning = null,
+      response_time_ms = null
+    } = judgmentData;
+
+    // Validate best != worst
+    if (best_item_id === worst_item_id) {
+      throw new Error('Best and worst items cannot be the same');
+    }
+
+    const result = await this.run(`
+      INSERT INTO bws_judgments (
+        tuple_id, rater_type, rater_id, best_item_id, worst_item_id,
+        reasoning, response_time_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [tuple_id, rater_type, rater_id, best_item_id, worst_item_id, reasoning, response_time_ms]);
+
+    return result.id;
+  }
+
+  /**
+   * Get all judgments for an experiment
+   */
+  async getBWSJudgments(experimentId) {
+    return await this.all(`
+      SELECT j.*, t.tuple_index, t.item_ids
+      FROM bws_judgments j
+      JOIN bws_tuples t ON j.tuple_id = t.id
+      WHERE t.experiment_id = ?
+      ORDER BY j.created_at
+    `, [experimentId]);
+  }
+
+  /**
+   * Calculate counting scores for an experiment
+   */
+  async calculateBWSCountingScores(experimentId) {
+    // Get all judgments
+    const judgments = await this.getBWSJudgments(experimentId);
+
+    // Count appearances, best, and worst for each item
+    const scores = {};
+
+    for (const judgment of judgments) {
+      const itemIds = JSON.parse(judgment.item_ids);
+
+      // Track appearances
+      for (const itemId of itemIds) {
+        if (!scores[itemId]) {
+          scores[itemId] = {
+            item_id: itemId,
+            num_appearances: 0,
+            num_best: 0,
+            num_worst: 0
+          };
+        }
+        scores[itemId].num_appearances++;
+      }
+
+      // Track best/worst
+      if (scores[judgment.best_item_id]) {
+        scores[judgment.best_item_id].num_best++;
+      }
+      if (scores[judgment.worst_item_id]) {
+        scores[judgment.worst_item_id].num_worst++;
+      }
+    }
+
+    // Calculate scores and save
+    const items = Object.values(scores);
+    for (const item of items) {
+      item.score_counting = item.num_best - item.num_worst;
+    }
+
+    // Sort by score and assign ranks
+    items.sort((a, b) => b.score_counting - a.score_counting);
+    items.forEach((item, index) => {
+      item.rank = index + 1;
+    });
+
+    // Save to database
+    await this.saveBWSScores(experimentId, items);
+
+    return items;
+  }
+
+  /**
+   * Save BWS scores to database
+   */
+  async saveBWSScores(experimentId, scores) {
+    // Delete existing scores for this experiment
+    await this.run('DELETE FROM bws_scores WHERE experiment_id = ?', [experimentId]);
+
+    // Insert new scores
+    const sql = `
+      INSERT INTO bws_scores (
+        experiment_id, item_id, score_counting, num_appearances,
+        num_best, num_worst, rank
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    for (const score of scores) {
+      await this.run(sql, [
+        experimentId,
+        score.item_id,
+        score.score_counting,
+        score.num_appearances,
+        score.num_best,
+        score.num_worst,
+        score.rank
+      ]);
+    }
+  }
+
+  /**
+   * Get scores for an experiment
+   */
+  async getBWSScores(experimentId) {
+    return await this.all(`
+      SELECT
+        s.*,
+        c.text as comment_text,
+        c.author_name,
+        c.like_count,
+        vc.transcript_text as chunk_text,
+        vc.start_time,
+        vc.end_time,
+        vc.file_path as chunk_file_path,
+        vc.video_id
+      FROM bws_scores s
+      LEFT JOIN comments c ON s.item_id = c.id
+      LEFT JOIN video_chunks vc ON s.item_id = vc.id
+      WHERE s.experiment_id = ?
+      ORDER BY s.rank
+    `, [experimentId]);
+  }
+
+  /**
+   * Get BWS experiment statistics
+   */
+  async getBWSExperimentStats(experimentId) {
+    const exp = await this.getBWSExperiment(experimentId);
+    const tuples = await this.getBWSTuples(experimentId);
+    const judgments = await this.getBWSJudgments(experimentId);
+
+    const totalTuples = tuples.length;
+    const totalJudgments = judgments.length;
+    const progress = totalTuples > 0 ? (totalJudgments / totalTuples) * 100 : 0;
+
+    // Count by rater type
+    const aiJudgments = judgments.filter(j => j.rater_type === 'ai').length;
+    const humanJudgments = judgments.filter(j => j.rater_type === 'human').length;
+
+    return {
+      ...exp,
+      total_tuples: totalTuples,
+      total_judgments: totalJudgments,
+      progress_percentage: Math.round(progress),
+      ai_judgments: aiJudgments,
+      human_judgments: humanJudgments,
+      is_complete: totalJudgments >= totalTuples
+    };
+  }
+
+  /**
+   * Delete BWS experiment (cascades to tuples, judgments, scores)
+   */
+  async deleteBWSExperiment(experimentId) {
+    await this.run('DELETE FROM bws_experiments WHERE id = ?', [experimentId]);
   }
 
   close() {

@@ -304,3 +304,4 @@ The result: A gallery that feels like a **professional desktop application**, no
 All CSS is now in `/src/styles/rating-projects.css`  
 Linked in `index-advanced.html`  
 Ready to see in action!
+

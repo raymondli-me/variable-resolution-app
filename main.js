@@ -2250,6 +2250,63 @@ ipcMain.handle('ai:getItemCounts', async (event, { collectionId }) => {
   }
 });
 
+// Hierarchical rating project IPC handlers
+ipcMain.handle('ai:getChildProjects', async (event, { projectId }) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    const children = await db.getChildProjects(projectId);
+    return { success: true, data: children };
+  } catch (error) {
+    console.error('Error getting child projects:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('ai:getProjectLineage', async (event, { projectId }) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    const lineage = await db.getRatingProjectLineage(projectId);
+    return { success: true, data: lineage };
+  } catch (error) {
+    console.error('Error getting project lineage:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('ai:getFilteredItemCount', async (event, { parentProjectId, filterCriteria }) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    const minScore = filterCriteria.min_score || 0.0;
+    const maxScore = filterCriteria.max_score || 1.0;
+    const allowedTypes = filterCriteria.content_types || ['video_chunk', 'comment'];
+
+    // Count items from parent project that match filter
+    const result = await db.get(`
+      SELECT COUNT(*) as count
+      FROM relevance_ratings
+      WHERE project_id = ?
+        AND status = 'success'
+        AND relevance_score >= ?
+        AND relevance_score <= ?
+        AND item_type IN (${allowedTypes.map(() => '?').join(',')})
+    `, [parentProjectId, minScore, maxScore, ...allowedTypes]);
+
+    return { success: true, data: { count: result.count } };
+  } catch (error) {
+    console.error('Error getting filtered item count:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // Preview rating (first 5 items)
 ipcMain.handle('ai:previewRating', async (event, config) => {
   try {
@@ -2261,14 +2318,85 @@ ipcMain.handle('ai:previewRating', async (event, config) => {
     const dbPath = path.join(app.getPath('userData'), 'collections.db');
     const db = require('./src/database/db');
     await db.initialize(dbPath);
-    
-    // Get items
-    const items = await db.getItemsForRating(
-      config.collectionId,
-      config.includeChunks,
-      config.includeComments
-    );
-    
+
+    let items;
+
+    // Check if this is a child project preview
+    if (config.parentProjectId && config.filterCriteria) {
+      console.log('[Preview] Child project - fetching from parent ratings');
+      const minScore = config.filterCriteria.min_score || 0.0;
+      const maxScore = config.filterCriteria.max_score || 1.0;
+      const allowedTypes = config.filterCriteria.content_types || ['video_chunk', 'comment'];
+
+      // Get items from parent's ratings with filters
+      const parentRatings = await db.all(`
+        SELECT
+          r.*,
+          c.text as comment_text,
+          c.author_name as comment_author,
+          c.like_count as comment_likes,
+          c.video_id as comment_video_id,
+          vc.transcript_text as chunk_text,
+          vc.start_time as chunk_start,
+          vc.end_time as chunk_end,
+          vc.file_path as chunk_file_path,
+          vc.video_id as chunk_video_id,
+          vc.chunk_number,
+          v.title as video_title,
+          v.channel_title
+        FROM relevance_ratings r
+        LEFT JOIN comments c ON r.item_type = 'comment' AND r.item_id = c.id
+        LEFT JOIN video_chunks vc ON r.item_type = 'video_chunk' AND r.item_id = vc.id
+        LEFT JOIN videos v ON (c.video_id = v.id OR vc.video_id = v.id)
+        WHERE r.project_id = ?
+          AND r.status = 'success'
+          AND r.relevance_score >= ?
+          AND r.relevance_score <= ?
+          AND r.item_type IN (${allowedTypes.map(() => '?').join(',')})
+        ORDER BY r.relevance_score DESC
+      `, [config.parentProjectId, minScore, maxScore, ...allowedTypes]);
+
+      // Convert to items format
+      items = [];
+      for (const rating of parentRatings) {
+        if (rating.item_type === 'video_chunk' && config.includeChunks && rating.chunk_file_path) {
+          items.push({
+            type: 'video_chunk',
+            id: rating.item_id,
+            video_id: rating.chunk_video_id,
+            chunk_number: rating.chunk_number,
+            file_path: rating.chunk_file_path,
+            start_time: rating.chunk_start,
+            end_time: rating.chunk_end,
+            transcript_text: rating.chunk_text,
+            video_title: rating.video_title,
+            channel_title: rating.channel_title,
+            parent_rating_score: rating.relevance_score
+          });
+        } else if (rating.item_type === 'comment' && config.includeComments && rating.comment_text) {
+          items.push({
+            type: 'comment',
+            id: rating.item_id,
+            text: rating.comment_text,
+            author_name: rating.comment_author,
+            like_count: rating.comment_likes,
+            video_id: rating.comment_video_id,
+            video_title: rating.video_title,
+            parent_rating_score: rating.relevance_score
+          });
+        }
+      }
+
+      console.log(`[Preview] Found ${items.length} filtered items from parent`);
+    } else {
+      // Root project - fetch from collection
+      items = await db.getItemsForRating(
+        config.collectionId,
+        config.includeChunks,
+        config.includeComments
+      );
+    }
+
     // Take first 5
     const previewItems = items.slice(0, 5);
     const geminiRater = new GeminiRater(geminiKey);
@@ -2422,12 +2550,378 @@ ipcMain.handle('ai:testGeminiConnection', async () => {
     if (!geminiKey) {
       return { success: false, error: 'Gemini API key not set' };
     }
-    
+
     const geminiRater = new GeminiRater(geminiKey);
     const result = await geminiRater.testConnection();
-    
+
     return result;
   } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('ai:getRatingsForProject', async (event, { projectId }) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    const ratings = await db.getRatingsForProject(projectId);
+
+    return { success: true, ratings };
+  } catch (error) {
+    console.error('Error getting ratings for project:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ========================================
+// BWS (Best-Worst Scaling) IPC Handlers
+// ========================================
+
+// Get all BWS experiments
+ipcMain.handle('bws:getAllExperiments', async () => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    const experiments = await db.getAllBWSExperiments();
+    return { success: true, experiments };
+  } catch (error) {
+    console.error('Error getting BWS experiments:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get single BWS experiment with stats
+ipcMain.handle('bws:getExperiment', async (event, { experimentId }) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    const stats = await db.getBWSExperimentStats(experimentId);
+    return { success: true, experiment: stats };
+  } catch (error) {
+    console.error('Error getting BWS experiment:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Create BWS experiment with tuple generation
+ipcMain.handle('bws:createExperiment', async (event, config) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    const BwsTupleGenerator = require('./src/services/bws-tuple-generator');
+
+    // Get items from rating project
+    const {
+      name,
+      rating_project_id,
+      tuple_size,
+      target_appearances,
+      design_method,
+      scoring_method,
+      rater_type,
+      research_intent,
+      min_score = 0.7
+    } = config;
+
+    // Fetch items from rating project with score filter
+    const ratings = await db.getRatingsForProject(rating_project_id);
+    const filteredRatings = ratings.filter(r =>
+      r.status === 'success' &&
+      r.relevance_score >= min_score
+    );
+
+    if (filteredRatings.length === 0) {
+      return { success: false, error: 'No items meet the score criteria' };
+    }
+
+    if (filteredRatings.length < tuple_size) {
+      return { success: false, error: `Need at least ${tuple_size} items for tuple size ${tuple_size}` };
+    }
+
+    // Determine item type (check if all same type)
+    const itemTypes = new Set(filteredRatings.map(r => r.item_type));
+    if (itemTypes.size > 1) {
+      return { success: false, error: 'Cannot mix video chunks and comments in BWS experiment' };
+    }
+    const item_type = filteredRatings[0].item_type;
+
+    // Generate tuples
+    const itemIds = filteredRatings.map(r => r.item_id);
+    const tuples = BwsTupleGenerator.generateTuples(itemIds, {
+      tupleSize: tuple_size,
+      targetAppearances: target_appearances || 4,
+      method: design_method || 'balanced'
+    });
+
+    // Validate tuples
+    const validation = BwsTupleGenerator.validateTuples(tuples, itemIds, tuple_size);
+    if (!validation.valid) {
+      console.warn('Tuple validation issues:', validation.issues);
+    }
+
+    // Create experiment in database
+    const experimentId = await db.createBWSExperiment({
+      name,
+      rating_project_id,
+      item_type,
+      tuple_size,
+      tuple_count: tuples.length,
+      design_method: design_method || 'balanced',
+      scoring_method: scoring_method || 'counting',
+      rater_type: rater_type || 'ai',
+      research_intent,
+      status: 'draft'
+    });
+
+    // Save tuples
+    await db.saveBWSTuples(experimentId, tuples);
+
+    return {
+      success: true,
+      experiment_id: experimentId,
+      tuple_count: tuples.length,
+      item_count: itemIds.length,
+      validation: validation.statistics
+    };
+  } catch (error) {
+    console.error('Error creating BWS experiment:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Update BWS experiment
+ipcMain.handle('bws:updateExperiment', async (event, { experimentId, updates }) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    await db.updateBWSExperiment(experimentId, updates);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating BWS experiment:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get next tuple for rating
+ipcMain.handle('bws:getNextTuple', async (event, { experimentId, raterType, raterId }) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    const tuple = await db.getNextBWSTuple(experimentId, raterType, raterId);
+
+    if (!tuple) {
+      return { success: true, tuple: null, items: null, complete: true };
+    }
+
+    // Extract items from tuple object (getBWSTupleWithItems adds items to tuple)
+    const items = tuple.items || [];
+
+    return { success: true, tuple, items, complete: false };
+  } catch (error) {
+    console.error('Error getting next tuple:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Save BWS judgment
+ipcMain.handle('bws:saveJudgment', async (event, judgmentData) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    const judgmentId = await db.saveBWSJudgment(judgmentData);
+
+    return { success: true, judgment_id: judgmentId };
+  } catch (error) {
+    console.error('Error saving BWS judgment:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Calculate scores for experiment
+ipcMain.handle('bws:calculateScores', async (event, { experimentId }) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    const scores = await db.calculateBWSCountingScores(experimentId);
+
+    // Update experiment status to completed
+    await db.updateBWSExperiment(experimentId, {
+      status: 'completed',
+      completed_at: new Date().toISOString()
+    });
+
+    return { success: true, scores };
+  } catch (error) {
+    console.error('Error calculating BWS scores:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get scores for experiment
+ipcMain.handle('bws:getScores', async (event, { experimentId }) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    const scores = await db.getBWSScores(experimentId);
+
+    return { success: true, scores };
+  } catch (error) {
+    console.error('Error getting BWS scores:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Delete BWS experiment
+ipcMain.handle('bws:deleteExperiment', async (event, { experimentId }) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    await db.deleteBWSExperiment(experimentId);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting BWS experiment:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Start AI BWS Rating
+ipcMain.handle('bws:startAIRating', async (event, { experimentId }) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+    const GeminiRater = require('./src/services/gemini-rater');
+
+    // Get experiment details
+    const stats = await db.getBWSExperimentStats(experimentId);
+    const experiment = stats;
+
+    // Get API key from encrypted settings
+    const geminiKey = settings.apiKeys?.gemini ? decrypt(settings.apiKeys.gemini) : null;
+    if (!geminiKey) {
+      return { success: false, error: 'Gemini API key not set. Please configure it in Settings.' };
+    }
+
+    const rater = new GeminiRater(geminiKey);
+
+    // Update experiment status
+    await db.updateBWSExperiment(experimentId, { status: 'in_progress' });
+
+    // Get all tuples
+    const allTuples = await db.getBWSTuples(experimentId);
+
+    // Get already rated tuples
+    const judgments = await db.getBWSJudgments(experimentId);
+    const ratedTupleIds = new Set(judgments.map(j => j.tuple_id));
+
+    // Filter to unrated tuples
+    const unratedTuples = allTuples.filter(t => !ratedTupleIds.has(t.id));
+
+    let completedCount = ratedTupleIds.size;
+    const totalCount = allTuples.length;
+
+    // Process each tuple
+    for (const tuple of unratedTuples) {
+      try {
+        // Get tuple with items
+        const tupleWithItems = await db.getBWSTupleWithItems(tuple.id);
+
+        // Send progress event
+        event.sender.send('bws:ai-progress', {
+          experimentId,
+          current: completedCount,
+          total: totalCount,
+          percentage: Math.round((completedCount / totalCount) * 100)
+        });
+
+        // Rate with Gemini
+        const result = await rater.compareBWSItems(tupleWithItems.items, experiment.research_intent);
+
+        // Convert 1-based indices to 0-based and get item IDs
+        const bestIndex = result.best - 1;
+        const worstIndex = result.worst - 1;
+        const bestItemId = tupleWithItems.items[bestIndex]?.id;
+        const worstItemId = tupleWithItems.items[worstIndex]?.id;
+
+        if (!bestItemId || !worstItemId) {
+          throw new Error('Invalid item indices from Gemini');
+        }
+
+        // Save judgment
+        await db.saveBWSJudgment({
+          tuple_id: tuple.id,
+          rater_type: 'ai',
+          rater_id: 'gemini-2.5-flash',
+          best_item_id: bestItemId,
+          worst_item_id: worstItemId,
+          reasoning: result.reasoning,
+          response_time_ms: 0
+        });
+
+        completedCount++;
+
+        // Send item rated event
+        event.sender.send('bws:ai-item-rated', {
+          tupleId: tuple.id,
+          best: bestIndex,
+          worst: worstIndex,
+          reasoning: result.reasoning
+        });
+
+        // Rate limiting - wait 1 second between requests
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+      } catch (error) {
+        console.error(`Error rating tuple ${tuple.id}:`, error);
+        event.sender.send('bws:ai-error', {
+          tupleId: tuple.id,
+          error: error.message
+        });
+        // Continue with next tuple
+      }
+    }
+
+    // Calculate scores
+    const scores = await db.calculateBWSCountingScores(experimentId);
+
+    // Update experiment to completed
+    await db.updateBWSExperiment(experimentId, {
+      status: 'completed',
+      completed_at: new Date().toISOString()
+    });
+
+    // Send completion event
+    event.sender.send('bws:ai-complete', {
+      experimentId,
+      scoresCount: scores.length
+    });
+
+    return { success: true, completed: completedCount, total: totalCount };
+
+  } catch (error) {
+    console.error('Error in AI BWS rating:', error);
     return { success: false, error: error.message };
   }
 });

@@ -320,3 +320,4 @@ The detailed logs will reveal exactly what's happening:
 *Debugging improvements completed: September 30, 2025*  
 *Status: ✅ Ready for testing*  
 *Files changed: 2 (gemini-rater.js, rating-engine.js)*
+

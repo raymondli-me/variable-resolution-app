@@ -26,6 +26,8 @@ class RatingEngine extends EventEmitter {
         researchIntent: projectConfig.researchIntent,
         ratingScale: projectConfig.ratingScale,
         geminiModel: projectConfig.geminiModel,
+        parentProjectId: projectConfig.parentProjectId || null,  // NEW: hierarchical support
+        filterCriteria: projectConfig.filterCriteria || null,    // NEW: hierarchical support
         settings: {
           includeChunks: projectConfig.includeChunks,
           includeComments: projectConfig.includeComments,
@@ -38,13 +40,14 @@ class RatingEngine extends EventEmitter {
       this.currentProject = { ...projectConfig, id: projectId };
       
       // Get items to rate
-      console.log(`[RatingEngine] Fetching items for collection ${projectConfig.collectionId}...`);
+      console.log(`[RatingEngine] Fetching items for project ${projectId}, collection ${projectConfig.collectionId}...`);
       console.log(`[RatingEngine] includeChunks: ${projectConfig.includeChunks}, includeComments: ${projectConfig.includeComments}`);
-      
+
       const items = await this.db.getItemsForRating(
         projectConfig.collectionId,
         projectConfig.includeChunks,
-        projectConfig.includeComments
+        projectConfig.includeComments,
+        projectId  // NEW: Pass projectId to check for hierarchical projects
       );
       
       console.log(`[RatingEngine] Found ${items.length} items to rate`);

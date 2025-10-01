@@ -458,3 +458,4 @@ Show indicator:
 *Progress UI fix completed: September 30, 2025*  
 *Status: ✅ Tested & working*  
 *Files changed: 2 (rating-engine.js, renderer-advanced.js)*
+

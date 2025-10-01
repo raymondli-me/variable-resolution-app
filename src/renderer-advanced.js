@@ -120,16 +120,23 @@ function setupEventListeners() {
 
 // Tab management
 function showTab(tabName) {
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  
+  // Get the currently active view
+  const activeView = document.querySelector('.view.active');
+  if (!activeView) return;
+
+  // Only remove 'active' from tabs within the current view
+  activeView.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  activeView.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+
+  // Activate the selected tab
   const tab = document.getElementById(`${tabName}Tab`);
   if (tab) {
     tab.classList.add('active');
     currentTab = tabName;
   }
-  
-  const tabBtn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
+
+  // Activate the selected tab button
+  const tabBtn = activeView.querySelector(`.tab-btn[data-tab="${tabName}"]`);
   if (tabBtn) {
     tabBtn.classList.add('active');
   }
@@ -139,20 +146,27 @@ function showTab(tabName) {
 function showView(viewName) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  
+
   const view = document.getElementById(`${viewName}View`);
   if (view) {
     view.classList.add('active');
     currentView = viewName;
   }
-  
+
   const navItem = document.querySelector(`.nav-item[data-view="${viewName}"]`);
   if (navItem) {
     navItem.classList.add('active');
   }
 
+  // Handle view-specific initialization
   if (viewName === 'collections') {
     loadCollections();
+  }
+
+  // When showing AI Analysis view, default to ratings tab
+  if (viewName === 'ai-analysis') {
+    // Small delay to ensure DOM is ready
+    setTimeout(() => showTab('ratings'), 0);
   }
 }
 
@@ -1116,7 +1130,13 @@ class AIAnalysisController {
     if (closeViewer) {
       closeViewer.addEventListener('click', () => this.closeViewer());
     }
-    
+
+    // Create Child Project button
+    const createChildBtn = document.getElementById('create-child-project-btn');
+    if (createChildBtn) {
+      createChildBtn.addEventListener('click', () => this.openChildProjectModal());
+    }
+
     // Viewer tabs
     document.querySelectorAll('.rating-tab').forEach(tab => {
       tab.addEventListener('click', (e) => {
@@ -1179,7 +1199,21 @@ class AIAnalysisController {
     if (pauseBtn) pauseBtn.addEventListener('click', () => this.pauseRating());
     if (cancelBtn) cancelBtn.addEventListener('click', () => this.cancelRating());
     if (minimizeBtn) minimizeBtn.addEventListener('click', () => this.minimizeProgress());
-    
+
+    // Hierarchical project filter listeners
+    const filterInputs = ['filter-min-score', 'filter-max-score', 'filter-video-chunks', 'filter-comments'];
+    filterInputs.forEach(id => {
+      const elem = document.getElementById(id);
+      if (elem) {
+        elem.addEventListener('change', () => {
+          const parentId = document.getElementById('parent-project-id').value;
+          if (parentId) {
+            this.updateFilteredItemCount(parseInt(parentId));
+          }
+        });
+      }
+    });
+
     // IPC listeners
     if (window.api.on) {
       window.api.on('ai:progress', (data) => this.onProgress(data));
@@ -1230,11 +1264,174 @@ class AIAnalysisController {
   hideCreateModal() {
     const modal = document.getElementById('create-project-modal');
     if (modal) modal.style.display = 'none';
+    // Reset hierarchical project fields
+    this.resetCreateModalHierarchical();
   }
 
   hideDetailsModal() {
     const modal = document.getElementById('project-details-modal');
     if (modal) modal.style.display = 'none';
+  }
+
+  // =======================================================================
+  // HIERARCHICAL RATING PROJECTS
+  // =======================================================================
+
+  async openChildProjectModal() {
+    const currentProject = this.currentViewerProject;
+    if (!currentProject) {
+      console.error('[Hierarchical] No current project to create child from');
+      return;
+    }
+
+    console.log('[Hierarchical] Opening child project modal for project:', currentProject.id);
+
+    // Show parent project info
+    document.getElementById('parent-project-info').style.display = 'block';
+    document.getElementById('parent-project-name-display').textContent = currentProject.project_name;
+    document.getElementById('parent-project-id').value = currentProject.id;
+
+    // Show filter criteria section
+    document.getElementById('filter-criteria-section').style.display = 'block';
+
+    // Pre-fill collection (same as parent)
+    document.getElementById('ai-collection-select').value = currentProject.collection_id;
+    document.getElementById('ai-collection-select').disabled = true;
+    // FIX: Set currentCollection so startRating() doesn't fail
+    this.currentCollection = currentProject.collection_id;
+
+    // Set default filters
+    document.getElementById('filter-min-score').value = 0.7;
+    document.getElementById('filter-max-score').value = 1.0;
+    document.getElementById('filter-video-chunks').checked = true;
+    document.getElementById('filter-comments').checked = true;
+
+    // Hide redundant content type checkboxes (filter controls them)
+    const rateChunksCheckbox = document.getElementById('rate-chunks');
+    const contentTypeSection = rateChunksCheckbox ? rateChunksCheckbox.closest('.form-group') : null;
+    if (contentTypeSection) {
+      contentTypeSection.style.display = 'none';
+    }
+
+    // Calculate filtered count
+    await this.updateFilteredItemCount(currentProject.id);
+
+    // Open modal
+    document.getElementById('create-project-modal').style.display = 'flex';
+  }
+
+  async updateFilteredItemCount(parentProjectId) {
+    try {
+      const minScore = parseFloat(document.getElementById('filter-min-score').value) || 0.0;
+      const maxScore = parseFloat(document.getElementById('filter-max-score').value) || 1.0;
+      const contentTypes = [];
+
+      if (document.getElementById('filter-video-chunks').checked) {
+        contentTypes.push('video_chunk');
+      }
+      if (document.getElementById('filter-comments').checked) {
+        contentTypes.push('comment');
+      }
+
+      if (contentTypes.length === 0) {
+        document.getElementById('filtered-items-count').textContent = '0 items (select at least one content type)';
+        return;
+      }
+
+      const filterCriteria = {
+        min_score: minScore,
+        max_score: maxScore,
+        content_types: contentTypes
+      };
+
+      console.log('[Hierarchical] Fetching filtered count for parent:', parentProjectId, filterCriteria);
+
+      const result = await window.api.ai.getFilteredItemCount({ parentProjectId, filterCriteria });
+
+      if (result.success) {
+        const count = result.data.count;
+        document.getElementById('filtered-items-count').textContent = `${count} item${count !== 1 ? 's' : ''}`;
+        console.log('[Hierarchical] Filtered count:', count);
+      } else {
+        document.getElementById('filtered-items-count').textContent = 'error';
+        console.error('[Hierarchical] Error getting filtered count:', result.error);
+      }
+    } catch (error) {
+      document.getElementById('filtered-items-count').textContent = 'error';
+      console.error('[Hierarchical] Error updating filtered count:', error);
+    }
+  }
+
+  async displayProjectLineage(projectId) {
+    try {
+      const result = await window.api.ai.getProjectLineage({ projectId });
+
+      if (!result.success || !result.data || result.data.length === 0) {
+        document.getElementById('project-lineage').style.display = 'none';
+        return;
+      }
+
+      const lineage = result.data;
+
+      if (lineage.length <= 1) {
+        // Root project, no lineage to show
+        document.getElementById('project-lineage').style.display = 'none';
+        return;
+      }
+
+      console.log('[Hierarchical] Displaying lineage for project:', projectId, lineage);
+
+      // Build breadcrumb HTML
+      const breadcrumbsHtml = lineage.map((project, index) => {
+        const isLast = index === lineage.length - 1;
+        const arrow = isLast ? '' : ' <span class="breadcrumb-arrow">→</span> ';
+
+        return `
+          <span class="breadcrumb-item ${isLast ? 'current' : ''}" data-project-id="${project.id}">
+            ${project.project_name}
+          </span>${arrow}
+        `;
+      }).join('');
+
+      const lineageDiv = document.getElementById('project-lineage');
+      lineageDiv.innerHTML = breadcrumbsHtml;
+      lineageDiv.style.display = 'flex';
+
+      // Make breadcrumbs clickable (navigate to parent projects)
+      lineageDiv.querySelectorAll('.breadcrumb-item:not(.current)').forEach(item => {
+        item.style.cursor = 'pointer';
+        item.addEventListener('click', () => {
+          const projectId = parseInt(item.dataset.projectId);
+          this.showProjectDetails(projectId);
+        });
+      });
+    } catch (error) {
+      console.error('[Hierarchical] Error displaying lineage:', error);
+      document.getElementById('project-lineage').style.display = 'none';
+    }
+  }
+
+  resetCreateModalHierarchical() {
+    // Hide parent project sections
+    document.getElementById('parent-project-info').style.display = 'none';
+    document.getElementById('filter-criteria-section').style.display = 'none';
+    document.getElementById('parent-project-id').value = '';
+
+    // Re-enable collection select
+    document.getElementById('ai-collection-select').disabled = false;
+
+    // Show content type checkboxes again (for root projects)
+    const rateChunksCheckbox = document.getElementById('rate-chunks');
+    const contentTypeSection = rateChunksCheckbox ? rateChunksCheckbox.closest('.form-group') : null;
+    if (contentTypeSection) {
+      contentTypeSection.style.display = 'block';
+    }
+
+    // Reset filters to defaults
+    document.getElementById('filter-min-score').value = 0.7;
+    document.getElementById('filter-max-score').value = 1.0;
+    document.getElementById('filter-video-chunks').checked = true;
+    document.getElementById('filter-comments').checked = true;
   }
 
   updateStatsBar() {
@@ -1457,6 +1654,9 @@ class AIAnalysisController {
   populateViewer() {
     const project = this.currentViewerProject;
     if (!project) return;
+
+    // Display lineage breadcrumbs for hierarchical projects
+    this.displayProjectLineage(project.id);
 
     // Header
     document.getElementById('rating-viewer-title').textContent = project.project_name;
@@ -1947,28 +2147,61 @@ class AIAnalysisController {
     const projectName = document.getElementById('project-name')?.value;
     const researchIntent = document.getElementById('research-intent')?.value;
     const ratingScale = document.querySelector('input[name="rating-scale"]:checked')?.value;
-    const includeChunks = document.getElementById('rate-chunks')?.checked || false;
-    const includeComments = document.getElementById('rate-comments')?.checked || false;
     const batchSize = parseInt(document.getElementById('batch-size')?.value || '50');
     const concurrentRequests = parseInt(document.getElementById('concurrent-requests')?.value || '5');
     const retryDelay = parseFloat(document.getElementById('retry-delay')?.value || '2');
     const includeConfidence = document.getElementById('include-confidence')?.checked || true;
-    
+
     if (!projectName || !researchIntent) {
       showNotification('Please fill in project name and research intent', 'error');
       return;
     }
-    
-    if (!includeChunks && !includeComments) {
-      showNotification('Please select at least one content type to rate', 'error');
-      return;
-    }
-    
+
     if (!this.currentCollection) {
       showNotification('Please select a collection first', 'error');
       return;
     }
-    
+
+    // Check if this is a child project
+    const parentProjectId = document.getElementById('parent-project-id')?.value;
+    let filterCriteria = null;
+    let includeChunks, includeComments;
+
+    if (parentProjectId) {
+      // This is a CHILD PROJECT - collect filter criteria
+      const minScore = parseFloat(document.getElementById('filter-min-score')?.value) || 0.0;
+      const maxScore = parseFloat(document.getElementById('filter-max-score')?.value) || 1.0;
+      const contentTypes = [];
+
+      if (document.getElementById('filter-video-chunks')?.checked) {
+        contentTypes.push('video_chunk');
+      }
+      if (document.getElementById('filter-comments')?.checked) {
+        contentTypes.push('comment');
+      }
+
+      filterCriteria = {
+        min_score: minScore,
+        max_score: maxScore,
+        content_types: contentTypes
+      };
+
+      // For child projects, content types come from filter checkboxes
+      includeChunks = document.getElementById('filter-video-chunks')?.checked || false;
+      includeComments = document.getElementById('filter-comments')?.checked || false;
+
+      console.log('[Hierarchical] Creating child project with filter:', filterCriteria);
+    } else {
+      // For root projects, content types come from regular checkboxes
+      includeChunks = document.getElementById('rate-chunks')?.checked || false;
+      includeComments = document.getElementById('rate-comments')?.checked || false;
+    }
+
+    if (!includeChunks && !includeComments) {
+      showNotification('Please select at least one content type to rate', 'error');
+      return;
+    }
+
     const config = {
       collectionId: this.currentCollection,
       projectName,
@@ -1979,7 +2212,9 @@ class AIAnalysisController {
       batchSize,
       concurrentRequests,
       retryDelay,
-      includeConfidence
+      includeConfidence,
+      parentProjectId: parentProjectId ? parseInt(parentProjectId) : null,  // NEW
+      filterCriteria: filterCriteria  // NEW
     };
     
     try {
@@ -2006,31 +2241,63 @@ class AIAnalysisController {
     const projectName = document.getElementById('project-name')?.value;
     const researchIntent = document.getElementById('research-intent')?.value;
     const ratingScale = document.querySelector('input[name="rating-scale"]:checked')?.value;
-    const includeChunks = document.getElementById('rate-chunks')?.checked || false;
-    const includeComments = document.getElementById('rate-comments')?.checked || false;
-    
+
     if (!projectName || !researchIntent) {
       showNotification('Please fill in project name and research intent', 'error');
       return;
     }
-    
-    if (!includeChunks && !includeComments) {
-      showNotification('Please select at least one content type to rate', 'error');
-      return;
-    }
-    
+
     if (!this.currentCollection) {
       showNotification('Please select a collection first', 'error');
       return;
     }
-    
+
+    // Check if this is a child project (same logic as startRating)
+    const parentProjectId = document.getElementById('parent-project-id')?.value;
+    let filterCriteria = null;
+    let includeChunks, includeComments;
+
+    if (parentProjectId) {
+      // Child project - use filter checkboxes
+      const minScore = parseFloat(document.getElementById('filter-min-score')?.value) || 0.0;
+      const maxScore = parseFloat(document.getElementById('filter-max-score')?.value) || 1.0;
+      const contentTypes = [];
+
+      if (document.getElementById('filter-video-chunks')?.checked) {
+        contentTypes.push('video_chunk');
+      }
+      if (document.getElementById('filter-comments')?.checked) {
+        contentTypes.push('comment');
+      }
+
+      filterCriteria = {
+        min_score: minScore,
+        max_score: maxScore,
+        content_types: contentTypes
+      };
+
+      includeChunks = document.getElementById('filter-video-chunks')?.checked || false;
+      includeComments = document.getElementById('filter-comments')?.checked || false;
+    } else {
+      // Root project - use regular checkboxes
+      includeChunks = document.getElementById('rate-chunks')?.checked || false;
+      includeComments = document.getElementById('rate-comments')?.checked || false;
+    }
+
+    if (!includeChunks && !includeComments) {
+      showNotification('Please select at least one content type to rate', 'error');
+      return;
+    }
+
     const config = {
       collectionId: this.currentCollection,
       projectName,
       researchIntent,
       ratingScale,
       includeChunks,
-      includeComments
+      includeComments,
+      parentProjectId: parentProjectId ? parseInt(parentProjectId) : null,
+      filterCriteria: filterCriteria
     };
     
     // Show loading state

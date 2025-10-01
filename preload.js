@@ -77,9 +77,29 @@ contextBridge.exposeInMainWorld('api', {
     cancelRating: () => ipcRenderer.invoke('ai:cancelRating'),
     previewRating: (config) => ipcRenderer.invoke('ai:previewRating', config),
     exportRatings: (params) => ipcRenderer.invoke('ai:exportRatings', params),
-    testGeminiConnection: () => ipcRenderer.invoke('ai:testGeminiConnection')
+    testGeminiConnection: () => ipcRenderer.invoke('ai:testGeminiConnection'),
+    // Hierarchical rating project methods
+    getChildProjects: (params) => ipcRenderer.invoke('ai:getChildProjects', params),
+    getProjectLineage: (params) => ipcRenderer.invoke('ai:getProjectLineage', params),
+    getFilteredItemCount: (params) => ipcRenderer.invoke('ai:getFilteredItemCount', params),
+    // BWS-related helper
+    getRatingsForProject: (params) => ipcRenderer.invoke('ai:getRatingsForProject', params)
   },
-  
+
+  // BWS (Best-Worst Scaling) operations
+  bws: {
+    getAllExperiments: () => ipcRenderer.invoke('bws:getAllExperiments'),
+    getExperiment: (params) => ipcRenderer.invoke('bws:getExperiment', params),
+    createExperiment: (config) => ipcRenderer.invoke('bws:createExperiment', config),
+    updateExperiment: (params) => ipcRenderer.invoke('bws:updateExperiment', params),
+    getNextTuple: (params) => ipcRenderer.invoke('bws:getNextTuple', params),
+    saveJudgment: (data) => ipcRenderer.invoke('bws:saveJudgment', data),
+    calculateScores: (params) => ipcRenderer.invoke('bws:calculateScores', params),
+    getScores: (params) => ipcRenderer.invoke('bws:getScores', params),
+    deleteExperiment: (params) => ipcRenderer.invoke('bws:deleteExperiment', params),
+    startAIRating: (params) => ipcRenderer.invoke('bws:startAIRating', params)
+  },
+
   // Platform info
   platform: process.platform + '-' + process.arch,
   
@@ -100,7 +120,11 @@ contextBridge.exposeInMainWorld('api', {
       'ai:item-rated',
       'ai:complete',
       'ai:error',
-      'ai:preview-item'
+      'ai:preview-item',
+      'bws:ai-progress',
+      'bws:ai-item-rated',
+      'bws:ai-complete',
+      'bws:ai-error'
     ];
     
     if (validChannels.includes(channel)) {

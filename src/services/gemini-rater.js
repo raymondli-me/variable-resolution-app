@@ -276,6 +276,144 @@ IMPORTANT: Respond with ONLY valid JSON. No markdown, no code blocks, no explana
   }
 
   /**
+   * Best-Worst Scaling: Compare items and select BEST and WORST
+   */
+  async compareBWSItems(items, researchIntent, retries = 3) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const prompt = this.buildBWSPrompt(items, researchIntent);
+
+        const requestBody = {
+          contents: [{
+            parts: [{
+              text: prompt
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.3,
+            topK: 1,
+            topP: 0.8,
+            maxOutputTokens: 500,
+            responseMimeType: 'application/json'
+          }
+        };
+
+        const response = await fetch(
+          `${this.baseURL}/${this.model}:generateContent?key=${this.apiKey}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody)
+          }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Gemini API error: ${response.status} ${response.statusText} - ${errorText}`);
+        }
+
+        const result = await response.json();
+        return this.parseBWSResponse(result);
+
+      } catch (error) {
+        console.error(`Error comparing BWS items (attempt ${attempt}/${retries}):`, error);
+        if (attempt === retries) {
+          throw error;
+        }
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      }
+    }
+  }
+
+  /**
+   * Build prompt for BWS comparison
+   */
+  buildBWSPrompt(items, researchIntent) {
+    const itemsList = items.map((item, i) => {
+      const isComment = item.item_type === 'comment';
+      const content = isComment ? item.text : item.transcript_text;
+      const label = isComment ? 'Comment' : 'Video Chunk';
+
+      return `${i + 1}. [${label}] ${content?.substring(0, 500) || 'No content'}`;
+    }).join('\n\n');
+
+    return `You are comparing items for research purposes using Best-Worst Scaling.
+
+Research Intent: ${researchIntent}
+
+Items to compare:
+${itemsList}
+
+Task: Select which item is MOST relevant (BEST) and which is LEAST relevant (WORST) to the research intent.
+
+Respond with ONLY valid JSON:
+{
+  "best": <item number 1-${items.length}>,
+  "worst": <item number 1-${items.length}>,
+  "reasoning": "Brief explanation (max 100 words)"
+}
+
+IMPORTANT:
+- best and worst must be different numbers
+- Numbers must be 1-${items.length}
+- Respond with ONLY the JSON object, no markdown, no code blocks`;
+  }
+
+  /**
+   * Parse BWS comparison response
+   */
+  parseBWSResponse(geminiResponse) {
+    let text = geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    if (!text) {
+      throw new Error('Empty response from Gemini API');
+    }
+
+    // Remove markdown code blocks if present
+    text = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+
+    // Parse JSON
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (parseError) {
+      // Try to extract JSON
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          parsed = JSON.parse(jsonMatch[0]);
+        } catch (e) {
+          throw new Error(`Invalid JSON response: ${text.substring(0, 200)}`);
+        }
+      } else {
+        throw new Error(`No JSON found in response: ${text.substring(0, 200)}`);
+      }
+    }
+
+    // Validate required fields
+    if (!parsed.best || !parsed.worst) {
+      throw new Error('Gemini response missing best or worst field');
+    }
+
+    if (parsed.best === parsed.worst) {
+      throw new Error('Best and worst must be different items');
+    }
+
+    if (!Number.isInteger(parsed.best) || !Number.isInteger(parsed.worst)) {
+      throw new Error('Best and worst must be integers');
+    }
+
+    return {
+      best: parsed.best,
+      worst: parsed.worst,
+      reasoning: parsed.reasoning || 'No reasoning provided'
+    };
+  }
+
+  /**
    * Test API connection
    */
   async testConnection() {

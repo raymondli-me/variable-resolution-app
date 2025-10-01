@@ -387,3 +387,4 @@ Ratings are fetched once when viewer opens:
 *Implementation completed: September 30, 2025*  
 *Status: ✅ Tested & working*  
 *Files changed: 2 (db.js, renderer-advanced.js)*
+

@@ -2618,10 +2618,13 @@ ipcMain.handle('bws:createExperiment', async (event, config) => {
 
     const BwsTupleGenerator = require('./src/services/bws-tuple-generator');
 
-    // Get items from rating project
     const {
       name,
+      source_type,
       rating_project_id,
+      collection_id,
+      include_comments,
+      include_chunks,
       tuple_size,
       target_appearances,
       design_method,
@@ -2631,34 +2634,81 @@ ipcMain.handle('bws:createExperiment', async (event, config) => {
       min_score = 0.7
     } = config;
 
-    // Fetch items from rating project with score filter
-    const ratings = await db.getRatingsForProject(rating_project_id);
-    const filteredRatings = ratings.filter(r =>
-      r.status === 'success' &&
-      r.relevance_score >= min_score
-    );
+    let items = [];
+    let item_type = 'mixed';
+    let sourceId = null;
 
-    if (filteredRatings.length === 0) {
-      return { success: false, error: 'No items meet the score criteria' };
+    // Fetch items based on source type
+    if (source_type === 'rating-project') {
+      sourceId = rating_project_id;
+
+      // Fetch items from rating project with score filter
+      const ratings = await db.getRatingsForProject(rating_project_id);
+      const filteredRatings = ratings.filter(r =>
+        r.status === 'success' &&
+        r.relevance_score >= min_score
+      );
+
+      if (filteredRatings.length === 0) {
+        return { success: false, error: 'No items meet the score criteria' };
+      }
+
+      // Determine item type (check if all same type)
+      const itemTypes = new Set(filteredRatings.map(r => r.item_type));
+      if (itemTypes.size > 1) {
+        return { success: false, error: 'Cannot mix video chunks and comments in BWS experiment' };
+      }
+      item_type = filteredRatings[0].item_type;
+
+      items = filteredRatings.map(r => ({ id: r.item_id, ...r }));
+
+    } else if (source_type === 'collection') {
+      sourceId = collection_id;
+
+      // Fetch items from collection
+      const rawItems = await db.getItemsForRating(
+        collection_id,
+        include_chunks,
+        include_comments,
+        null // No projectId
+      );
+
+      if (rawItems.length === 0) {
+        return { success: false, error: 'No items found in collection' };
+      }
+
+      // Determine item type
+      const itemTypes = new Set(rawItems.map(item => item.type));
+      if (itemTypes.size > 1) {
+        return { success: false, error: 'Cannot mix video chunks and comments in BWS experiment. Uncheck one type.' };
+      }
+      item_type = rawItems[0].type === 'comment' ? 'comment' : 'video_chunk';
+
+      items = rawItems.map(item => ({ id: item.id, ...item }));
+    } else {
+      return { success: false, error: 'Invalid source_type' };
     }
 
-    if (filteredRatings.length < tuple_size) {
+    if (items.length < tuple_size) {
       return { success: false, error: `Need at least ${tuple_size} items for tuple size ${tuple_size}` };
     }
 
-    // Determine item type (check if all same type)
-    const itemTypes = new Set(filteredRatings.map(r => r.item_type));
-    if (itemTypes.size > 1) {
-      return { success: false, error: 'Cannot mix video chunks and comments in BWS experiment' };
-    }
-    const item_type = filteredRatings[0].item_type;
+    // Generate tuples with video diversity constraint
+    const itemIds = items.map(item => item.id);
 
-    // Generate tuples
-    const itemIds = filteredRatings.map(r => r.item_id);
+    // For video chunks, build a map of item_id -> video_id to enforce diversity
+    const itemVideoMap = {};
+    if (item_type === 'video_chunk') {
+      items.forEach(item => {
+        itemVideoMap[item.id] = item.video_id;
+      });
+    }
+
     const tuples = BwsTupleGenerator.generateTuples(itemIds, {
       tupleSize: tuple_size,
       targetAppearances: target_appearances || 4,
-      method: design_method || 'balanced'
+      method: design_method || 'balanced',
+      itemVideoMap: Object.keys(itemVideoMap).length > 0 ? itemVideoMap : null
     });
 
     // Validate tuples
@@ -2668,9 +2718,8 @@ ipcMain.handle('bws:createExperiment', async (event, config) => {
     }
 
     // Create experiment in database
-    const experimentId = await db.createBWSExperiment({
+    const experimentData = {
       name,
-      rating_project_id,
       item_type,
       tuple_size,
       tuple_count: tuples.length,
@@ -2679,7 +2728,16 @@ ipcMain.handle('bws:createExperiment', async (event, config) => {
       rater_type: rater_type || 'ai',
       research_intent,
       status: 'draft'
-    });
+    };
+
+    // Add source-specific fields
+    if (source_type === 'rating-project') {
+      experimentData.rating_project_id = rating_project_id;
+    } else {
+      experimentData.collection_id = collection_id;
+    }
+
+    const experimentId = await db.createBWSExperiment(experimentData);
 
     // Save tuples
     await db.saveBWSTuples(experimentId, tuples);
@@ -2941,6 +2999,238 @@ ipcMain.handle('bws:startAIRating', async (event, { experimentId }) => {
   } catch (error) {
     console.error('Error in AI BWS rating:', error);
     return { success: false, error: error.message };
+  }
+});
+
+// BWS List View Handlers (for live viewer)
+ipcMain.handle('bws:getAllTuples', async (event, { experimentId }) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    // Get all tuples with their items
+    const tuples = await db.all(`
+      SELECT id, experiment_id, item_ids, tuple_index, created_at
+      FROM bws_tuples
+      WHERE experiment_id = ?
+      ORDER BY tuple_index
+    `, [experimentId]);
+
+    // Parse item_ids JSON and fetch items for each tuple
+    const tuplesWithItems = await Promise.all(tuples.map(async (tuple) => {
+      tuple.item_ids = JSON.parse(tuple.item_ids);
+
+      // Fetch items
+      const items = [];
+      for (const itemId of tuple.item_ids) {
+        let item = await db.get('SELECT *, "comment" as item_type FROM comments WHERE id = ?', [itemId]);
+        if (!item) {
+          item = await db.get('SELECT *, "video_chunk" as item_type FROM video_chunks WHERE id = ?', [itemId]);
+        }
+        if (item) items.push(item);
+      }
+
+      return { ...tuple, items };
+    }));
+
+    return tuplesWithItems;
+  } catch (error) {
+    console.error('Error getting all tuples:', error);
+    return [];
+  }
+});
+
+ipcMain.handle('bws:getJudgments', async (event, { experimentId, raterType = null, raterId = null }) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    let query = `
+      SELECT j.*, t.experiment_id
+      FROM bws_judgments j
+      JOIN bws_tuples t ON j.tuple_id = t.id
+      WHERE t.experiment_id = ?
+    `;
+
+    const params = [experimentId];
+
+    if (raterType) {
+      query += ` AND j.rater_type = ?`;
+      params.push(raterType);
+    }
+
+    if (raterId) {
+      query += ` AND j.rater_id = ?`;
+      params.push(raterId);
+    }
+
+    query += ` ORDER BY j.created_at DESC`;
+
+    const judgments = await db.all(query, params);
+    return judgments;
+  } catch (error) {
+    console.error('Error getting judgments:', error);
+    return [];
+  }
+});
+
+ipcMain.handle('bws:getTupleWithItems', async (event, { tupleId }) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    const tupleWithItems = await db.getBWSTupleWithItems(tupleId);
+    return tupleWithItems;
+  } catch (error) {
+    console.error('Error getting tuple with items:', error);
+    return null;
+  }
+});
+
+// ========================================
+// Database Merge IPC Handlers
+// ========================================
+
+ipcMain.handle('database:getCollections', async (event, limit = 50, offset = 0) => {
+  try {
+    const db = await getDatabase();
+    return await db.getCollections(limit, offset);
+  } catch (error) {
+    console.error('[IPC] Error getting collections:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('database:getCollection', async (event, id) => {
+  try {
+    const db = await getDatabase();
+    return await db.getCollection(id);
+  } catch (error) {
+    console.error('[IPC] Error getting collection:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('database:getAllMerges', async () => {
+  try {
+    const db = await getDatabase();
+    return await db.getAllMerges();
+  } catch (error) {
+    console.error('[IPC] Error getting all merges:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('database:getMerge', async (event, mergeId) => {
+  try {
+    const db = await getDatabase();
+    return await db.getMerge(mergeId);
+  } catch (error) {
+    console.error('[IPC] Error getting merge:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('database:createMerge', async (event, name, collectionIds, options) => {
+  try {
+    const db = await getDatabase();
+    return await db.createMerge(name, collectionIds, options);
+  } catch (error) {
+    console.error('[IPC] Error creating merge:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('database:updateMerge', async (event, mergeId, updates) => {
+  try {
+    const db = await getDatabase();
+    return await db.updateMerge(mergeId, updates);
+  } catch (error) {
+    console.error('[IPC] Error updating merge:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('database:deleteMerge', async (event, mergeId, hard = false) => {
+  try {
+    const db = await getDatabase();
+    return await db.deleteMerge(mergeId, hard);
+  } catch (error) {
+    console.error('[IPC] Error deleting merge:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('database:addCollectionToMerge', async (event, mergeId, collectionId) => {
+  try {
+    const db = await getDatabase();
+    return await db.addCollectionToMerge(mergeId, collectionId);
+  } catch (error) {
+    console.error('[IPC] Error adding collection to merge:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('database:removeCollectionFromMerge', async (event, mergeId, collectionId) => {
+  try {
+    const db = await getDatabase();
+    return await db.removeCollectionFromMerge(mergeId, collectionId);
+  } catch (error) {
+    console.error('[IPC] Error removing collection from merge:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('database:getMergeStatistics', async (event, mergeId) => {
+  try {
+    const db = await getDatabase();
+    return await db.getMergeStatistics(mergeId);
+  } catch (error) {
+    console.error('[IPC] Error getting merge statistics:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('database:getMergeVideos', async (event, mergeId) => {
+  try {
+    const db = await getDatabase();
+    return await db.getMergeVideos(mergeId);
+  } catch (error) {
+    console.error('[IPC] Error getting merge videos:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('database:getMergeComments', async (event, mergeId) => {
+  try {
+    const db = await getDatabase();
+    return await db.getMergeComments(mergeId);
+  } catch (error) {
+    console.error('[IPC] Error getting merge comments:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('database:getMergeVideoChunks', async (event, mergeId) => {
+  try {
+    const db = await getDatabase();
+    return await db.getMergeVideoChunks(mergeId);
+  } catch (error) {
+    console.error('[IPC] Error getting merge video chunks:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('database:getItemsForRating', async (event, collectionId, includeChunks, includeComments, projectId) => {
+  try {
+    const db = await getDatabase();
+    return await db.getItemsForRating(collectionId, includeChunks, includeComments, projectId);
+  } catch (error) {
+    console.error('[IPC] Error getting items for rating:', error);
+    throw error;
   }
 });
 

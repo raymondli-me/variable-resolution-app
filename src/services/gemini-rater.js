@@ -1,11 +1,14 @@
 // Gemini API Integration for Content Rating
 const fs = require('fs').promises;
+const path = require('path');
 
 class GeminiRater {
   constructor(apiKey) {
     this.apiKey = apiKey;
     this.baseURL = 'https://generativelanguage.googleapis.com/v1beta/models';
     this.model = 'gemini-2.5-flash';
+    // Cache for uploaded files to avoid re-uploading same videos
+    this.uploadedFilesCache = new Map(); // key: file_path -> { uri, expiresAt }
   }
 
   /**
@@ -277,25 +280,47 @@ IMPORTANT: Respond with ONLY valid JSON. No markdown, no code blocks, no explana
 
   /**
    * Best-Worst Scaling: Compare items and select BEST and WORST
+   * Now supports MULTIMODAL comparison (videos + text)
    */
   async compareBWSItems(items, researchIntent, retries = 3) {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const prompt = this.buildBWSPrompt(items, researchIntent);
+        console.log(`[GeminiRater BWS] Comparing ${items.length} items (attempt ${attempt}/${retries})`);
+
+        // Build multimodal parts (videos + text)
+        const parts = await this.buildBWSMultimodalParts(items, researchIntent);
+
+        console.log(`[GeminiRater BWS] Built ${parts.length} parts for comparison`);
 
         const requestBody = {
           contents: [{
-            parts: [{
-              text: prompt
-            }]
+            parts: parts
           }],
           generationConfig: {
             temperature: 0.3,
             topK: 1,
             topP: 0.8,
-            maxOutputTokens: 500,
+            maxOutputTokens: 1500,  // Increased from 500 to handle verbose responses
             responseMimeType: 'application/json'
-          }
+          },
+          safetySettings: [
+            {
+              category: 'HARM_CATEGORY_HARASSMENT',
+              threshold: 'BLOCK_ONLY_HIGH'
+            },
+            {
+              category: 'HARM_CATEGORY_HATE_SPEECH',
+              threshold: 'BLOCK_ONLY_HIGH'
+            },
+            {
+              category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+              threshold: 'BLOCK_ONLY_HIGH'
+            },
+            {
+              category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+              threshold: 'BLOCK_ONLY_HIGH'
+            }
+          ]
         };
 
         const response = await fetch(
@@ -315,6 +340,7 @@ IMPORTANT: Respond with ONLY valid JSON. No markdown, no code blocks, no explana
         }
 
         const result = await response.json();
+        console.log(`[GeminiRater BWS] Received response from Gemini`);
         return this.parseBWSResponse(result);
 
       } catch (error) {
@@ -329,7 +355,99 @@ IMPORTANT: Respond with ONLY valid JSON. No markdown, no code blocks, no explana
   }
 
   /**
-   * Build prompt for BWS comparison
+   * Build multimodal parts for BWS comparison
+   * Handles both video chunks (with actual video files) and comments (text)
+   * INLINE ONLY: Videos must be < 20MB (File API upload can be added later if needed)
+   */
+  async buildBWSMultimodalParts(items, researchIntent) {
+    const parts = [];
+    const videoCount = items.filter(item => item.item_type !== 'comment' && item.file_path).length;
+    const commentCount = items.filter(item => item.item_type === 'comment').length;
+
+    console.log(`[BWS Multimodal] Building parts for ${items.length} items (${videoCount} videos, ${commentCount} comments)`);
+
+    // Add each item (video or text)
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const isComment = item.item_type === 'comment';
+      const isVideo = !isComment && item.file_path;
+
+      if (isVideo) {
+        try {
+          const stats = await fs.stat(item.file_path);
+          const fileSizeMB = stats.size / (1024 * 1024);
+
+          console.log(`[BWS Video ${i + 1}] ${path.basename(item.file_path)} - ${fileSizeMB.toFixed(2)} MB`);
+
+          if (fileSizeMB < 20) {
+            // Inline video data (< 20MB)
+            const videoBytes = await fs.readFile(item.file_path);
+            parts.push({
+              inline_data: {
+                mime_type: "video/mp4",
+                data: videoBytes.toString('base64')
+              }
+            });
+            console.log(`[BWS Video ${i + 1}] ✅ Loaded inline video (${fileSizeMB.toFixed(2)} MB)`);
+          } else {
+            // File too large - fallback to transcript only
+            console.warn(`[BWS Video ${i + 1}] ⚠️ File too large (${fileSizeMB.toFixed(2)} MB > 20 MB), using transcript only`);
+            parts.push({
+              text: `Video ${i + 1} (file too large for inline upload, using transcript): "${item.transcript_text || 'No transcript available'}"`
+            });
+          }
+
+          // Add transcript as supplementary context (only if video was loaded)
+          if (fileSizeMB < 20) {
+            parts.push({
+              text: `Video ${i + 1} Transcript: "${item.transcript_text || 'No transcript available'}"`
+            });
+          }
+        } catch (error) {
+          console.error(`[BWS Video ${i + 1}] ❌ Failed to load video, falling back to transcript only:`, error.message);
+          // Fallback to text-only if video fails
+          parts.push({
+            text: `Video ${i + 1} (video unavailable, using transcript): "${item.transcript_text || 'No transcript available'}"`
+          });
+        }
+      } else {
+        // Comment (text only)
+        parts.push({
+          text: `Comment ${i + 1}: "${item.text || 'No content'}"`
+        });
+      }
+    }
+
+    // Add instruction prompt AFTER all items
+    parts.push({
+      text: `You are comparing items for research purposes using Best-Worst Scaling.
+
+Research Intent: ${researchIntent}
+
+Task: Select which item is MOST relevant (BEST) and which is LEAST relevant (WORST) to the research intent.
+
+Consider both VISUAL content (from videos) and TEXTUAL content (from transcripts/comments).
+
+Respond with ONLY valid JSON (no other text before or after):
+{
+  "best": <item number>,
+  "worst": <item number>,
+  "reasoning": "Explain in 1-2 sentences (max 50 words)"
+}
+
+CRITICAL RULES:
+- If videos don't match research intent, still pick best/worst based on closest relevance
+- Keep reasoning VERY brief - you have limited tokens
+- DO NOT explain why the task is difficult - just answer
+- best and worst must be different numbers (1-${items.length})
+- Respond with ONLY the JSON object, no markdown, no code blocks`
+    });
+
+    return parts;
+  }
+
+  /**
+   * Build prompt for BWS comparison (legacy text-only, kept for fallback)
    */
   buildBWSPrompt(items, researchIntent) {
     const itemsList = items.map((item, i) => {
@@ -369,6 +487,18 @@ IMPORTANT:
     let text = geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
     if (!text) {
+      // Enhanced logging to understand WHY the response is empty
+      console.error('[parseBWSResponse] Empty response - Full API response:');
+      console.error(JSON.stringify(geminiResponse, null, 2));
+
+      // Check for safety ratings or other blocking
+      const candidate = geminiResponse.candidates?.[0];
+      if (candidate) {
+        console.error('[parseBWSResponse] Candidate exists but empty text:');
+        console.error('  - finishReason:', candidate.finishReason);
+        console.error('  - safetyRatings:', JSON.stringify(candidate.safetyRatings, null, 2));
+      }
+
       throw new Error('Empty response from Gemini API');
     }
 
@@ -386,9 +516,17 @@ IMPORTANT:
         try {
           parsed = JSON.parse(jsonMatch[0]);
         } catch (e) {
+          // Log the actual text to see if it's truncated
+          console.error('[parseBWSResponse] Failed to parse JSON:');
+          console.error('  - Text length:', text.length);
+          console.error('  - Text preview:', text.substring(0, 500));
+          console.error('  - Full text:', text);
           throw new Error(`Invalid JSON response: ${text.substring(0, 200)}`);
         }
       } else {
+        console.error('[parseBWSResponse] No JSON found in text:');
+        console.error('  - Text length:', text.length);
+        console.error('  - Full text:', text);
         throw new Error(`No JSON found in response: ${text.substring(0, 200)}`);
       }
     }

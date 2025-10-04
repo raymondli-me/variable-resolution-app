@@ -81,6 +81,7 @@ class CollectionViewer {
       const result = await window.api.db.getCollection(collectionId);
       if (result.success && result.data) {
         this.currentCollection = result.data;
+        this.currentCollection.isMerge = false;
         this.render();
         document.getElementById('collectionViewerModal').style.display = 'flex';
       } else {
@@ -91,14 +92,52 @@ class CollectionViewer {
     }
   }
 
+  async showMerge(mergeId) {
+    try {
+      // Load merge details
+      const merge = await window.api.database.getMerge(mergeId);
+      const videos = await window.api.database.getMergeVideos(mergeId);
+
+      if (!merge) {
+        showNotification('Failed to load merged collection', 'error');
+        return;
+      }
+
+      // Create a collection-like object for the merge
+      this.currentCollection = {
+        id: merge.id,
+        search_term: merge.name,
+        created_at: merge.created_at,
+        video_count: videos.length,
+        comment_count: 0, // Will be calculated
+        videos: videos,
+        isMerge: true,
+        mergeData: merge
+      };
+
+      this.render();
+      document.getElementById('collectionViewerModal').style.display = 'flex';
+    } catch (error) {
+      console.error('[CollectionViewer] Error loading merge:', error);
+      showNotification('Error loading merged collection: ' + error.message, 'error');
+    }
+  }
+
   render() {
     if (!this.currentCollection) return;
-    
+
     // Update header
-    document.getElementById('collectionTitle').textContent = this.currentCollection.search_term;
-    document.getElementById('collectionMeta').textContent = 
-      `${new Date(this.currentCollection.created_at).toLocaleString()} • ${this.currentCollection.video_count} videos • ${this.currentCollection.comment_count} comments`;
-    
+    const title = this.currentCollection.isMerge
+      ? `${this.currentCollection.search_term} (Merged)`
+      : this.currentCollection.search_term;
+    document.getElementById('collectionTitle').textContent = title;
+
+    const meta = this.currentCollection.isMerge
+      ? `Created ${new Date(this.currentCollection.created_at).toLocaleDateString()} • ${this.currentCollection.video_count} videos from ${this.currentCollection.mergeData.source_collections.length} collections`
+      : `${new Date(this.currentCollection.created_at).toLocaleString()} • ${this.currentCollection.video_count} videos • ${this.currentCollection.comment_count} comments`;
+
+    document.getElementById('collectionMeta').textContent = meta;
+
     // Render videos list
     this.renderVideos();
   }
@@ -106,34 +145,42 @@ class CollectionViewer {
   renderVideos() {
     const videosList = document.getElementById('videosList');
     const videos = this.currentCollection.videos || [];
-    
+
     document.getElementById('videoCount').textContent = `${videos.length} videos`;
-    
-    videosList.innerHTML = videos.map(video => `
-      <div class="video-item ${video.id === this.currentVideoId ? 'active' : ''}" data-video-id="${video.id}">
-        <div class="video-thumbnail">
-          ${video.thumbnails ? 
-            `<img src="${JSON.parse(video.thumbnails).medium?.url}" alt="${video.title}" />` : 
-            '<div class="no-thumbnail">📹</div>'
-          }
-        </div>
-        <div class="video-info">
-          <div class="video-title">${this.escapeHtml(video.title)}</div>
-          <div class="video-stats">
-            <span>${this.formatNumber(video.view_count)} views</span>
-            <span>${this.formatNumber(video.comment_count)} comments</span>
+
+    videosList.innerHTML = videos.map(video => {
+      // Show source collection badge for merged collections
+      const sourceBadge = this.currentCollection.isMerge && video.source_collection_name
+        ? `<span class="source-badge" title="From: ${video.source_collection_name}">${video.source_collection_name}</span>`
+        : '';
+
+      return `
+        <div class="video-item ${video.id === this.currentVideoId ? 'active' : ''}" data-video-id="${video.id}">
+          <div class="video-thumbnail">
+            ${video.thumbnails ?
+              `<img src="${JSON.parse(video.thumbnails).medium?.url}" alt="${video.title}" />` :
+              '<div class="no-thumbnail">📹</div>'
+            }
+          </div>
+          <div class="video-info">
+            <div class="video-title">${this.escapeHtml(video.title)}</div>
+            <div class="video-stats">
+              <span>${this.formatNumber(video.view_count)} views</span>
+              <span>${this.formatNumber(video.comment_count)} comments</span>
+            </div>
+            ${sourceBadge}
           </div>
         </div>
-      </div>
-    `).join('');
-    
+      `;
+    }).join('');
+
     // Add click handlers
     videosList.querySelectorAll('.video-item').forEach(item => {
       item.addEventListener('click', () => {
         this.selectVideo(item.dataset.videoId);
       });
     });
-    
+
     // Select first video if none selected
     if (!this.currentVideoId && videos.length > 0) {
       this.selectVideo(videos[0].id);
@@ -282,5 +329,6 @@ class CollectionViewer {
   }
 }
 
-// Initialize
+// Initialize and expose globally
 const collectionViewer = new CollectionViewer();
+window.collectionViewer = collectionViewer;

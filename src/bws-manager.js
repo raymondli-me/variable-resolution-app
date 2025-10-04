@@ -4,8 +4,13 @@
  */
 
 let bwsState = {
+  sourceType: 'rating-project', // 'rating-project' or 'collection'
   selectedProjectId: null,
   selectedProjectData: null,
+  selectedCollectionId: null,
+  selectedCollectionData: null,
+  includeComments: true,
+  includeChunks: false,
   filteredItemCount: 0
 };
 
@@ -38,10 +43,33 @@ function setupBWSEventListeners() {
     cancelBWSBtn.addEventListener('click', closeCreateBWSModal);
   }
 
+  // Source type radio buttons
+  const sourceTypeRadios = document.querySelectorAll('input[name="bws-source-type"]');
+  sourceTypeRadios.forEach(radio => {
+    radio.addEventListener('change', onBWSSourceTypeChange);
+  });
+
   // Rating project selection
   const projectSelect = document.getElementById('bws-rating-project-select');
   if (projectSelect) {
     projectSelect.addEventListener('change', onBWSProjectSelect);
+  }
+
+  // Collection selection
+  const collectionSelect = document.getElementById('bws-collection-select');
+  if (collectionSelect) {
+    collectionSelect.addEventListener('change', onBWSCollectionSelect);
+  }
+
+  // Collection content type checkboxes
+  const includeComments = document.getElementById('bws-include-comments');
+  if (includeComments) {
+    includeComments.addEventListener('change', updateBWSCollectionCount);
+  }
+
+  const includeChunks = document.getElementById('bws-include-chunks');
+  if (includeChunks) {
+    includeChunks.addEventListener('change', updateBWSCollectionCount);
   }
 
   // Filter score change
@@ -94,21 +122,37 @@ async function openCreateBWSModal() {
   document.getElementById('bws-design-method').value = 'balanced';
   document.getElementById('bws-rater-type').value = 'ai';
   document.getElementById('bws-scoring-method').value = 'counting';
+  document.getElementById('bws-include-comments').checked = true;
+  document.getElementById('bws-include-chunks').checked = false;
+
+  // Reset source type to rating-project
+  document.querySelector('input[name="bws-source-type"][value="rating-project"]').checked = true;
 
   // Hide sections initially
-  document.getElementById('bws-project-info').style.display = 'none';
+  document.getElementById('bws-source-info').style.display = 'none';
   document.getElementById('bws-filter-section').style.display = 'none';
   document.getElementById('bws-config-section').style.display = 'none';
+  document.getElementById('bws-rating-project-section').style.display = 'block';
+  document.getElementById('bws-collection-section').style.display = 'none';
+  document.getElementById('bws-collection-content-section').style.display = 'none';
 
   // Reset state
   bwsState = {
+    sourceType: 'rating-project',
     selectedProjectId: null,
     selectedProjectData: null,
+    selectedCollectionId: null,
+    selectedCollectionData: null,
+    includeComments: true,
+    includeChunks: false,
     filteredItemCount: 0
   };
 
-  // Load available rating projects
-  await loadBWSRatingProjects();
+  // Load available rating projects and collections
+  await Promise.all([
+    loadBWSRatingProjects(),
+    loadBWSCollections()
+  ]);
 
   // Show modal
   modal.style.display = 'flex';
@@ -217,7 +261,7 @@ async function onBWSProjectSelect(event) {
 
   if (!select.value) {
     // Hide sections if no project selected
-    document.getElementById('bws-project-info').style.display = 'none';
+    document.getElementById('bws-source-info').style.display = 'none';
     document.getElementById('bws-filter-section').style.display = 'none';
     document.getElementById('bws-config-section').style.display = 'none';
     bwsState.selectedProjectId = null;
@@ -231,15 +275,15 @@ async function onBWSProjectSelect(event) {
   bwsState.selectedProjectId = parseInt(select.value);
   bwsState.selectedProjectData = projectData;
 
-  // Display project info
-  document.getElementById('bws-selected-project-name').textContent = projectData.project_name;
+  // Display project info (using shared source-info elements)
+  document.getElementById('bws-selected-source-name').textContent = projectData.project_name;
   document.getElementById('bws-total-items').textContent = projectData.total_items;
 
   // Determine item type from project (assume it's in the name or we need to query)
   document.getElementById('bws-item-type').textContent = 'Mixed (comments + video chunks)';
 
-  // Show project info and filter section
-  document.getElementById('bws-project-info').style.display = 'block';
+  // Show source info and filter section
+  document.getElementById('bws-source-info').style.display = 'block';
   document.getElementById('bws-filter-section').style.display = 'block';
 
   // Calculate filtered count
@@ -249,7 +293,217 @@ async function onBWSProjectSelect(event) {
 }
 
 /**
- * Update filtered item count based on score threshold
+ * Handle source type change (rating project vs collection)
+ */
+function onBWSSourceTypeChange(event) {
+  const sourceType = event.target.value;
+  bwsState.sourceType = sourceType;
+
+  // Update hint text
+  const hint = document.getElementById('bws-source-type-hint');
+  if (sourceType === 'rating-project') {
+    hint.textContent = 'Use rated items filtered by relevance score';
+  } else {
+    hint.textContent = 'Compare raw items from a collection without needing ratings first';
+  }
+
+  // Show/hide appropriate sections
+  if (sourceType === 'rating-project') {
+    document.getElementById('bws-rating-project-section').style.display = 'block';
+    document.getElementById('bws-collection-section').style.display = 'none';
+    document.getElementById('bws-collection-content-section').style.display = 'none';
+    document.getElementById('bws-filter-section').style.display = 'none';
+  } else {
+    document.getElementById('bws-rating-project-section').style.display = 'none';
+    document.getElementById('bws-collection-section').style.display = 'block';
+    document.getElementById('bws-collection-content-section').style.display = 'none';
+    document.getElementById('bws-filter-section').style.display = 'none';
+  }
+
+  // Hide info and config sections
+  document.getElementById('bws-source-info').style.display = 'none';
+  document.getElementById('bws-config-section').style.display = 'none';
+
+  // Reset selections
+  bwsState.selectedProjectId = null;
+  bwsState.selectedProjectData = null;
+  bwsState.selectedCollectionId = null;
+  bwsState.selectedCollectionData = null;
+  bwsState.filteredItemCount = 0;
+
+  validateBWSForm();
+}
+
+/**
+ * Load collections into dropdown
+ */
+async function loadBWSCollections() {
+  try {
+    // Load both regular collections and merged collections (same as AI Analysis)
+    const [collectionsResult, mergesResult] = await Promise.all([
+      window.api.db.getCollections(),
+      window.api.database.getAllMerges()
+    ]);
+
+    const collections = [];
+
+    // Add regular collections
+    if (collectionsResult.success && collectionsResult.data) {
+      collectionsResult.data.forEach(c => {
+        collections.push({
+          ...c,
+          isMerge: false
+        });
+      });
+    }
+
+    // Add merged collections
+    if (mergesResult && Array.isArray(mergesResult)) {
+      mergesResult.forEach(merge => {
+        let videoCount = 0;
+        let commentCount = 0;
+        if (merge.source_collections) {
+          merge.source_collections.forEach(sc => {
+            videoCount += sc.video_count || 0;
+            commentCount += sc.comment_count || 0;
+          });
+        }
+
+        collections.push({
+          id: merge.id,
+          search_term: merge.name,
+          name: merge.name,
+          video_count: videoCount,
+          comment_count: commentCount,
+          isMerge: true,
+          mergeData: merge
+        });
+      });
+    }
+
+    const select = document.getElementById('bws-collection-select');
+    select.innerHTML = '<option value="">Choose a collection...</option>';
+
+    if (collections.length === 0) {
+      select.innerHTML = '<option value="">No collections available</option>';
+      select.disabled = true;
+      return;
+    }
+
+    select.disabled = false;
+
+    // Add collections to dropdown
+    collections.forEach(collection => {
+      const option = document.createElement('option');
+      option.value = collection.id;
+      const mergeLabel = collection.isMerge ? ' [MERGED]' : '';
+      option.textContent = `${collection.search_term || collection.name}${mergeLabel}`;
+      option.dataset.collectionData = JSON.stringify(collection);
+      select.appendChild(option);
+    });
+
+  } catch (error) {
+    console.error('Error loading collections:', error);
+    showNotification('Failed to load collections', 'error');
+  }
+}
+
+/**
+ * Handle collection selection
+ */
+async function onBWSCollectionSelect(event) {
+  const select = event.target;
+  const selectedOption = select.options[select.selectedIndex];
+
+  if (!select.value) {
+    // Hide sections if no collection selected
+    document.getElementById('bws-source-info').style.display = 'none';
+    document.getElementById('bws-collection-content-section').style.display = 'none';
+    document.getElementById('bws-config-section').style.display = 'none';
+    bwsState.selectedCollectionId = null;
+    bwsState.selectedCollectionData = null;
+    validateBWSForm();
+    return;
+  }
+
+  // Get collection data
+  const collectionData = JSON.parse(selectedOption.dataset.collectionData);
+  bwsState.selectedCollectionId = parseInt(select.value);
+  bwsState.selectedCollectionData = collectionData;
+
+  // Show content type selection
+  document.getElementById('bws-collection-content-section').style.display = 'block';
+
+  // Calculate item count
+  await updateBWSCollectionCount();
+
+  validateBWSForm();
+}
+
+/**
+ * Update collection item count based on content type checkboxes
+ */
+async function updateBWSCollectionCount() {
+  if (!bwsState.selectedCollectionId) return;
+
+  const includeComments = document.getElementById('bws-include-comments').checked;
+  const includeChunks = document.getElementById('bws-include-chunks').checked;
+
+  bwsState.includeComments = includeComments;
+  bwsState.includeChunks = includeChunks;
+
+  if (!includeComments && !includeChunks) {
+    document.getElementById('bws-source-info').style.display = 'none';
+    document.getElementById('bws-config-section').style.display = 'none';
+    bwsState.filteredItemCount = 0;
+    validateBWSForm();
+    return;
+  }
+
+  try {
+    // Get items from collection (same logic as getItemsForRating but without projectId)
+    const items = await window.api.database.getItemsForRating(
+      bwsState.selectedCollectionId,
+      includeChunks,
+      includeComments,
+      null // No projectId since we're not filtering by ratings
+    );
+
+    bwsState.filteredItemCount = items.length;
+
+    // Display collection info
+    const collectionData = bwsState.selectedCollectionData;
+    document.getElementById('bws-selected-source-name').textContent =
+      collectionData.search_term || collectionData.name;
+    document.getElementById('bws-total-items').textContent = items.length;
+
+    const itemTypes = [];
+    if (includeComments) itemTypes.push('Comments');
+    if (includeChunks) itemTypes.push('Video Chunks');
+    document.getElementById('bws-item-type').textContent = itemTypes.join(' + ');
+
+    // Show info section
+    document.getElementById('bws-source-info').style.display = 'block';
+
+    // Show config section if we have enough items
+    if (items.length >= 2) {
+      document.getElementById('bws-config-section').style.display = 'block';
+      updateBWSEstimates();
+    } else {
+      document.getElementById('bws-config-section').style.display = 'none';
+      showNotification('Need at least 2 items for BWS experiment', 'warning');
+    }
+
+  } catch (error) {
+    console.error('Error calculating collection item count:', error);
+    showNotification('Failed to load collection items', 'error');
+  }
+
+  validateBWSForm();
+}
+
+/**
+ * Update filtered item count based on score threshold (for rating projects)
  */
 async function updateBWSFilteredCount() {
   if (!bwsState.selectedProjectId) return;
@@ -267,6 +521,12 @@ async function updateBWSFilteredCount() {
       bwsState.filteredItemCount = filteredItems.length;
 
       document.getElementById('bws-filtered-count').textContent = `${filteredItems.length} items`;
+
+      // Display project info (already set in onBWSProjectSelect, but update total)
+      document.getElementById('bws-total-items').textContent = bwsState.selectedProjectData.total_items;
+
+      // Show info section (should already be visible from onBWSProjectSelect)
+      document.getElementById('bws-source-info').style.display = 'block';
 
       // Show config section if we have enough items
       if (filteredItems.length >= 2) {
@@ -320,10 +580,17 @@ function validateBWSForm() {
   const createBtn = document.getElementById('bws-create-btn');
   const name = document.getElementById('bws-experiment-name').value.trim();
   const intent = document.getElementById('bws-research-intent').value.trim();
-  const hasProject = bwsState.selectedProjectId !== null;
+
+  let hasSource = false;
+  if (bwsState.sourceType === 'rating-project') {
+    hasSource = bwsState.selectedProjectId !== null;
+  } else {
+    hasSource = bwsState.selectedCollectionId !== null;
+  }
+
   const hasEnoughItems = bwsState.filteredItemCount >= 2;
 
-  const isValid = hasProject && hasEnoughItems && name.length > 0 && intent.length > 0;
+  const isValid = hasSource && hasEnoughItems && name.length > 0 && intent.length > 0;
 
   createBtn.disabled = !isValid;
 }
@@ -339,15 +606,24 @@ async function createBWSExperiment() {
   try {
     const config = {
       name: document.getElementById('bws-experiment-name').value.trim(),
-      rating_project_id: bwsState.selectedProjectId,
+      source_type: bwsState.sourceType,
       tuple_size: parseInt(document.getElementById('bws-tuple-size').value),
       target_appearances: parseInt(document.getElementById('bws-target-appearances').value),
       design_method: document.getElementById('bws-design-method').value,
       scoring_method: document.getElementById('bws-scoring-method').value,
       rater_type: document.getElementById('bws-rater-type').value,
-      research_intent: document.getElementById('bws-research-intent').value.trim(),
-      min_score: parseFloat(document.getElementById('bws-min-score').value)
+      research_intent: document.getElementById('bws-research-intent').value.trim()
     };
+
+    // Add source-specific parameters
+    if (bwsState.sourceType === 'rating-project') {
+      config.rating_project_id = bwsState.selectedProjectId;
+      config.min_score = parseFloat(document.getElementById('bws-min-score').value);
+    } else {
+      config.collection_id = bwsState.selectedCollectionId;
+      config.include_comments = bwsState.includeComments;
+      config.include_chunks = bwsState.includeChunks;
+    }
 
     const result = await window.api.bws.createExperiment(config);
 
@@ -463,13 +739,13 @@ function createBWSExperimentCard(exp) {
 
       <div class="project-card-actions">
         ${exp.status === 'draft' || exp.status === 'in_progress' ?
-          `<button class="btn btn-sm btn-primary" onclick="startBWSRating(${exp.id})">Start Rating</button>` :
-          `<button class="btn btn-sm btn-secondary" onclick="viewBWSResults(${exp.id})">View Results</button>
-           ${exp.status === 'completed' && exp.rater_type === 'ai' ?
-             `<button class="btn btn-sm btn-primary" onclick="addHumanRatingsToExperiment(${exp.id})" title="Add human ratings to this experiment">
-               👤 Add Human Ratings
-             </button>` : ''
-           }`
+          `<button class="btn btn-sm btn-primary" onclick="startBWSRating(${exp.id})">
+             ${exp.status === 'in_progress' ? '▶️ Continue' : '▶️ Start'} Rating
+           </button>` :
+          `<button class="btn btn-sm btn-secondary" onclick="viewBWSResults(${exp.id})">📊 View Results</button>
+           <button class="btn btn-sm btn-primary" onclick="addHumanRatingsToExperiment(${exp.id})" title="Browse and rate tuples (see AI + your ratings)">
+             🔍 Browse & Rate
+           </button>`
         }
         <button class="btn btn-sm btn-secondary" onclick="deleteBWSExperiment(${exp.id})">Delete</button>
       </div>
@@ -534,49 +810,292 @@ async function startBWSRating(experimentId) {
 }
 
 /**
- * Start AI BWS Rating
+ * Start Unified BWS Rating (AI + Human)
+ *
+ * This opens a single interface where:
+ * - AI ratings are shown in bright green/red borders
+ * - Human ratings are shown in light green/red borders
+ * - You can rate anytime (auto-saves)
+ * - AI can be started/paused/resumed
  */
 async function startAIBWSRating(experimentId, experiment) {
   try {
     // Show confirmation
-    const confirmed = confirm(`Start AI rating for "${experiment.name}"?\n\nThis will process ${experiment.total_tuples} comparisons using Gemini AI.`);
+    const confirmed = confirm(
+      `Start rating "${experiment.name}"?\n\n` +
+      `• Browse ${experiment.total_tuples} comparisons\n` +
+      `• AI rating will run in background (Gemini AI)\n` +
+      `• You can add your own ratings anytime\n` +
+      `• All progress auto-saves`
+    );
     if (!confirmed) return;
 
     // Store current experiment ID for progress tracking
     window.currentAIRatingExperimentId = experimentId;
 
-    // Setup progress listeners (also shows overlay)
-    setupAIBWSProgressListeners();
+    // ✅ CRITICAL: Store experiment info in state (unified AI + Human)
+    bwsRatingState.experimentId = experimentId;
+    bwsRatingState.experiment = experiment;
+    bwsRatingState.raterType = 'human';  // Primary rater is human (for submit button)
+    bwsRatingState.raterId = 'human-user';  // Human ratings will be saved with this ID
+    bwsRatingState.aiRaterType = 'ai';  // Track that AI is also active
+    bwsRatingState.aiRaterId = 'gemini-2.5-flash';
 
-    // Initialize progress display
-    const totalTuples = experiment.total_tuples || 0;
-    const alreadyCompleted = experiment.total_judgments || 0;
-    document.getElementById('bws-ai-progress-count').textContent = `${alreadyCompleted} / ${totalTuples}`;
-    document.getElementById('bws-ai-progress-percentage').textContent = `${Math.round((alreadyCompleted / totalTuples) * 100)}%`;
-    document.getElementById('bws-ai-progress-fill').style.width = `${(alreadyCompleted / totalTuples) * 100}%`;
-    document.getElementById('bws-ai-progress-text').textContent = `Processing ${totalTuples} comparisons with Gemini AI...`;
+    // ✅ Show rating interface
+    document.getElementById('bws-rating-interface').style.display = 'flex';
+
+    // Update header
+    document.getElementById('bws-rating-exp-name').textContent = experiment.name;
+    document.getElementById('bws-rating-exp-desc').textContent = experiment.research_intent;
+
+    // ✅ Setup interface event listeners (Close, Pause, Submit buttons)
+    setupRatingInterfaceListeners();
+
+    // ✅ Initialize single-tuple browser (NOT list view)
+    // This sets up Next/Prev/Skip buttons
+    setupBWSNavigation();
+
+    // ✅ Show inline progress banner
+    showInlineAIProgress(experimentId, experiment);
+
+    // Setup progress listeners to update banner
+    setupInlineAIProgressListeners();
+
+    // ✅ Load first tuple so user can start browsing immediately
+    // AI will rate in background, user can browse as ratings appear
+    await loadBWSTuple({ tupleIndex: 0, filter: 'all' });
 
     // Start AI rating (runs in background)
     const result = await window.api.bws.startAIRating({ experimentId });
 
     if (!result.success) {
-      // Hide overlay on error
-      document.getElementById('bws-ai-progress-overlay').style.display = 'none';
+      hideInlineAIProgress();
       showNotification(`AI rating failed: ${result.error}`, 'error');
       window.currentAIRatingExperimentId = null;
     }
 
   } catch (error) {
     console.error('Error starting AI BWS rating:', error);
-    // Hide overlay on error
-    document.getElementById('bws-ai-progress-overlay').style.display = 'none';
+    hideInlineAIProgress();
     showNotification('Failed to start AI rating', 'error');
     window.currentAIRatingExperimentId = null;
   }
 }
 
 /**
- * Add human ratings to a completed AI experiment
+ * Show inline AI progress banner
+ */
+function showInlineAIProgress(experimentId, experiment) {
+  const banner = document.getElementById('bws-ai-progress-banner');
+  if (!banner) {
+    console.error('[showInlineAIProgress] Banner element not found!');
+    return;
+  }
+
+  // Initialize progress display
+  const totalTuples = experiment.total_tuples || 0;
+  const alreadyCompleted = experiment.total_judgments || 0;
+  const percentage = totalTuples > 0 ? Math.round((alreadyCompleted / totalTuples) * 100) : 0;
+
+  // Update banner content
+  document.getElementById('bws-ai-progress-title').textContent = 'AI Rating in Progress';
+  document.getElementById('bws-ai-progress-count-inline').textContent = `${alreadyCompleted} / ${totalTuples}`;
+  document.getElementById('bws-ai-progress-percentage-inline').textContent = `${percentage}%`;
+  document.getElementById('bws-ai-progress-bar-fill').style.width = `${percentage}%`;
+
+  // Remove any previous state classes
+  banner.classList.remove('completed', 'error');
+
+  // Show banner with animation
+  banner.style.display = 'block';
+
+  console.log(`[AI Progress Banner] Initialized: ${alreadyCompleted}/${totalTuples} (${percentage}%)`);
+}
+
+/**
+ * Hide inline AI progress banner
+ */
+function hideInlineAIProgress() {
+  const banner = document.getElementById('bws-ai-progress-banner');
+  if (banner) {
+    banner.style.display = 'none';
+  }
+}
+
+/**
+ * Update inline AI progress banner
+ */
+function updateInlineAIProgress(current, total) {
+  const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+
+  // Update count
+  const countElement = document.getElementById('bws-ai-progress-count-inline');
+  if (countElement) {
+    countElement.textContent = `${current} / ${total}`;
+  }
+
+  // Update percentage
+  const percentageElement = document.getElementById('bws-ai-progress-percentage-inline');
+  if (percentageElement) {
+    percentageElement.textContent = `${percentage}%`;
+  }
+
+  // Update progress bar fill
+  const fillElement = document.getElementById('bws-ai-progress-bar-fill');
+  if (fillElement) {
+    fillElement.style.width = `${percentage}%`;
+  }
+
+  console.log(`[AI Progress Banner] Updated: ${current}/${total} (${percentage}%)`);
+}
+
+/**
+ * Mark inline AI progress as completed
+ */
+function markInlineAIProgressComplete(total) {
+  const banner = document.getElementById('bws-ai-progress-banner');
+  if (!banner) return;
+
+  // Update to completed state
+  banner.classList.add('completed');
+  document.getElementById('bws-ai-progress-title').textContent = '✅ AI Rating Complete';
+  document.getElementById('bws-ai-progress-count-inline').textContent = `${total} / ${total}`;
+  document.getElementById('bws-ai-progress-percentage-inline').textContent = '100%';
+  document.getElementById('bws-ai-progress-bar-fill').style.width = '100%';
+
+  // Hide latest result
+  const latestElement = document.getElementById('bws-ai-latest-inline');
+  if (latestElement) {
+    latestElement.style.display = 'none';
+  }
+
+  console.log(`[AI Progress Banner] Completed: ${total}/${total}`);
+
+  // Auto-hide banner after 5 seconds
+  setTimeout(() => {
+    if (banner) {
+      banner.style.display = 'none';
+    }
+  }, 5000);
+}
+
+/**
+ * Mark inline AI progress as error
+ */
+function markInlineAIProgressError(errorMessage) {
+  const banner = document.getElementById('bws-ai-progress-banner');
+  if (!banner) return;
+
+  // Update to error state
+  banner.classList.add('error');
+  document.getElementById('bws-ai-progress-title').textContent = '❌ AI Rating Error';
+
+  // Show error in latest section
+  const latestElement = document.getElementById('bws-ai-latest-inline');
+  const latestTextElement = document.getElementById('bws-ai-latest-text-inline');
+  if (latestElement && latestTextElement) {
+    latestTextElement.textContent = errorMessage;
+    latestElement.style.display = 'flex';
+  }
+
+  console.error(`[AI Progress Banner] Error: ${errorMessage}`);
+}
+
+/**
+ * Setup event listeners for inline AI progress updates
+ */
+function setupInlineAIProgressListeners() {
+  // Listen for progress updates
+  window.api.on('bws:ai-progress', (data) => {
+    const { experimentId, current, total, percentage } = data;
+
+    // Only update if this is the current experiment
+    if (experimentId === window.currentAIRatingExperimentId) {
+      updateInlineAIProgress(current, total);
+
+      // ✅ Smart refresh: Only reload current tuple if viewing single-tuple browser
+      // (Don't call loadBWSList() - that creates 2,320 videos!)
+      if (bwsRatingState.currentTuple && bwsRatingState.currentTupleIndex !== undefined) {
+        // Reload current tuple to show updated AI judgment if it was just rated
+        loadBWSTuple({
+          tupleIndex: bwsRatingState.currentTupleIndex,
+          filter: bwsRatingState.currentFilter || 'all'
+        });
+      }
+
+      console.log(`[BWS AI Progress] ${current}/${total} (${percentage}%)`);
+    }
+  });
+
+  // Listen for individual tuple ratings
+  window.api.on('bws:ai-item-rated', (data) => {
+    const { experimentId, tupleId, best, worst } = data;
+
+    // Only update if this is the current experiment
+    if (experimentId === window.currentAIRatingExperimentId) {
+      // Show latest result in banner
+      const latestElement = document.getElementById('bws-ai-latest-inline');
+      const latestTextElement = document.getElementById('bws-ai-latest-text-inline');
+
+      if (latestElement && latestTextElement) {
+        latestTextElement.textContent = `Tuple #${tupleId} rated (Best: ${best}, Worst: ${worst})`;
+        latestElement.style.display = 'flex';
+      }
+
+      // ✅ Smart refresh: Only reload if currently viewing the tuple that was just rated
+      if (bwsRatingState.currentTuple && bwsRatingState.currentTuple.id === tupleId) {
+        loadBWSTuple({
+          tupleIndex: bwsRatingState.currentTupleIndex,
+          filter: bwsRatingState.currentFilter || 'all'
+        });
+      }
+
+      console.log(`[BWS AI] Tuple ${tupleId} rated - Best: ${best}, Worst: ${worst}`);
+    }
+  });
+
+  // Listen for completion
+  window.api.on('bws:ai-complete', (data) => {
+    const { experimentId, totalCompleted } = data;
+
+    // Only update if this is the current experiment
+    if (experimentId === window.currentAIRatingExperimentId) {
+      markInlineAIProgressComplete(totalCompleted);
+
+      // ✅ Final refresh: Reload current tuple to show completion state
+      if (bwsRatingState.currentTuple && bwsRatingState.currentTupleIndex !== undefined) {
+        loadBWSTuple({
+          tupleIndex: bwsRatingState.currentTupleIndex,
+          filter: bwsRatingState.currentFilter || 'all'
+        });
+      }
+
+      // Clear current experiment ID
+      window.currentAIRatingExperimentId = null;
+
+      console.log(`[BWS AI] Completed: ${totalCompleted} tuples rated`);
+      showNotification(`AI rating complete! ${totalCompleted} tuples rated.`, 'success');
+    }
+  });
+
+  // Listen for errors
+  window.api.on('bws:ai-error', (data) => {
+    const { experimentId, tupleId, error } = data;
+
+    // Only update if this is the current experiment
+    if (experimentId === window.currentAIRatingExperimentId) {
+      console.error(`[BWS AI Error] Tuple ${tupleId}: ${error}`);
+
+      // Don't stop on individual errors, just log them
+      // The AI will continue with next tuple
+    }
+  });
+}
+
+/**
+ * Add human ratings to an experiment (unified interface)
+ *
+ * Same as startBWSRating but with human-focused messaging
  */
 async function addHumanRatingsToExperiment(experimentId) {
   try {
@@ -602,8 +1121,8 @@ async function addHumanRatingsToExperiment(experimentId) {
 
     // Show confirmation with progress info
     const message = humanJudgments > 0
-      ? `Add human ratings to "${experiment.name}"?\n\nYou've already completed ${humanJudgments}/${totalTuples} comparisons.\n${remaining} remaining.`
-      : `Add human ratings to "${experiment.name}"?\n\nThis will let you rate the same ${totalTuples} comparisons that AI completed.\nYour ratings will be combined for multi-rater analysis.`;
+      ? `Continue rating "${experiment.name}"?\n\n✅ You've completed ${humanJudgments}/${totalTuples} comparisons\n⏳ ${remaining} remaining\n\n• See AI ratings alongside yours\n• All progress auto-saves`
+      : `Start rating "${experiment.name}"?\n\n• Browse ${totalTuples} comparisons\n• See AI ratings (if completed)\n• Add your own ratings\n• Compare AI vs Human judgments`;
 
     const confirmed = confirm(message);
     if (!confirmed) return;
@@ -618,7 +1137,12 @@ async function addHumanRatingsToExperiment(experimentId) {
 }
 
 /**
- * Start Human BWS Rating
+ * Start Human BWS Rating (Unified with AI)
+ *
+ * Opens the same interface as AI rating, but:
+ * - Focuses on human rating (no auto-start AI)
+ * - Shows existing AI ratings if any
+ * - Human can trigger AI from within interface
  */
 async function startHumanBWSRating(experimentId, experiment, raterId = 'human-user') {
   try {
@@ -641,7 +1165,7 @@ async function startHumanBWSRating(experimentId, experiment, raterId = 'human-us
       totalJudgments: experiment.total_judgments || 0,
       totalTuples: experiment.total_tuples || 0,
       raterId: raterId,  // Track rater ID for multi-rater support
-      raterType: 'human'
+      raterType: 'human'  // Primary rater is human, but AI ratings still visible
     };
 
     // Setup event listeners for rating interface
@@ -661,8 +1185,11 @@ async function startHumanBWSRating(experimentId, experiment, raterId = 'human-us
       raterInfo.style.display = 'block';
     }
 
-    // Load first tuple (filtered by rater)
-    await loadNextBWSTuple();
+    // ✅ Initialize single-tuple browser with navigation
+    setupBWSNavigation();
+
+    // Load first tuple (you can navigate with Prev/Next or filter)
+    await loadBWSTuple({ tupleIndex: 0, filter: 'unrated' });
 
   } catch (error) {
     console.error('Error starting human BWS rating:', error);
@@ -671,73 +1198,82 @@ async function startHumanBWSRating(experimentId, experiment, raterId = 'human-us
 }
 
 /**
- * Setup AI BWS progress listeners
+ * Setup AI BWS Progress Listeners (OLD VERSION - DEPRECATED)
+ *
+ * @deprecated - Replaced by setupInlineAIProgressListeners()
+ * This function showed a full-screen blocking overlay.
+ * Now using inline banner instead.
  */
-function setupAIBWSProgressListeners() {
-  // Remove old listeners
-  window.api.removeAllListeners('bws:ai-progress');
-  window.api.removeAllListeners('bws:ai-item-rated');
-  window.api.removeAllListeners('bws:ai-complete');
-  window.api.removeAllListeners('bws:ai-error');
+function setupAIBWSProgressListenersOLD() {
+  // OLD CODE - DISABLED
+  console.log('[setupAIBWSProgressListeners] Using inline banner instead of overlay');
 
-  // Show progress overlay
-  document.getElementById('bws-ai-progress-overlay').style.display = 'flex';
-
-  // Close button for overlay
-  const closeBtn = document.getElementById('bws-ai-progress-close');
-  if (closeBtn) {
-    closeBtn.onclick = () => {
-      document.getElementById('bws-ai-progress-overlay').style.display = 'none';
-    };
-  }
-
-  // Progress updates
-  window.api.on('bws:ai-progress', (data) => {
-    console.log(`[BWS AI Progress] ${data.current}/${data.total} (${data.percentage}%)`);
-
-    // Update progress overlay
-    document.getElementById('bws-ai-progress-count').textContent = `${data.current} / ${data.total}`;
-    document.getElementById('bws-ai-progress-percentage').textContent = `${data.percentage}%`;
-    document.getElementById('bws-ai-progress-fill').style.width = `${data.percentage}%`;
-
-    // Update experiment card in gallery
-    updateExperimentCardProgress(data);
-  });
-
-  // Item rated
-  window.api.on('bws:ai-item-rated', (data) => {
-    console.log(`[BWS AI] Tuple ${data.tupleId} rated - Best: ${data.best}, Worst: ${data.worst}`);
-
-    // Show latest result
-    const latestDiv = document.getElementById('bws-ai-latest-result');
-    const latestText = document.getElementById('bws-ai-latest-text');
-
-    if (latestDiv && latestText) {
-      latestDiv.style.display = 'block';
-      latestText.textContent = `Best: Item ${data.best + 1}, Worst: Item ${data.worst + 1} - ${data.reasoning?.substring(0, 150) || 'Processing...'}`;
-    }
-  });
-
-  // Completion
-  window.api.on('bws:ai-complete', async (data) => {
-    console.log(`[BWS AI Complete] ${data.scoresCount} items ranked`);
-
-    // Hide progress overlay
-    document.getElementById('bws-ai-progress-overlay').style.display = 'none';
-
-    showNotification(`AI rating complete! ${data.scoresCount} items ranked.`, 'success');
-
-    // Clear current experiment ID
-    window.currentAIRatingExperimentId = null;
-
-    // Reload experiments to show updated status
-    await loadBWSExperiments();
-  });
-
-  // Errors
-  window.api.on('bws:ai-error', (data) => {
-    console.error(`[BWS AI Error] Tuple ${data.tupleId}:`, data.error);
-  });
+  // The code below is kept for reference but not used:
+  //
+  // // Remove old listeners
+  // window.api.removeAllListeners('bws:ai-progress');
+  // window.api.removeAllListeners('bws:ai-item-rated');
+  // window.api.removeAllListeners('bws:ai-complete');
+  // window.api.removeAllListeners('bws:ai-error');
+  //
+  // // Show progress overlay
+  // document.getElementById('bws-ai-progress-overlay').style.display = 'flex';
+  //
+  // // Close button for overlay
+  // const closeBtn = document.getElementById('bws-ai-progress-close');
+  // if (closeBtn) {
+  //   closeBtn.onclick = () => {
+  //     document.getElementById('bws-ai-progress-overlay').style.display = 'none';
+  //   };
+  // }
+  //
+  // // Progress updates
+  // window.api.on('bws:ai-progress', (data) => {
+  //   console.log(`[BWS AI Progress] ${data.current}/${data.total} (${data.percentage}%)`);
+  //
+  //   // Update progress overlay
+  //   document.getElementById('bws-ai-progress-count').textContent = `${data.current} / ${data.total}`;
+  //   document.getElementById('bws-ai-progress-percentage').textContent = `${data.percentage}%`;
+  //   document.getElementById('bws-ai-progress-fill').style.width = `${data.percentage}%`;
+  //
+  //   // Update experiment card in gallery
+  //   updateExperimentCardProgress(data);
+  // });
+  //
+  // // Item rated
+  // window.api.on('bws:ai-item-rated', (data) => {
+  //   console.log(`[BWS AI] Tuple ${data.tupleId} rated - Best: ${data.best}, Worst: ${data.worst}`);
+  //
+  //   // Show latest result
+  //   const latestDiv = document.getElementById('bws-ai-latest-result');
+  //   const latestText = document.getElementById('bws-ai-latest-text');
+  //
+  //   if (latestDiv && latestText) {
+  //     latestDiv.style.display = 'block';
+  //     latestText.textContent = `Best: Item ${data.best + 1}, Worst: Item ${data.worst + 1} - ${data.reasoning?.substring(0, 150) || 'Processing...'}`;
+  //   }
+  // });
+  //
+  // // Completion
+  // window.api.on('bws:ai-complete', async (data) => {
+  //   console.log(`[BWS AI Complete] ${data.scoresCount} items ranked`);
+  //
+  //   // Hide progress overlay
+  //   document.getElementById('bws-ai-progress-overlay').style.display = 'none';
+  //
+  //   showNotification(`AI rating complete! ${data.scoresCount} items ranked.`, 'success');
+  //
+  //   // Clear current experiment ID
+  //   window.currentAIRatingExperimentId = null;
+  //
+  //   // Reload experiments to show updated status
+  //   await loadBWSExperiments();
+  // });
+  //
+  // // Errors
+  // window.api.on('bws:ai-error', (data) => {
+  //   console.error(`[BWS AI Error] Tuple ${data.tupleId}:`, data.error);
+  // });
 }
 
 /**
@@ -796,7 +1332,7 @@ function setupRatingInterfaceListeners() {
   const skipBtn = document.getElementById('bws-rating-skip-btn');
   if (skipBtn) {
     skipBtn.replaceWith(skipBtn.cloneNode(true));
-    document.getElementById('bws-rating-skip-btn').addEventListener('click', loadNextBWSTuple);
+    document.getElementById('bws-rating-skip-btn').addEventListener('click', () => loadNextBWSTuple(true));
   }
 
   // Keyboard shortcuts
@@ -806,10 +1342,33 @@ function setupRatingInterfaceListeners() {
 /**
  * Load next BWS tuple
  */
-async function loadNextBWSTuple() {
+async function loadNextBWSTuple(isSkip = false) {
   try {
     // Pause all videos from previous tuple
     pauseAllBWSVideos();
+
+    // If this is a skip, save a skip judgment so tuple is marked as "seen"
+    if (isSkip && bwsRatingState.currentTuple) {
+      try {
+        await window.api.bws.saveJudgment({
+          tuple_id: bwsRatingState.currentTuple.id,
+          rater_type: bwsRatingState.raterType || 'human',
+          rater_id: bwsRatingState.raterId || 'human-user',
+          best_item_id: -1,  // Special marker for skipped
+          worst_item_id: -2, // Different value to pass CHECK constraint
+          reasoning: 'SKIPPED',
+          response_time_ms: null
+        });
+
+        console.log('[Skip] Saved skip record for tuple', bwsRatingState.currentTuple.id);
+
+        // Increment judgment count for progress tracking
+        bwsRatingState.totalJudgments++;
+      } catch (skipError) {
+        console.error('[Skip] Failed to save skip record:', skipError);
+        // Continue anyway - not critical
+      }
+    }
 
     // Show loading
     document.getElementById('bws-rating-loading').style.display = 'flex';
@@ -859,7 +1418,616 @@ async function loadNextBWSTuple() {
 }
 
 /**
- * Render BWS item cards
+ * Load a specific BWS tuple with navigation and filtering support
+ *
+ * @param {Object} options - Loading options
+ * @param {number} options.tupleIndex - Load specific tuple by index (0-based)
+ * @param {string} options.direction - 'next' or 'prev' for navigation
+ * @param {string} options.filter - 'all', 'ai-rated', 'unrated', 'human-rated'
+ *
+ * Education: This is the navigation engine. It:
+ * - Fetches all tuples for the experiment
+ * - Filters them based on rating status
+ * - Loads the target tuple with AI/human judgments
+ * - Renders with overlays showing what AI/human picked
+ */
+async function loadBWSTuple(options = {}) {
+  const {
+    tupleIndex = null,
+    direction = 'next',
+    filter = 'all'
+  } = options;
+
+  try {
+    // Pause videos from previous tuple
+    pauseAllBWSVideos();
+
+    const experimentId = bwsRatingState.experimentId;
+    if (!experimentId) {
+      console.error('[loadBWSTuple] No experiment ID');
+      return;
+    }
+
+    // Show loading
+    document.getElementById('bws-rating-loading').style.display = 'flex';
+
+    // Fetch all tuples for this experiment
+    const allTuples = await window.api.bws.getAllTuples({ experimentId });
+
+    if (!allTuples || allTuples.length === 0) {
+      showNotification('No tuples found for this experiment', 'info');
+      document.getElementById('bws-rating-loading').style.display = 'none';
+      return;
+    }
+
+    // Fetch AI judgments (what AI has rated)
+    const aiJudgments = await window.api.bws.getJudgments({
+      experimentId,
+      raterType: 'ai'
+    });
+
+    // Fetch human judgments (what you've rated)
+    const humanJudgments = await window.api.bws.getJudgments({
+      experimentId,
+      raterType: 'human',
+      raterId: bwsRatingState.raterId || 'default-rater'
+    });
+
+    // Build lookup maps for fast filtering
+    const aiJudgmentMap = new Map();
+    aiJudgments.forEach(j => aiJudgmentMap.set(j.tuple_id, j));
+
+    const humanJudgmentMap = new Map();
+    humanJudgments.forEach(j => humanJudgmentMap.set(j.tuple_id, j));
+
+    // Filter tuples based on filter option
+    let filteredTuples = allTuples;
+
+    if (filter === 'ai-rated') {
+      filteredTuples = allTuples.filter(t => aiJudgmentMap.has(t.id));
+    } else if (filter === 'unrated') {
+      filteredTuples = allTuples.filter(t =>
+        !aiJudgmentMap.has(t.id) && !humanJudgmentMap.has(t.id)
+      );
+    } else if (filter === 'human-rated') {
+      filteredTuples = allTuples.filter(t => humanJudgmentMap.has(t.id));
+    }
+    // else filter === 'all', use all tuples
+
+    if (filteredTuples.length === 0) {
+      showNotification(`No tuples match filter: ${filter}`, 'info');
+      document.getElementById('bws-rating-loading').style.display = 'none';
+      return;
+    }
+
+    // Determine which tuple to load
+    let targetTupleIndex;
+
+    if (tupleIndex !== null) {
+      // Load specific tuple by index
+      targetTupleIndex = Math.max(0, Math.min(tupleIndex, filteredTuples.length - 1));
+    } else {
+      // Navigate from current position
+      const currentIndex = bwsRatingState.currentTupleIndex !== undefined
+        ? bwsRatingState.currentTupleIndex
+        : 0;
+
+      if (direction === 'next') {
+        targetTupleIndex = Math.min(currentIndex + 1, filteredTuples.length - 1);
+      } else if (direction === 'prev') {
+        targetTupleIndex = Math.max(currentIndex - 1, 0);
+      } else {
+        targetTupleIndex = currentIndex;
+      }
+    }
+
+    // Store navigation state
+    bwsRatingState.currentTupleIndex = targetTupleIndex;
+    bwsRatingState.currentFilter = filter;
+    bwsRatingState.filteredTuples = filteredTuples;
+
+    // Load the specific tuple with all its items
+    const tupleToLoad = filteredTuples[targetTupleIndex];
+    const tupleWithItems = await window.api.bws.getTupleWithItems({
+      tupleId: tupleToLoad.id
+    });
+
+    // Get judgments for this specific tuple
+    const aiJudgment = aiJudgmentMap.get(tupleToLoad.id);
+    const humanJudgment = humanJudgmentMap.get(tupleToLoad.id);
+
+    // Store in state for later use
+    bwsRatingState.currentTuple = tupleWithItems;
+    bwsRatingState.currentTupleData = tupleWithItems;
+    bwsRatingState.currentAIJudgment = aiJudgment;
+    bwsRatingState.currentHumanJudgment = humanJudgment;
+    bwsRatingState.selectedBest = null;
+    bwsRatingState.selectedWorst = null;
+
+    // Render the tuple with AI/human overlays
+    renderBWSTuple(tupleWithItems, aiJudgment, humanJudgment);
+
+    // Update navigation UI (position counter, enable/disable buttons)
+    updateNavigationUI(targetTupleIndex, filteredTuples.length);
+
+    // Update progress
+    updateBWSRatingProgress();
+
+    // Hide loading
+    document.getElementById('bws-rating-loading').style.display = 'none';
+
+    console.log(`[loadBWSTuple] Loaded tuple ${tupleToLoad.id} (index ${targetTupleIndex + 1}/${filteredTuples.length}, filter: ${filter})`);
+
+  } catch (error) {
+    console.error('[loadBWSTuple] Error:', error);
+    document.getElementById('bws-rating-loading').style.display = 'none';
+    showNotification('Failed to load tuple', 'error');
+  }
+}
+
+/**
+ * Render a single BWS tuple with AI/human judgment overlays
+ *
+ * Education: This is the visual renderer. It:
+ * - Shows tuple status (AI-rated? Human-rated? Both?)
+ * - Renders 4 video cards with green/red borders
+ * - Displays AI reasoning below the videos
+ * - Shows agreement % if both AI and human rated
+ *
+ * @param {Object} tuple - The tuple with items
+ * @param {Object} aiJudgment - AI's judgment (best_item_id, worst_item_id, reasoning)
+ * @param {Object} humanJudgment - Human's judgment
+ */
+function renderBWSTuple(tuple, aiJudgment, humanJudgment) {
+  // Get container elements
+  const itemsGrid = document.getElementById('bws-rating-items-grid');
+  const singleRatingView = document.getElementById('bws-single-rating-view');
+
+  if (!itemsGrid || !singleRatingView) {
+    console.error('[renderBWSTuple] Required elements not found');
+    return;
+  }
+
+  // Show single-rating view (hide list view if it exists)
+  singleRatingView.style.display = 'block';
+
+  // Update tuple info header (status, agreement)
+  updateTupleInfoHeader(tuple, aiJudgment, humanJudgment);
+
+  // Clear existing items
+  itemsGrid.innerHTML = '';
+
+  // Apply smart layout class based on tuple size
+  itemsGrid.className = 'bws-rating-items-grid';
+  if (tuple.items.length === 2) {
+    itemsGrid.classList.add('grid-2-items');
+  } else if (tuple.items.length === 3) {
+    itemsGrid.classList.add('grid-3-items');
+  } else if (tuple.items.length === 4) {
+    itemsGrid.classList.add('grid-4-items');
+  }
+
+  // Render each item (video or comment) with AI/human overlays
+  tuple.items.forEach((item, index) => {
+    const itemCard = renderBWSItemCard(item, index, aiJudgment, humanJudgment);
+    itemsGrid.appendChild(itemCard);
+  });
+
+  // Display AI reasoning (if exists and blind mode off)
+  displayAIReasoning(aiJudgment);
+
+  // Update action buttons (Submit vs Update)
+  updateActionButtons(humanJudgment);
+
+  // ✅ CRITICAL: Start videos and setup interactions after DOM insertion
+  // This enables hover-for-audio, click-to-expand, and progress bars
+  const allVideos = tuple.items.every(item => item.item_type !== 'comment' && item.file_path);
+  if (allVideos) {
+    startBWSVideos();
+  }
+
+  console.log(`[renderBWSTuple] Rendered tuple ${tuple.id} with ${tuple.items.length} items`);
+}
+
+/**
+ * Update tuple info header showing status and agreement
+ *
+ * Education: This creates/updates the header above the 4 videos.
+ * Shows: "Tuple #123 - ✅ AI + Human Rated | ✅ Perfect Agreement (100%)"
+ */
+function updateTupleInfoHeader(tuple, aiJudgment, humanJudgment) {
+  let header = document.getElementById('bws-tuple-info-header');
+
+  if (!header) {
+    // Create header element if it doesn't exist
+    header = document.createElement('div');
+    header.id = 'bws-tuple-info-header';
+    header.className = 'bws-tuple-info-header';
+
+    // Insert before single-rating-view
+    const singleView = document.getElementById('bws-single-rating-view');
+    if (singleView && singleView.parentNode) {
+      singleView.parentNode.insertBefore(header, singleView);
+    }
+  }
+
+  // Determine status HTML
+  let statusHTML = '';
+
+  if (aiJudgment && humanJudgment) {
+    statusHTML = '<span class="status-both">✅ AI + Human Rated</span>';
+  } else if (aiJudgment) {
+    const timeAgo = getTimeAgo(aiJudgment.created_at);
+    statusHTML = `<span class="status-ai">🤖 AI Rated (${timeAgo})</span>`;
+  } else if (humanJudgment) {
+    const timeAgo = getTimeAgo(humanJudgment.created_at);
+    statusHTML = `<span class="status-human">👤 You Rated (${timeAgo})</span>`;
+  } else {
+    statusHTML = '<span class="status-unrated">⚪ Not Rated</span>';
+  }
+
+  // Agreement indicator (if both rated)
+  let agreementHTML = '';
+  if (aiJudgment && humanJudgment) {
+    const bestAgree = aiJudgment.best_item_id === humanJudgment.best_item_id;
+    const worstAgree = aiJudgment.worst_item_id === humanJudgment.worst_item_id;
+    const agreementPct = (bestAgree && worstAgree) ? 100 : (bestAgree || worstAgree) ? 50 : 0;
+
+    const icon = agreementPct === 100 ? '✅' : agreementPct === 50 ? '⚠️' : '❌';
+    const text = agreementPct === 100 ? 'Perfect Agreement' :
+                 agreementPct === 50 ? 'Partial Agreement' :
+                 'Disagreement';
+
+    agreementHTML = `
+      <span class="agreement-indicator agreement-${agreementPct}">
+        ${icon} ${text} (${agreementPct}%)
+      </span>
+    `;
+  }
+
+  header.innerHTML = `
+    <div class="tuple-header-left">
+      <h3>Tuple #${tuple.id}</h3>
+      ${statusHTML}
+    </div>
+    <div class="tuple-header-right">
+      ${agreementHTML}
+    </div>
+  `;
+}
+
+/**
+ * Display AI reasoning below the video grid
+ *
+ * Education: Shows why AI picked BEST/WORST.
+ * Hidden in blind mode to prevent bias.
+ */
+function displayAIReasoning(aiJudgment) {
+  let reasoningContainer = document.getElementById('bws-ai-reasoning-display');
+
+  if (!reasoningContainer) {
+    // Create container
+    reasoningContainer = document.createElement('div');
+    reasoningContainer.id = 'bws-ai-reasoning-display';
+    reasoningContainer.className = 'bws-ai-reasoning-display';
+
+    // Insert after items grid
+    const itemsGrid = document.getElementById('bws-rating-items-grid');
+    if (itemsGrid && itemsGrid.parentNode) {
+      itemsGrid.parentNode.insertBefore(reasoningContainer, itemsGrid.nextSibling);
+    }
+  }
+
+  // Check blind mode
+  const blindMode = document.getElementById('bws-blind-mode')?.checked || false;
+
+  if (aiJudgment && aiJudgment.reasoning && !blindMode) {
+    reasoningContainer.style.display = 'block';
+    reasoningContainer.innerHTML = `
+      <div class="reasoning-label">🤖 AI Reasoning:</div>
+      <div class="reasoning-text">${aiJudgment.reasoning}</div>
+    `;
+  } else {
+    reasoningContainer.style.display = 'none';
+  }
+}
+
+/**
+ * Update action buttons based on rating state
+ *
+ * Education: If human already rated, button says "Update Rating".
+ * If not rated, button says "Submit Judgment" (disabled until BEST/WORST selected).
+ */
+function updateActionButtons(humanJudgment) {
+  const submitBtn = document.getElementById('bws-rating-submit-btn');
+
+  if (humanJudgment) {
+    // Already rated - allow updating
+    if (submitBtn) {
+      submitBtn.textContent = 'Update Rating';
+      submitBtn.disabled = false;
+    }
+  } else {
+    // Not rated - normal submit
+    if (submitBtn) {
+      submitBtn.textContent = 'Submit Judgment';
+      submitBtn.disabled = true; // Enable when BEST/WORST selected
+    }
+  }
+}
+
+/**
+ * Helper: Get human-readable time ago
+ *
+ * Education: Converts "2025-10-04 10:30:00" → "2m ago" or "5h ago"
+ */
+function getTimeAgo(timestamp) {
+  const now = new Date();
+  const then = new Date(timestamp);
+  const seconds = Math.floor((now - then) / 1000);
+
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+/**
+ * Render a single BWS item card with AI/human overlay badges
+ *
+ * Education: This creates ONE video card with:
+ * - Green border if AI picked BEST
+ * - Red border if AI picked WORST
+ * - Badges showing "🟢 BEST (AI)" or "🔴 WORST (AI)"
+ * - Blue badges for human choices
+ * - Blind mode hides AI overlays
+ *
+ * @param {Object} item - The video/comment item
+ * @param {number} index - Position in tuple (0-3)
+ * @param {Object} aiJudgment - AI's judgment (best_item_id, worst_item_id)
+ * @param {Object} humanJudgment - Human's judgment
+ * @returns {HTMLElement} The card element
+ */
+function renderBWSItemCard(item, index, aiJudgment, humanJudgment) {
+  const card = document.createElement('div');
+  card.className = 'bws-item-card';
+  card.dataset.index = index;
+  card.dataset.itemId = item.id;
+
+  // Check blind mode
+  const blindMode = document.getElementById('bws-blind-mode')?.checked || false;
+
+  // Determine AI overlay classes and badges
+  let aiOverlayClass = '';
+  let aiBadgeHTML = '';
+
+  if (aiJudgment && !blindMode) {
+    if (item.id === aiJudgment.best_item_id) {
+      aiOverlayClass = 'ai-best-overlay';
+      aiBadgeHTML = '<div class="ai-badge badge-best">🟢 BEST (AI)</div>';
+    } else if (item.id === aiJudgment.worst_item_id) {
+      aiOverlayClass = 'ai-worst-overlay';
+      aiBadgeHTML = '<div class="ai-badge badge-worst">🔴 WORST (AI)</div>';
+    }
+  }
+
+  // Determine human overlay classes and badges
+  let humanOverlayClass = '';
+  let humanBadgeHTML = '';
+
+  if (humanJudgment) {
+    if (item.id === humanJudgment.best_item_id) {
+      humanOverlayClass = 'human-best-overlay';
+      humanBadgeHTML = '<div class="human-badge badge-best">🟢 BEST (You)</div>';
+    } else if (item.id === humanJudgment.worst_item_id) {
+      humanOverlayClass = 'human-worst-overlay';
+      humanBadgeHTML = '<div class="human-badge badge-worst">🔴 WORST (You)</div>';
+    }
+  }
+
+  // Apply overlay classes
+  if (aiOverlayClass) card.classList.add(aiOverlayClass);
+  if (humanOverlayClass) card.classList.add(humanOverlayClass);
+
+  // Build card HTML
+  const isComment = item.item_type === 'comment';
+  const isVideo = !isComment && item.file_path;
+  const content = isComment ? item.text : item.transcript_text;
+  const typeLabel = isComment ? 'Comment' : 'Video Chunk';
+  const duration = isVideo ? item.end_time - item.start_time : 0;
+
+  card.innerHTML = `
+    <div class="bws-item-header">
+      <span class="bws-item-number">${index + 1}</span>
+      <span class="bws-item-type">${typeLabel}</span>
+      ${isVideo ? `<span class="bws-item-duration">${duration.toFixed(1)}s</span>` : ''}
+    </div>
+
+    ${isVideo ? `
+      <!-- Video Player Container -->
+      <div class="bws-video-container" data-index="${index}">
+        <video
+          class="bws-video-player"
+          loop
+          muted
+          playsinline
+          data-index="${index}"
+          data-start="${item.start_time}"
+          data-end="${item.end_time}"
+        >
+          <source src="file://${item.file_path}" type="video/mp4">
+        </video>
+
+        <!-- Audio indicator -->
+        <div class="bws-audio-indicator">🔇</div>
+
+        <!-- Progress bar -->
+        <div class="bws-video-progress-bar">
+          <div class="bws-video-progress-fill" data-index="${index}"></div>
+        </div>
+
+        <!-- AI Badge (conditionally shown) -->
+        ${aiBadgeHTML}
+
+        <!-- Human Badge (conditionally shown) -->
+        ${humanBadgeHTML}
+      </div>
+
+      <!-- Transcript -->
+      <div class="bws-transcript">
+        <div class="bws-transcript-label">📝 Transcript</div>
+        <div class="bws-transcript-text">
+          ${content || 'No transcript available'}
+        </div>
+      </div>
+    ` : `
+      <!-- Text Content (for comments) -->
+      <div class="bws-item-content">
+        ${aiBadgeHTML}
+        ${humanBadgeHTML}
+        ${content || 'No content available'}
+      </div>
+    `}
+
+    ${isComment ? `
+      <div class="bws-item-meta">
+        <span>👤 ${item.author || 'Unknown'}</span>
+        <span>👍 ${item.likes || 0}</span>
+      </div>
+    ` : `
+      <div class="bws-item-meta">
+        <span>⏱️ ${formatTimestamp(item.start_time)} - ${formatTimestamp(item.end_time)}</span>
+        <span>📊 Score: ${(item.relevance_score || 0).toFixed(2)}</span>
+      </div>
+    `}
+
+    <div class="bws-item-actions">
+      <button class="bws-item-btn btn-best" data-index="${index}" onclick="selectBest(${index})">
+        ✓ BEST
+      </button>
+      <button class="bws-item-btn btn-worst" data-index="${index}" onclick="selectWorst(${index})">
+        ✗ WORST
+      </button>
+    </div>
+  `;
+
+  return card;
+}
+
+/**
+ * Setup navigation event listeners for single-tuple browser
+ *
+ * Education: This wires up the Next/Prev/Skip buttons.
+ * Called once when rating interface opens.
+ */
+function setupBWSNavigation() {
+  // Next button - load next tuple in current filter
+  const nextBtn = document.getElementById('bws-nav-next-btn');
+  if (nextBtn) {
+    nextBtn.addEventListener('click', () => {
+      const filter = bwsRatingState.currentFilter || 'all';
+      loadBWSTuple({ direction: 'next', filter });
+    });
+  }
+
+  // Previous button - load previous tuple in current filter
+  const prevBtn = document.getElementById('bws-nav-prev-btn');
+  if (prevBtn) {
+    prevBtn.addEventListener('click', () => {
+      const filter = bwsRatingState.currentFilter || 'all';
+      loadBWSTuple({ direction: 'prev', filter });
+    });
+  }
+
+  // Skip button - jump to next unrated tuple
+  const skipBtn = document.getElementById('bws-rating-skip-btn');
+  if (skipBtn) {
+    skipBtn.addEventListener('click', () => {
+      loadBWSTuple({ direction: 'next', filter: 'unrated' });
+    });
+  }
+
+  // Filter dropdown - reload with new filter
+  const filterSelect = document.getElementById('bws-filter-mode');
+  if (filterSelect) {
+    filterSelect.addEventListener('change', (e) => {
+      const filter = e.target.value;
+      loadBWSTuple({ tupleIndex: 0, filter }); // Load first tuple of filtered set
+    });
+  }
+
+  // Blind mode toggle - re-render to hide/show AI overlays
+  const blindModeCheckbox = document.getElementById('bws-blind-mode');
+  const blindModeLabel = document.getElementById('bws-blind-mode-label');
+
+  if (blindModeCheckbox) {
+    blindModeCheckbox.addEventListener('change', (e) => {
+      const blindMode = e.target.checked;
+
+      // Update label
+      if (blindModeLabel) {
+        blindModeLabel.textContent = blindMode ? '🙈 Blind Mode: ON' : '👁 Blind Mode: OFF';
+      }
+
+      // Toggle class on interface container
+      const ratingInterface = document.getElementById('bws-rating-interface');
+      if (ratingInterface) {
+        ratingInterface.classList.toggle('blind-mode-active', blindMode);
+      }
+
+      // Re-render current tuple to apply blind mode
+      const currentTuple = bwsRatingState.currentTuple;
+      const aiJudgment = bwsRatingState.currentAIJudgment;
+      const humanJudgment = bwsRatingState.currentHumanJudgment;
+
+      if (currentTuple) {
+        renderBWSTuple(currentTuple, aiJudgment, humanJudgment);
+      }
+    });
+  }
+
+  console.log('[setupBWSNavigation] Navigation event listeners attached');
+}
+
+/**
+ * Update navigation UI (position counter, button states)
+ *
+ * Education: Updates "Tuple 5 of 45" and enables/disables Prev/Next
+ * based on whether you're at the start/end of the filtered list.
+ *
+ * @param {number} currentIndex - Current position (0-based)
+ * @param {number} totalCount - Total tuples in current filter
+ */
+function updateNavigationUI(currentIndex, totalCount) {
+  // Update position counter
+  const currentIndexElement = document.getElementById('bws-current-index');
+  const totalCountElement = document.getElementById('bws-total-count');
+
+  if (currentIndexElement) {
+    currentIndexElement.textContent = currentIndex + 1; // Display 1-based
+  }
+
+  if (totalCountElement) {
+    totalCountElement.textContent = totalCount;
+  }
+
+  // Enable/disable prev button (disabled at first tuple)
+  const prevBtn = document.getElementById('bws-nav-prev-btn');
+  if (prevBtn) {
+    prevBtn.disabled = (currentIndex === 0);
+  }
+
+  // Enable/disable next button (disabled at last tuple)
+  const nextBtn = document.getElementById('bws-nav-next-btn');
+  if (nextBtn) {
+    nextBtn.disabled = (currentIndex === totalCount - 1);
+  }
+
+  console.log(`[updateNavigationUI] Position: ${currentIndex + 1}/${totalCount}`);
+}
+
+/**
+ * Render BWS item cards (OLD VERSION - for backward compatibility)
  */
 function renderBWSItemCards(items) {
   const grid = document.getElementById('bws-rating-items-grid');
@@ -977,20 +2145,23 @@ function startBWSVideos() {
   console.log(`[startBWSVideos] Starting ${videos.length} videos with staggered loading`);
 
   videos.forEach((video, index) => {
-    // Stagger by 100ms each to avoid overwhelming decoder
+    // Stagger by 150ms each to avoid race condition with pauseAllBWSVideos()
     setTimeout(() => {
       video.play().catch(err => {
-        console.error(`Failed to auto-play video ${index}:`, err);
-        // Fallback: show play button overlay
-        const container = video.closest('.bws-video-container');
-        if (container) {
-          container.classList.add('needs-interaction');
+        // Ignore "interrupted by pause" errors - they're harmless during tuple loading
+        if (!err.message.includes('interrupted')) {
+          console.warn(`Video ${index} autoplay blocked:`, err.message);
+          // Fallback: show play button overlay
+          const container = video.closest('.bws-video-container');
+          if (container) {
+            container.classList.add('needs-interaction');
+          }
         }
       });
 
       // All videos start muted (hover for audio)
       video.muted = true;
-    }, index * 100);
+    }, index * 150 + 200); // Extra 200ms delay after pause completes
   });
 
   // Setup hover interactions for audio
@@ -1002,6 +2173,9 @@ function startBWSVideos() {
 
 /**
  * Setup hover interactions for video cards
+ *
+ * Note: We recreate event listeners each time because itemsGrid.innerHTML = ''
+ * removes old elements, so no need to manually remove listeners
  */
 function setupVideoHoverInteractions() {
   const videoContainers = document.querySelectorAll('.bws-video-container');
@@ -1009,8 +2183,10 @@ function setupVideoHoverInteractions() {
   videoContainers.forEach((container, index) => {
     const video = container.querySelector('.bws-video-player');
 
+    if (!video) return;
+
     // Hover = enlarge + audio
-    container.addEventListener('mouseenter', () => {
+    const handleMouseEnter = () => {
       container.style.transform = 'scale(1.15)';
       container.style.zIndex = '10';
 
@@ -1020,21 +2196,25 @@ function setupVideoHoverInteractions() {
 
       // Update button states
       updateAudioButtonStates(index);
-    });
+    };
 
-    container.addEventListener('mouseleave', () => {
+    const handleMouseLeave = () => {
       container.style.transform = 'scale(1)';
       container.style.zIndex = '1';
       video.muted = true;
 
       // Reset button states
       updateAudioButtonStates(-1);
-    });
+    };
 
-    // Click = open full-size modal
-    container.addEventListener('click', () => {
+    const handleClick = () => {
       openVideoDetailModal(index);
-    });
+    };
+
+    // Add event listeners
+    container.addEventListener('mouseenter', handleMouseEnter);
+    container.addEventListener('mouseleave', handleMouseLeave);
+    container.addEventListener('click', handleClick);
   });
 }
 
@@ -1400,8 +2580,35 @@ async function submitBWSJudgment() {
     // Increment judgment count
     bwsRatingState.totalJudgments++;
 
-    // Load next tuple
-    await loadNextBWSTuple();
+    // ✅ Keep selection visible! Reload current tuple to show both:
+    // - Your selection (light green/red DASHED outline - same color as your rating)
+    // - AI rating (bright green/red SOLID border)
+    // - Human rating (light green/red SOLID border)
+    // The dashed outline shows OUTSIDE the solid border so you can see overlap!
+    const currentIndex = bwsRatingState.currentTupleIndex;
+    const currentFilter = bwsRatingState.currentFilter || 'all';
+
+    if (currentIndex !== undefined) {
+      await loadBWSTuple({ tupleIndex: currentIndex, filter: currentFilter });
+
+      // Restore selection state after reload
+      if (bwsRatingState.selectedBest !== null) {
+        const bestCard = document.querySelector(`.bws-item-card[data-index="${bwsRatingState.selectedBest}"]`);
+        if (bestCard) bestCard.classList.add('selected-best');
+      }
+      if (bwsRatingState.selectedWorst !== null) {
+        const worstCard = document.querySelector(`.bws-item-card[data-index="${bwsRatingState.selectedWorst}"]`);
+        if (worstCard) worstCard.classList.add('selected-worst');
+      }
+    }
+
+    // Update progress display
+    updateBWSRatingProgress();
+
+    // Hide loading
+    document.getElementById('bws-rating-loading').style.display = 'none';
+
+    showNotification('✅ Saved! Dashed = your pick, solid = AI rating (if exists)', 'success');
 
   } catch (error) {
     console.error('Error submitting judgment:', error);
@@ -1523,6 +2730,12 @@ function pauseBWSRating() {
  */
 function closeBWSRating() {
   if (confirm('Are you sure you want to exit? Progress is saved automatically.')) {
+    // ✅ Cleanup list view (stop auto-refresh, reset state)
+    cleanupBWSListView();
+
+    // ✅ Hide inline AI progress banner
+    hideInlineAIProgress();
+
     // Pause all videos
     pauseAllBWSVideos();
 
@@ -2050,3 +3263,401 @@ if (document.readyState === 'loading') {
 } else {
   initializeBWS();
 }
+
+// ============================================
+// BWS LIVE VIEWER - SCROLLABLE LIST VIEW
+// Phase 1A: Inline Integration
+// ============================================
+
+let bwsListViewState = {
+  currentFilter: 'all',
+  blindMode: false,
+  autoRefresh: true,
+  refreshInterval: null,
+  currentExperimentId: null
+};
+
+/**
+ * Initialize BWS List View
+ *
+ * @deprecated - DISABLED: Causes video player limit errors (2320 videos at once)
+ * Now using single-tuple browser instead (shows 4 videos at a time)
+ */
+function initializeBWSListView(experimentId) {
+  console.log('[initializeBWSListView] SKIPPED - Using single-tuple browser to avoid video limit errors');
+  return;
+
+  // OLD CODE - Disabled because showing all 580 tuples = 2320 video elements
+  // This hits browser limit: "[Intervention] Blocked attempt to create WebMediaPlayer"
+  //
+  // bwsListViewState.currentExperimentId = experimentId;
+  // setupListViewListeners();
+  // loadBWSList();
+  // if (bwsListViewState.autoRefresh) {
+  //   startAutoRefresh();
+  // }
+}
+
+/**
+ * Setup event listeners for list view controls
+ */
+function setupListViewListeners() {
+  // Filter dropdown
+  const filterSelect = document.getElementById('bws-filter-mode');
+  if (filterSelect) {
+    filterSelect.addEventListener('change', (e) => {
+      bwsListViewState.currentFilter = e.target.value;
+      loadBWSList();
+    });
+  }
+  
+  // Blind mode toggle
+  const blindModeCheckbox = document.getElementById('bws-blind-mode');
+  const blindModeLabel = document.getElementById('bws-blind-mode-label');
+  if (blindModeCheckbox) {
+    blindModeCheckbox.addEventListener('change', (e) => {
+      bwsListViewState.blindMode = e.target.checked;
+      
+      // Update label
+      if (blindModeLabel) {
+        blindModeLabel.textContent = e.target.checked ? '🙈 Blind Mode: ON' : '👁 Blind Mode: OFF';
+      }
+      
+      // Toggle class on container
+      const ratingInterface = document.getElementById('bws-rating-interface');
+      if (ratingInterface) {
+        ratingInterface.classList.toggle('blind-mode-active', e.target.checked);
+      }
+      
+      // Reload list to apply blind mode
+      loadBWSList();
+    });
+  }
+  
+  // Auto-refresh toggle
+  const autoRefreshCheckbox = document.getElementById('bws-auto-refresh');
+  if (autoRefreshCheckbox) {
+    autoRefreshCheckbox.addEventListener('change', (e) => {
+      bwsListViewState.autoRefresh = e.target.checked;
+      
+      if (e.target.checked) {
+        startAutoRefresh();
+      } else {
+        stopAutoRefresh();
+      }
+    });
+  }
+}
+
+/**
+ * Load and display BWS tuple list
+ */
+async function loadBWSList() {
+  const listView = document.getElementById('bws-list-view');
+  if (!listView) return;
+  
+  // Show loading state
+  listView.innerHTML = '<div class="bws-list-loading"><div class="spinner"></div><p>Loading tuples...</p></div>';
+  
+  try {
+    const experimentId = bwsListViewState.currentExperimentId || bwsRatingState.experimentId;
+    
+    // Get all tuples for this experiment
+    const tuples = await window.api.bws.getAllTuples({ experimentId });
+    
+    // Get AI judgments
+    const aiJudgments = await window.api.bws.getJudgments({
+      experimentId,
+      raterType: 'ai'
+    });
+    
+    // Get human judgments for current rater
+    const humanJudgments = await window.api.bws.getJudgments({
+      experimentId,
+      raterType: 'human',
+      raterId: bwsRatingState.raterId || 'default-rater'
+    });
+    
+    // Build judgment maps
+    const aiJudgmentMap = new Map();
+    aiJudgments.forEach(j => aiJudgmentMap.set(j.tuple_id, j));
+    
+    const humanJudgmentMap = new Map();
+    humanJudgments.forEach(j => humanJudgmentMap.set(j.tuple_id, j));
+    
+    // Filter tuples based on current filter
+    let filteredTuples = tuples;
+    
+    if (bwsListViewState.currentFilter === 'ai-rated') {
+      filteredTuples = tuples.filter(t => aiJudgmentMap.has(t.id));
+    } else if (bwsListViewState.currentFilter === 'human-rated') {
+      filteredTuples = tuples.filter(t => humanJudgmentMap.has(t.id));
+    } else if (bwsListViewState.currentFilter === 'unrated') {
+      filteredTuples = tuples.filter(t => !aiJudgmentMap.has(t.id) && !humanJudgmentMap.has(t.id));
+    }
+    
+    // Render tuples
+    if (filteredTuples.length === 0) {
+      listView.innerHTML = `
+        <div class="bws-empty-state">
+          <div class="bws-empty-state-icon">📭</div>
+          <div class="bws-empty-state-text">No tuples found</div>
+          <div class="bws-empty-state-subtext">Try changing the filter or create a BWS experiment</div>
+        </div>
+      `;
+      return;
+    }
+    
+    // Build HTML for all tuples
+    const tuplesHTML = filteredTuples.map(tuple => {
+      const aiJudgment = aiJudgmentMap.get(tuple.id);
+      const humanJudgment = humanJudgmentMap.get(tuple.id);
+      
+      return renderTupleCard(tuple, aiJudgment, humanJudgment);
+    }).join('');
+    
+    listView.innerHTML = tuplesHTML;
+    
+    // Setup individual tuple card listeners
+    setupTupleCardListeners();
+    
+  } catch (error) {
+    console.error('[loadBWSList] Error loading list:', error);
+    listView.innerHTML = `
+      <div class="bws-empty-state">
+        <div class="bws-empty-state-icon">⚠️</div>
+        <div class="bws-empty-state-text">Error loading tuples</div>
+        <div class="bws-empty-state-subtext">${error.message}</div>
+      </div>
+    `;
+  }
+}
+
+/**
+ * Render a single tuple card
+ */
+function renderTupleCard(tuple, aiJudgment, humanJudgment) {
+  // Determine status
+  let status = 'unrated';
+  let statusLabel = '⚪ Not rated';
+  
+  if (aiJudgment && humanJudgment) {
+    status = 'both';
+    statusLabel = '✅ AI + Human';
+  } else if (aiJudgment) {
+    status = 'ai';
+    const timeAgo = getTimeAgo(aiJudgment.created_at);
+    statusLabel = `🤖 AI (${timeAgo})`;
+  } else if (humanJudgment) {
+    status = 'human';
+    const timeAgo = getTimeAgo(humanJudgment.created_at);
+    statusLabel = `👤 Human (${timeAgo})`;
+  }
+  
+  // Build items HTML
+  const itemsHTML = tuple.items.map((item, index) => {
+    let highlightClass = '';
+    let badgeHTML = '';
+    
+    // AI highlights (unless blind mode)
+    if (!bwsListViewState.blindMode && aiJudgment) {
+      if (item.id === aiJudgment.best_item_id) {
+        highlightClass = 'ai-best';
+        badgeHTML = '<div class="bws-judgment-badge badge-best">✓ BEST (AI)</div>';
+      } else if (item.id === aiJudgment.worst_item_id) {
+        highlightClass = 'ai-worst';
+        badgeHTML = '<div class="bws-judgment-badge badge-worst">✗ WORST (AI)</div>';
+      }
+    }
+    
+    // Human highlights
+    if (humanJudgment) {
+      if (item.id === humanJudgment.best_item_id) {
+        highlightClass += ' human-best';
+        badgeHTML += '<div class="bws-judgment-badge badge-best badge-human">✓ BEST (You)</div>';
+      } else if (item.id === humanJudgment.worst_item_id) {
+        highlightClass += ' human-worst';
+        badgeHTML += '<div class="bws-judgment-badge badge-worst badge-human">✗ WORST (You)</div>';
+      }
+    }
+    
+    const isVideo = item.item_type === 'video_chunk';
+    const content = isVideo 
+      ? `<video src="${item.file_path}" muted loop></video>`
+      : `<div class="bws-tuple-item-text">${item.text || 'No content'}</div>`;
+    
+    return `
+      <div class="bws-tuple-item ${highlightClass}" data-item-id="${item.id}">
+        ${badgeHTML}
+        ${content}
+      </div>
+    `;
+  }).join('');
+  
+  // AI reasoning (unless blind mode)
+  let reasoningHTML = '';
+  if (!bwsListViewState.blindMode && aiJudgment && aiJudgment.reasoning) {
+    reasoningHTML = `
+      <div class="bws-ai-reasoning">
+        <div class="bws-ai-reasoning-label">🤖 AI Reasoning:</div>
+        <div class="bws-ai-reasoning-text">${aiJudgment.reasoning}</div>
+      </div>
+    `;
+  }
+  
+  // Agreement indicator (if both AI and human rated)
+  let agreementHTML = '';
+  if (aiJudgment && humanJudgment) {
+    const bestAgree = aiJudgment.best_item_id === humanJudgment.best_item_id;
+    const worstAgree = aiJudgment.worst_item_id === humanJudgment.worst_item_id;
+    const agreementPct = (bestAgree && worstAgree) ? 100 : (bestAgree || worstAgree) ? 50 : 0;
+    
+    const agreementClass = `agreement-${agreementPct}`;
+    const agreementIcon = agreementPct === 100 ? '✅' : agreementPct === 50 ? '⚠️' : '❌';
+    const agreementText = agreementPct === 100 ? 'Perfect Agreement' : 
+                         agreementPct === 50 ? 'Partial Agreement' : 
+                         'Disagreement';
+    
+    agreementHTML = `
+      <div class="bws-agreement-indicator ${agreementClass}">
+        ${agreementIcon} ${agreementText} (${agreementPct}%)
+      </div>
+    `;
+  }
+  
+  // Action buttons
+  const actionButtonsHTML = !humanJudgment ? `
+    <div class="bws-tuple-actions">
+      <button class="bws-tuple-btn btn-primary" onclick="rateTupleFromList(${tuple.id})">
+        ▶ Rate This Tuple
+      </button>
+    </div>
+  ` : '';
+  
+  return `
+    <div class="bws-tuple-card" data-tuple-id="${tuple.id}">
+      <div class="bws-tuple-header">
+        <div class="bws-tuple-number">Tuple #${tuple.id}</div>
+        <div class="bws-tuple-status status-${status}">${statusLabel}</div>
+      </div>
+      
+      <div class="bws-tuple-items">
+        ${itemsHTML}
+      </div>
+      
+      ${reasoningHTML}
+      ${agreementHTML}
+      ${actionButtonsHTML}
+    </div>
+  `;
+}
+
+/**
+ * Get time ago string from ISO timestamp
+ */
+function getTimeAgo(timestamp) {
+  const now = new Date();
+  const then = new Date(timestamp);
+  const seconds = Math.floor((now - then) / 1000);
+  
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+/**
+ * Setup listeners for tuple cards (video hover play, etc.)
+ */
+function setupTupleCardListeners() {
+  // Play videos on hover
+  document.querySelectorAll('.bws-tuple-item video').forEach(video => {
+    video.addEventListener('mouseenter', () => {
+      video.play();
+    });
+    
+    video.addEventListener('mouseleave', () => {
+      video.pause();
+      video.currentTime = 0;
+    });
+  });
+}
+
+/**
+ * Rate a specific tuple from the list
+ */
+async function rateTupleFromList(tupleId) {
+  // Hide list view, show single rating view
+  document.getElementById('bws-list-view').style.display = 'none';
+  document.getElementById('bws-single-rating-view').style.display = 'block';
+  
+  // Load the tuple for rating
+  const tupleWithItems = await window.api.bws.getTupleWithItems({ tupleId });
+  
+  // Set current tuple data
+  bwsRatingState.currentTuple = tupleWithItems;
+  bwsRatingState.currentTupleData = tupleWithItems;
+  
+  // Render the tuple for rating (reuse existing function)
+  renderBWSTuple(tupleWithItems.items);
+  
+  // Reset selections
+  bwsRatingState.selectedBest = null;
+  bwsRatingState.selectedWorst = null;
+  updateSubmitButton();
+}
+
+/**
+ * Return to list view after rating
+ */
+function returnToListView() {
+  document.getElementById('bws-single-rating-view').style.display = 'none';
+  document.getElementById('bws-list-view').style.display = 'block';
+  
+  // Reload list to show new rating
+  loadBWSList();
+}
+
+/**
+ * Start auto-refresh polling
+ */
+function startAutoRefresh() {
+  if (bwsListViewState.refreshInterval) {
+    clearInterval(bwsListViewState.refreshInterval);
+  }
+  
+  bwsListViewState.refreshInterval = setInterval(() => {
+    if (bwsListViewState.autoRefresh && bwsListViewState.currentExperimentId) {
+      loadBWSList();
+    }
+  }, 2000); // Refresh every 2 seconds
+  
+  console.log('[BWS List View] Auto-refresh started');
+}
+
+/**
+ * Stop auto-refresh polling
+ */
+function stopAutoRefresh() {
+  if (bwsListViewState.refreshInterval) {
+    clearInterval(bwsListViewState.refreshInterval);
+    bwsListViewState.refreshInterval = null;
+  }
+  
+  console.log('[BWS List View] Auto-refresh stopped');
+}
+
+/**
+ * Cleanup when leaving BWS interface
+ */
+function cleanupBWSListView() {
+  stopAutoRefresh();
+  bwsListViewState = {
+    currentFilter: 'all',
+    blindMode: false,
+    autoRefresh: true,
+    refreshInterval: null,
+    currentExperimentId: null
+  };
+}
+

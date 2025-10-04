@@ -113,9 +113,18 @@ function setupEventListeners() {
   // Open folder buttons
   const openOutputBtn = document.getElementById('openOutputBtn');
   if (openOutputBtn) openOutputBtn.addEventListener('click', openOutputFolder);
-  
+
   const openOutputHeaderBtn = document.getElementById('openOutputHeaderBtn');
   if (openOutputHeaderBtn) openOutputHeaderBtn.addEventListener('click', openOutputFolder);
+
+  // Collection type filter
+  const collectionTypeFilter = document.getElementById('collectionTypeFilter');
+  if (collectionTypeFilter) {
+    collectionTypeFilter.addEventListener('change', () => {
+      // Reload collections when filter changes
+      loadCollections();
+    });
+  }
 }
 
 // Tab management
@@ -162,6 +171,9 @@ function showView(viewName) {
   if (viewName === 'collections') {
     loadCollections();
   }
+
+  // Dispatch custom event for view change
+  document.dispatchEvent(new CustomEvent('viewChanged', { detail: { view: viewName } }));
 
   // When showing AI Analysis view, default to ratings tab
   if (viewName === 'ai-analysis') {
@@ -597,11 +609,57 @@ async function cancelCollection() {
 
 // Collections view
 async function loadCollections() {
-  const result = await window.api.db.getCollections();
-  
-  if (result.success) {
-    displayCollections(result.data);
-  } else {
+  try {
+    // Load both regular collections and merged collections
+    const [collectionsResult, mergesResult] = await Promise.all([
+      window.api.db.getCollections(),
+      window.api.database.getAllMerges()
+    ]);
+
+    const collections = [];
+
+    // Add regular collections
+    if (collectionsResult.success && collectionsResult.data) {
+      collectionsResult.data.forEach(c => {
+        collections.push({
+          ...c,
+          isMerge: false
+        });
+      });
+    }
+
+    // Add merged collections
+    if (mergesResult && Array.isArray(mergesResult)) {
+      mergesResult.forEach(merge => {
+        // Calculate total video/comment counts from source collections
+        let videoCount = 0;
+        let commentCount = 0;
+        if (merge.source_collections) {
+          merge.source_collections.forEach(sc => {
+            videoCount += sc.video_count || 0;
+            commentCount += sc.comment_count || 0;
+          });
+        }
+
+        collections.push({
+          id: merge.id,
+          search_term: merge.name,
+          created_at: merge.created_at,
+          video_count: videoCount,
+          comment_count: commentCount,
+          isMerge: true,
+          mergeData: merge
+        });
+      });
+    }
+
+    // Sort by created_at descending (newest first)
+    collections.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    displayCollections(collections);
+
+  } catch (error) {
+    console.error('[loadCollections] Error:', error);
     showNotification('Failed to load collections', 'error');
   }
 }
@@ -610,13 +668,32 @@ async function displayCollections(collections) {
   const list = document.getElementById('collectionsList');
   list.innerHTML = '';
 
-  if (collections.length === 0) {
+  // Apply type filter
+  const typeFilter = document.getElementById('collectionTypeFilter');
+  const typeFilterValue = typeFilter ? typeFilter.value : 'all';
+
+  let filteredCollections = collections;
+  if (typeFilterValue === 'regular') {
+    filteredCollections = collections.filter(c => !c.isMerge);
+  } else if (typeFilterValue === 'merged') {
+    filteredCollections = collections.filter(c => c.isMerge);
+  }
+
+  if (filteredCollections.length === 0) {
+    const emptyMessage = typeFilterValue === 'merged'
+      ? 'No merged collections. Create one by merging multiple collections!'
+      : typeFilterValue === 'regular'
+      ? 'No regular collections. Start by searching YouTube!'
+      : 'No collections yet. Start by searching YouTube!';
+
     list.innerHTML = `
       <div class="empty-state">
-        <p>No collections yet. Start by searching YouTube!</p>
+        <p>${emptyMessage}</p>
         <button class="btn btn-primary" onclick="showView('youtube')">Start Collecting</button>
-        <p style="margin-top: 20px;">or</p>
-        <button class="btn" onclick="importCollection()">Import Collection</button>
+        ${typeFilterValue !== 'merged' ? `
+          <p style="margin-top: 20px;">or</p>
+          <button class="btn" onclick="importCollection()">Import Collection</button>
+        ` : ''}
       </div>
     `;
     return;
@@ -635,14 +712,15 @@ async function displayCollections(collections) {
     });
   }
 
-  // Update stats
-  const totalVideos = collections.reduce((sum, c) => sum + (c.video_count || 0), 0);
-  const totalComments = collections.reduce((sum, c) => sum + (c.comment_count || 0), 0);
-  document.getElementById('totalCollections').textContent = `${collections.length} collections`;
+  // Update stats based on filtered collections
+  const totalVideos = filteredCollections.reduce((sum, c) => sum + (c.video_count || 0), 0);
+  const totalComments = filteredCollections.reduce((sum, c) => sum + (c.comment_count || 0), 0);
+  const collectionLabel = typeFilterValue === 'merged' ? 'merged' : typeFilterValue === 'regular' ? 'regular' : '';
+  document.getElementById('totalCollections').textContent = `${filteredCollections.length} ${collectionLabel} collection${filteredCollections.length !== 1 ? 's' : ''}`;
   document.getElementById('totalVideos').textContent = `${totalVideos} videos`;
   document.getElementById('totalComments').textContent = `${totalComments} comments`;
 
-  collections.forEach(collection => {
+  filteredCollections.forEach(collection => {
     const card = document.createElement('div');
     card.className = 'collection-card';
     
@@ -655,11 +733,28 @@ async function displayCollections(collections) {
       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>' : 
       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>';
     
+    // Build merge badge if this is a merged collection
+    const mergeBadge = collection.isMerge ? `
+      <span class="merge-badge" title="Merged from ${collection.mergeData.source_collections.length} collections">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 7h16M4 12h16M4 17h16"></path>
+          <path d="M12 3v18" opacity="0.4"></path>
+        </svg>
+        Merged
+      </span>
+    ` : '';
+
+    const mergeInfo = collection.isMerge ?
+      `<span class="merge-info">${collection.mergeData.source_collections.length} source collections</span>` : '';
+
     card.innerHTML = `
       <div class="collection-header">
-        <div class="collection-title">${escapeHtml(collection.search_term)}</div>
+        <div class="collection-title">
+          ${escapeHtml(collection.search_term)}
+          ${mergeBadge}
+        </div>
         <div class="collection-actions">
-          ${isIncomplete ? `
+          ${!collection.isMerge && isIncomplete ? `
             <button class="btn btn-sm btn-primary" onclick="resumeCollectionFromGallery('${incompleteInfo.folderPath}/collection_manifest.json', event);" title="Resume Collection">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -687,17 +782,30 @@ async function displayCollections(collections) {
       <div class="collection-stats">
         <span>${collection.video_count || 0} videos</span>
         <span>${collection.comment_count || 0} comments</span>
-        <span class="status-${status}">
+        ${mergeInfo}
+        ${!collection.isMerge ? `<span class="status-${status}">
           ${statusIcon}
           ${statusText}
-        </span>
+        </span>` : ''}
       </div>
     `;
     
     card.addEventListener('click', (e) => {
       // Don't navigate if clicking buttons
       if (!e.target.closest('button')) {
-        viewCollection(collection.id);
+        if (collection.isMerge) {
+          // Open merge viewer with the same viewer as regular collections
+          if (typeof galleryViewer !== 'undefined') {
+            galleryViewer.showMerge(collection.id);
+          } else if (typeof enhancedViewer !== 'undefined') {
+            enhancedViewer.showMerge(collection.id);
+          } else if (window.collectionViewer) {
+            window.collectionViewer.showMerge(collection.id);
+          }
+        } else {
+          // Open regular collection viewer
+          viewCollection(collection.id);
+        }
       }
     });
     list.appendChild(card);
@@ -1225,10 +1333,53 @@ class AIAnalysisController {
 
   async loadCollections() {
     try {
-      const result = await window.api.db.getCollections();
-      if (result.success && result.data) {
-        this.collections = result.data;
+      // Load both regular collections and merged collections
+      const [collectionsResult, mergesResult] = await Promise.all([
+        window.api.db.getCollections(),
+        window.api.database.getAllMerges()
+      ]);
+
+      this.collections = [];
+
+      // Add regular collections
+      if (collectionsResult.success && collectionsResult.data) {
+        collectionsResult.data.forEach(c => {
+          this.collections.push({
+            ...c,
+            isMerge: false
+          });
+        });
       }
+
+      // Add merged collections
+      if (mergesResult && Array.isArray(mergesResult)) {
+        mergesResult.forEach(merge => {
+          // Calculate total video/comment counts from source collections
+          let videoCount = 0;
+          let commentCount = 0;
+          if (merge.source_collections) {
+            merge.source_collections.forEach(sc => {
+              videoCount += sc.video_count || 0;
+              commentCount += sc.comment_count || 0;
+            });
+          }
+
+          this.collections.push({
+            id: merge.id,
+            search_term: merge.name,
+            name: merge.name,
+            created_at: merge.created_at,
+            video_count: videoCount,
+            comment_count: commentCount,
+            isMerge: true,
+            mergeData: merge
+          });
+        });
+      }
+
+      // Sort by created_at descending (newest first)
+      this.collections.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
     } catch (error) {
       console.error('Error loading collections:', error);
     }

@@ -98,7 +98,35 @@ contextBridge.exposeInMainWorld('api', {
     getScores: (params) => ipcRenderer.invoke('bws:getScores', params),
     deleteExperiment: (params) => ipcRenderer.invoke('bws:deleteExperiment', params),
     startAIRating: (params) => ipcRenderer.invoke('bws:startAIRating', params),
-    getRaterJudgmentCount: (params) => ipcRenderer.invoke('bws:getRaterJudgmentCount', params)
+    getRaterJudgmentCount: (params) => ipcRenderer.invoke('bws:getRaterJudgmentCount', params),
+    // List view methods
+    getAllTuples: (params) => ipcRenderer.invoke('bws:getAllTuples', params),
+    getJudgments: (params) => ipcRenderer.invoke('bws:getJudgments', params),
+    getTupleWithItems: (params) => ipcRenderer.invoke('bws:getTupleWithItems', params)
+  },
+
+  // Database operations (direct access to DB methods)
+  database: {
+    // Collection operations
+    getCollections: (limit, offset) => ipcRenderer.invoke('database:getCollections', limit, offset),
+    getCollection: (id) => ipcRenderer.invoke('database:getCollection', id),
+
+    // Merge operations
+    getAllMerges: () => ipcRenderer.invoke('database:getAllMerges'),
+    getMerge: (mergeId) => ipcRenderer.invoke('database:getMerge', mergeId),
+    createMerge: (name, collectionIds, options) => ipcRenderer.invoke('database:createMerge', name, collectionIds, options),
+    updateMerge: (mergeId, updates) => ipcRenderer.invoke('database:updateMerge', mergeId, updates),
+    deleteMerge: (mergeId, hard) => ipcRenderer.invoke('database:deleteMerge', mergeId, hard),
+    addCollectionToMerge: (mergeId, collectionId) => ipcRenderer.invoke('database:addCollectionToMerge', mergeId, collectionId),
+    removeCollectionFromMerge: (mergeId, collectionId) => ipcRenderer.invoke('database:removeCollectionFromMerge', mergeId, collectionId),
+    getMergeStatistics: (mergeId) => ipcRenderer.invoke('database:getMergeStatistics', mergeId),
+    getMergeVideos: (mergeId) => ipcRenderer.invoke('database:getMergeVideos', mergeId),
+    getMergeComments: (mergeId) => ipcRenderer.invoke('database:getMergeComments', mergeId),
+    getMergeVideoChunks: (mergeId) => ipcRenderer.invoke('database:getMergeVideoChunks', mergeId),
+
+    // Rating/BWS operations
+    getItemsForRating: (collectionId, includeChunks, includeComments, projectId) =>
+      ipcRenderer.invoke('database:getItemsForRating', collectionId, includeChunks, includeComments, projectId)
   },
 
   // Platform info

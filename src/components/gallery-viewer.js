@@ -4,6 +4,7 @@ class GalleryViewer {
     this.currentCollection = null;
     this.currentVideoIndex = 0;
     this.videos = [];
+    this.originalVideos = []; // Store unfiltered videos for merged collections
     this.viewMode = 'gallery'; // 'gallery' or 'list'
     this.createModal();
     this.bindKeyboardShortcuts();
@@ -49,7 +50,31 @@ class GalleryViewer {
             <button class="close-btn" onclick="galleryViewer.close()">×</button>
           </div>
         </div>
-        
+
+        <!-- Merge Filters (hidden by default, shown for merged collections) -->
+        <div id="mergeFilters" class="merge-filters" style="display: none;">
+          <div class="filter-group">
+            <label>Filter by Source:</label>
+            <select id="sourceCollectionFilter" onchange="galleryViewer.applyFilters()">
+              <option value="all">All Sources</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>Sort by:</label>
+            <select id="mergeSortOrder" onchange="galleryViewer.applyFilters()">
+              <option value="default">Default Order</option>
+              <option value="source">Source Collection</option>
+              <option value="views">Most Views</option>
+              <option value="comments">Most Comments</option>
+              <option value="date-newest">Newest First</option>
+              <option value="date-oldest">Oldest First</option>
+            </select>
+          </div>
+          <div class="filter-stats">
+            <span id="filterResultCount"></span>
+          </div>
+        </div>
+
         <div class="gallery-body">
           <!-- Gallery View -->
           <div id="galleryView" class="gallery-view">
@@ -771,9 +796,71 @@ class GalleryViewer {
           background: #3a3a3a;
           border-radius: 4px;
         }
+
+        /* Merge Filters */
+        .merge-filters {
+          padding: 15px 30px;
+          background: #1a1a1a;
+          border-bottom: 1px solid #2a2a2a;
+          display: none;
+          gap: 20px;
+          align-items: center;
+          flex-wrap: wrap;
+        }
+
+        .filter-group {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .filter-group label {
+          color: #ccc;
+          font-size: 14px;
+          white-space: nowrap;
+        }
+
+        .filter-group select {
+          background: #0a0a0a;
+          border: 1px solid #3a3a3a;
+          color: #fff;
+          padding: 6px 12px;
+          border-radius: 6px;
+          font-size: 14px;
+          cursor: pointer;
+          min-width: 180px;
+        }
+
+        .filter-group select:hover {
+          border-color: #4a4a4a;
+        }
+
+        .filter-group select:focus {
+          outline: none;
+          border-color: #3b82f6;
+        }
+
+        .filter-stats {
+          margin-left: auto;
+          color: #888;
+          font-size: 13px;
+        }
+
+        /* Video Source Badge */
+        .video-source-badge {
+          display: inline-block;
+          background: #2a2a2a;
+          border: 1px solid #3a3a3a;
+          color: #3b82f6;
+          padding: 3px 8px;
+          border-radius: 4px;
+          font-size: 11px;
+          font-weight: 500;
+          margin-top: 4px;
+        }
       </style>
     `;
-    
+
     document.body.appendChild(modal);
     this.modal = modal;
   }
@@ -786,30 +873,118 @@ class GalleryViewer {
         console.error('Failed to load collection');
         return;
       }
-      
+
       this.currentCollection = collResult.data;
-      
+      this.currentCollection.isMerge = false;
+
       // Get videos
       const videoResult = await window.api.db.getVideos(collectionId);
       if (!videoResult.success) {
         console.error('Failed to load videos');
         return;
       }
-      
+
       this.videos = videoResult.data;
+      this.originalVideos = [];
       this.currentVideoIndex = 0;
-      
+
       console.log('Loaded videos:', this.videos.length, this.videos);
-      
+
       // Update header
       document.getElementById('galleryTitle').textContent = this.currentCollection.search_term || 'Collection';
-      document.getElementById('galleryStats').textContent = 
+      document.getElementById('galleryStats').textContent =
         `${this.videos.length} videos • ${this.currentCollection.comment_count || 0} comments`;
-      
+
+      // Hide merge filters for regular collections
+      const mergeFilters = document.getElementById('mergeFilters');
+      if (mergeFilters) {
+        mergeFilters.style.display = 'none';
+      }
+
       // Show gallery
       this.modal.style.display = 'block';
       this.showGalleryView();
-      
+    } catch (error) {
+      console.error('Error showing collection:', error);
+    }
+  }
+
+  async showMerge(mergeId) {
+    try {
+      // Get merge details
+      const merge = await window.api.database.getMerge(mergeId);
+      if (!merge) {
+        console.error('Failed to load merge');
+        return;
+      }
+
+      // Get videos from all source collections
+      const videos = await window.api.database.getMergeVideos(mergeId);
+
+      // Calculate total comment count
+      let totalComments = 0;
+      if (merge.source_collections) {
+        merge.source_collections.forEach(sc => {
+          totalComments += sc.comment_count || 0;
+        });
+      }
+
+      // Create a collection-like object
+      this.currentCollection = {
+        id: merge.id,
+        search_term: merge.name,
+        created_at: merge.created_at,
+        video_count: videos.length,
+        comment_count: totalComments,
+        isMerge: true,
+        mergeData: merge
+      };
+
+      this.videos = videos;
+      this.originalVideos = [...videos]; // Store original unfiltered videos
+      this.currentVideoIndex = 0;
+
+      console.log('Loaded merge videos:', this.videos.length, this.videos);
+
+      // Update header with merge badge
+      const mergeBadge = `<span style="background: linear-gradient(135deg, var(--accent) 0%, #2563eb 100%); color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600; margin-left: 0.5rem;">MERGED</span>`;
+      document.getElementById('galleryTitle').innerHTML = `${this.currentCollection.search_term}${mergeBadge}`;
+      document.getElementById('galleryStats').textContent =
+        `${this.videos.length} videos from ${merge.source_collections.length} collections`;
+
+      // Populate source collection filter
+      const sourceFilter = document.getElementById('sourceCollectionFilter');
+      if (sourceFilter) {
+        sourceFilter.innerHTML = '<option value="all">All Sources</option>';
+        if (merge.source_collections) {
+          merge.source_collections.forEach(sc => {
+            const option = document.createElement('option');
+            option.value = sc.id;
+            option.textContent = sc.search_term;
+            sourceFilter.appendChild(option);
+          });
+        }
+      }
+
+      // Reset sort order
+      const sortSelect = document.getElementById('mergeSortOrder');
+      if (sortSelect) {
+        sortSelect.value = 'default';
+      }
+
+      // Show merge filters
+      const mergeFilters = document.getElementById('mergeFilters');
+      if (mergeFilters) {
+        mergeFilters.style.display = 'flex';
+      }
+
+      // Update filter stats
+      this.updateFilterStats();
+
+      // Show gallery
+      this.modal.style.display = 'block';
+      this.showGalleryView();
+
     } catch (error) {
       console.error('Error showing collection:', error);
     }
@@ -819,11 +994,96 @@ class GalleryViewer {
     document.getElementById('galleryView').style.display = 'block';
     document.getElementById('listView').style.display = 'none';
     document.getElementById('detailView').style.display = 'none';
-    
+
     if (this.viewMode === 'gallery') {
       this.renderGallery();
     } else {
       this.renderList();
+    }
+  }
+
+  applyFilters() {
+    if (!this.currentCollection?.isMerge) return;
+
+    const sourceFilter = document.getElementById('sourceCollectionFilter');
+    const sortOrder = document.getElementById('mergeSortOrder');
+
+    if (!sourceFilter || !sortOrder) return;
+
+    // Start with original videos
+    let filtered = [...this.originalVideos];
+
+    // Apply source collection filter
+    const selectedSource = sourceFilter.value;
+    if (selectedSource !== 'all') {
+      filtered = filtered.filter(video =>
+        video.source_collection_id === parseInt(selectedSource)
+      );
+    }
+
+    // Apply sorting
+    const selectedSort = sortOrder.value;
+    switch (selectedSort) {
+      case 'source':
+        filtered.sort((a, b) => {
+          const nameA = (a.source_collection_name || '').toLowerCase();
+          const nameB = (b.source_collection_name || '').toLowerCase();
+          return nameA.localeCompare(nameB);
+        });
+        break;
+      case 'views':
+        filtered.sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
+        break;
+      case 'comments':
+        filtered.sort((a, b) => (b.comment_count || 0) - (a.comment_count || 0));
+        break;
+      case 'date-newest':
+        filtered.sort((a, b) => {
+          const dateA = new Date(a.published_at || 0);
+          const dateB = new Date(b.published_at || 0);
+          return dateB - dateA;
+        });
+        break;
+      case 'date-oldest':
+        filtered.sort((a, b) => {
+          const dateA = new Date(a.published_at || 0);
+          const dateB = new Date(b.published_at || 0);
+          return dateA - dateB;
+        });
+        break;
+      case 'default':
+      default:
+        // Keep default order (newest collected first)
+        break;
+    }
+
+    // Update videos and re-render
+    this.videos = filtered;
+    this.updateFilterStats();
+
+    // Re-render the current view
+    if (this.viewMode === 'gallery') {
+      this.renderGallery();
+    } else {
+      this.renderList();
+    }
+  }
+
+  updateFilterStats() {
+    const statsEl = document.getElementById('filterResultCount');
+    if (!statsEl) return;
+
+    if (this.currentCollection?.isMerge && this.originalVideos.length > 0) {
+      const total = this.originalVideos.length;
+      const showing = this.videos.length;
+
+      if (showing === total) {
+        statsEl.textContent = `Showing all ${total} videos`;
+      } else {
+        statsEl.textContent = `Showing ${showing} of ${total} videos`;
+      }
+    } else {
+      statsEl.textContent = '';
     }
   }
 
@@ -873,8 +1133,15 @@ class GalleryViewer {
       
       const infoDiv = document.createElement('div');
       infoDiv.className = 'video-info';
+
+      // Add source collection badge for merged collections
+      const sourceBadge = this.currentCollection?.isMerge && video.source_collection_name
+        ? `<span class="video-source-badge" title="From: ${video.source_collection_name}">${this.escapeHtml(video.source_collection_name)}</span>`
+        : '';
+
       infoDiv.innerHTML = `
         <div class="video-title">${this.escapeHtml(video.title || 'Untitled')}</div>
+        ${sourceBadge}
         <div class="video-meta">
           <span>${this.formatViews(video.view_count)} views</span>
           <span class="comment-count">${video.comment_count || 0} comments</span>

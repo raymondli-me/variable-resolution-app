@@ -140,7 +140,35 @@ class Database {
       `CREATE INDEX IF NOT EXISTS idx_relevance_ratings_score ON relevance_ratings(relevance_score)`,
       `CREATE INDEX IF NOT EXISTS idx_relevance_ratings_status ON relevance_ratings(project_id, status)`,
       `CREATE INDEX IF NOT EXISTS idx_rating_projects_collection ON rating_projects(collection_id)`,
-      `CREATE INDEX IF NOT EXISTS idx_rating_projects_status ON rating_projects(status)`
+      `CREATE INDEX IF NOT EXISTS idx_rating_projects_status ON rating_projects(status)`,
+
+      // Collection Merge tables - for combining multiple collections
+      `CREATE TABLE IF NOT EXISTS collection_merges (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        settings TEXT,
+        is_active INTEGER DEFAULT 1
+      )`,
+
+      // Maps which source collections belong to which merge
+      `CREATE TABLE IF NOT EXISTS collection_merge_members (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        merge_id INTEGER NOT NULL,
+        source_collection_id INTEGER NOT NULL,
+        added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        weight REAL DEFAULT 1.0,
+        notes TEXT,
+        FOREIGN KEY (merge_id) REFERENCES collection_merges(id) ON DELETE CASCADE,
+        FOREIGN KEY (source_collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+        UNIQUE(merge_id, source_collection_id)
+      )`,
+
+      // Indexes for merge tables
+      `CREATE INDEX IF NOT EXISTS idx_merge_members_merge ON collection_merge_members(merge_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_merge_members_source ON collection_merge_members(source_collection_id)`
     ];
 
     for (const query of queries) {
@@ -522,13 +550,33 @@ class Database {
     // ROOT PROJECT or no projectId - fetch from collection as before
     console.log(`[Database] Fetching items from collection ${collectionId} (root project)`);
 
+    // Check if this is a merged collection
+    const merge = await this.get(`
+      SELECT id FROM collection_merges WHERE id = ? AND is_active = 1
+    `, [collectionId]);
+
+    let collectionIds = [collectionId];
+
+    if (merge) {
+      // This is a merged collection - get all source collection IDs
+      const sourceCollections = await this.all(`
+        SELECT source_collection_id FROM collection_merge_members WHERE merge_id = ?
+      `, [collectionId]);
+
+      if (sourceCollections.length > 0) {
+        collectionIds = sourceCollections.map(sc => sc.source_collection_id);
+        console.log(`[Database] Merged collection detected, fetching from ${collectionIds.length} source collections`);
+      }
+    }
+
     if (includeChunks) {
+      const placeholders = collectionIds.map(() => '?').join(',');
       const chunks = await this.all(`
         SELECT vc.*, v.title as video_title, v.channel_title
         FROM video_chunks vc
         JOIN videos v ON vc.video_id = v.id
-        WHERE vc.collection_id = ?
-      `, [collectionId]);
+        WHERE vc.collection_id IN (${placeholders})
+      `, collectionIds);
 
       items.push(...chunks.map(chunk => ({
         type: 'video_chunk',
@@ -538,12 +586,13 @@ class Database {
     }
 
     if (includeComments) {
+      const placeholders = collectionIds.map(() => '?').join(',');
       const comments = await this.all(`
         SELECT c.*, v.title as video_title
         FROM comments c
         JOIN videos v ON c.video_id = v.id
-        WHERE c.collection_id = ?
-      `, [collectionId]);
+        WHERE c.collection_id IN (${placeholders})
+      `, collectionIds);
 
       items.push(...comments.map(comment => ({
         type: 'comment',
@@ -552,7 +601,7 @@ class Database {
       })));
     }
 
-    console.log(`[Database] Returning ${items.length} items from collection for root project`);
+    console.log(`[Database] Returning ${items.length} items from collection(s) for root project`);
     return items;
   }
   
@@ -841,12 +890,37 @@ class Database {
     `, [experimentId, raterType, raterId]);
 
     const ratedIds = new Set(ratedTupleIds.map(r => r.id));
-    const unratedTuple = allTuples.find(t => !ratedIds.has(t.id));
+    const unratedTuples = allTuples.filter(t => !ratedIds.has(t.id));
 
-    if (!unratedTuple) return null;
+    if (unratedTuples.length === 0) return null;
+
+    // RANDOMIZE: Pick a random unrated tuple instead of always the first one
+    const randomIndex = Math.floor(Math.random() * unratedTuples.length);
+    const selectedTuple = unratedTuples[randomIndex];
 
     // Get full tuple with items
-    return await this.getBWSTupleWithItems(unratedTuple.id);
+    const tuple = await this.getBWSTupleWithItems(selectedTuple.id);
+
+    // RANDOMIZE: Shuffle the items within the tuple so videos appear in different positions
+    if (tuple && tuple.items) {
+      tuple.items = this.shuffleArray([...tuple.items]);
+      // Update item_ids to match shuffled order
+      tuple.item_ids = tuple.items.map(item => item.id);
+    }
+
+    return tuple;
+  }
+
+  /**
+   * Shuffle array using Fisher-Yates algorithm
+   */
+  shuffleArray(array) {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
   }
 
   /**
@@ -863,8 +937,9 @@ class Database {
       response_time_ms = null
     } = judgmentData;
 
-    // Validate best != worst
-    if (best_item_id === worst_item_id) {
+    // Validate best != worst (except for skip marker where best=-1 and worst=-2)
+    const isSkipMarker = (best_item_id === -1 && worst_item_id === -2);
+    if (best_item_id === worst_item_id && !isSkipMarker) {
       throw new Error('Best and worst items cannot be the same');
     }
 
@@ -1165,6 +1240,9 @@ class Database {
       judgments = judgments.filter(j => j.rater_id === raterId);
     }
 
+    // Filter out skipped judgments (marked with best_item_id = -1 and worst_item_id = -2)
+    judgments = judgments.filter(j => !(j.best_item_id === -1 && j.worst_item_id === -2));
+
     if (judgments.length === 0) {
       throw new Error(`No judgments found for this experiment${raterId ? ` with rater_id=${raterId}` : ''}`);
     }
@@ -1304,6 +1382,298 @@ class Database {
    */
   async deleteBWSExperiment(experimentId) {
     await this.run('DELETE FROM bws_experiments WHERE id = ?', [experimentId]);
+  }
+
+  // ========================================
+  // Collection Merge Methods
+  // ========================================
+
+  /**
+   * Create a new merged collection
+   * @param {string} name - Name for the merged collection
+   * @param {Array<number>} collectionIds - Array of collection IDs to merge
+   * @param {Object} options - Optional settings
+   * @returns {number} The merge ID
+   */
+  async createMerge(name, collectionIds, options = {}) {
+    const { description = '', settings = {} } = options;
+
+    // Validate that all collections exist
+    for (const collectionId of collectionIds) {
+      const collection = await this.get('SELECT id FROM collections WHERE id = ?', [collectionId]);
+      if (!collection) {
+        throw new Error(`Collection ${collectionId} not found`);
+      }
+    }
+
+    // Create the merge
+    const result = await this.run(`
+      INSERT INTO collection_merges (name, description, settings)
+      VALUES (?, ?, ?)
+    `, [name, description, JSON.stringify(settings)]);
+
+    const mergeId = result.id;
+
+    // Add all source collections
+    for (const collectionId of collectionIds) {
+      await this.run(`
+        INSERT INTO collection_merge_members (merge_id, source_collection_id)
+        VALUES (?, ?)
+      `, [mergeId, collectionId]);
+    }
+
+    console.log(`[Database] Created merge "${name}" (ID: ${mergeId}) with ${collectionIds.length} collections`);
+    return mergeId;
+  }
+
+  /**
+   * Get all merges
+   * @returns {Array} List of merge objects with statistics
+   */
+  async getAllMerges() {
+    const merges = await this.all(`
+      SELECT
+        m.*,
+        COUNT(DISTINCT cmm.source_collection_id) as collection_count
+      FROM collection_merges m
+      LEFT JOIN collection_merge_members cmm ON m.id = cmm.merge_id
+      WHERE m.is_active = 1
+      GROUP BY m.id
+      ORDER BY m.created_at DESC
+    `);
+
+    // Get source collections for each merge
+    for (const merge of merges) {
+      merge.source_collections = await this.getMergeMembers(merge.id);
+      merge.settings = merge.settings ? JSON.parse(merge.settings) : {};
+    }
+
+    return merges;
+  }
+
+  /**
+   * Get a specific merge with full details
+   * @param {number} mergeId - The merge ID
+   * @returns {Object} Merge object with source collections
+   */
+  async getMerge(mergeId) {
+    const merge = await this.get(`
+      SELECT * FROM collection_merges WHERE id = ? AND is_active = 1
+    `, [mergeId]);
+
+    if (!merge) return null;
+
+    // Get source collections
+    merge.source_collections = await this.getMergeMembers(mergeId);
+    merge.settings = merge.settings ? JSON.parse(merge.settings) : {};
+
+    return merge;
+  }
+
+  /**
+   * Get member collections of a merge
+   * @param {number} mergeId - The merge ID
+   * @returns {Array} List of source collections
+   */
+  async getMergeMembers(mergeId) {
+    return await this.all(`
+      SELECT
+        c.*,
+        cmm.added_at as merged_at,
+        cmm.weight,
+        cmm.notes
+      FROM collection_merge_members cmm
+      JOIN collections c ON cmm.source_collection_id = c.id
+      WHERE cmm.merge_id = ?
+      ORDER BY cmm.added_at ASC
+    `, [mergeId]);
+  }
+
+  /**
+   * Add a collection to an existing merge
+   * @param {number} mergeId - The merge ID
+   * @param {number} collectionId - Collection to add
+   */
+  async addCollectionToMerge(mergeId, collectionId) {
+    // Check if already exists
+    const existing = await this.get(`
+      SELECT id FROM collection_merge_members
+      WHERE merge_id = ? AND source_collection_id = ?
+    `, [mergeId, collectionId]);
+
+    if (existing) {
+      throw new Error('Collection already in this merge');
+    }
+
+    await this.run(`
+      INSERT INTO collection_merge_members (merge_id, source_collection_id)
+      VALUES (?, ?)
+    `, [mergeId, collectionId]);
+
+    // Update merge timestamp
+    await this.run(`
+      UPDATE collection_merges SET updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `, [mergeId]);
+
+    console.log(`[Database] Added collection ${collectionId} to merge ${mergeId}`);
+  }
+
+  /**
+   * Remove a collection from a merge
+   * @param {number} mergeId - The merge ID
+   * @param {number} collectionId - Collection to remove
+   */
+  async removeCollectionFromMerge(mergeId, collectionId) {
+    await this.run(`
+      DELETE FROM collection_merge_members
+      WHERE merge_id = ? AND source_collection_id = ?
+    `, [mergeId, collectionId]);
+
+    // Update merge timestamp
+    await this.run(`
+      UPDATE collection_merges SET updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `, [mergeId]);
+
+    console.log(`[Database] Removed collection ${collectionId} from merge ${mergeId}`);
+  }
+
+  /**
+   * Get all videos in a merged collection (with deduplication)
+   * @param {number} mergeId - The merge ID
+   * @returns {Array} List of videos with source collection info
+   */
+  async getMergeVideos(mergeId) {
+    return await this.all(`
+      SELECT DISTINCT
+        v.*,
+        c.search_term as source_collection_name,
+        c.id as source_collection_id
+      FROM videos v
+      JOIN collection_merge_members cmm ON v.collection_id = cmm.source_collection_id
+      JOIN collections c ON c.id = v.collection_id
+      WHERE cmm.merge_id = ?
+      ORDER BY v.collected_at DESC
+    `, [mergeId]);
+  }
+
+  /**
+   * Get all comments in a merged collection
+   * @param {number} mergeId - The merge ID
+   * @returns {Array} List of comments with source info
+   */
+  async getMergeComments(mergeId) {
+    return await this.all(`
+      SELECT
+        co.*,
+        c.search_term as source_collection_name,
+        c.id as source_collection_id,
+        v.title as video_title
+      FROM comments co
+      JOIN collection_merge_members cmm ON co.collection_id = cmm.source_collection_id
+      JOIN collections c ON c.id = co.collection_id
+      JOIN videos v ON co.video_id = v.id
+      WHERE cmm.merge_id = ?
+      ORDER BY co.published_at DESC
+    `, [mergeId]);
+  }
+
+  /**
+   * Get all video chunks in a merged collection
+   * @param {number} mergeId - The merge ID
+   * @returns {Array} List of video chunks
+   */
+  async getMergeVideoChunks(mergeId) {
+    return await this.all(`
+      SELECT
+        vc.*,
+        c.search_term as source_collection_name,
+        c.id as source_collection_id,
+        v.title as video_title
+      FROM video_chunks vc
+      JOIN collection_merge_members cmm ON vc.collection_id = cmm.source_collection_id
+      JOIN collections c ON c.id = vc.collection_id
+      JOIN videos v ON vc.video_id = v.id
+      WHERE cmm.merge_id = ?
+      ORDER BY vc.created_at DESC
+    `, [mergeId]);
+  }
+
+  /**
+   * Get statistics for a merged collection
+   * @param {number} mergeId - The merge ID
+   * @returns {Object} Statistics object
+   */
+  async getMergeStatistics(mergeId) {
+    const videos = await this.getMergeVideos(mergeId);
+    const comments = await this.getMergeComments(mergeId);
+    const chunks = await this.getMergeVideoChunks(mergeId);
+    const members = await this.getMergeMembers(mergeId);
+
+    // Count unique vs total
+    const videoIds = videos.map(v => v.id);
+    const uniqueVideos = new Set(videoIds).size;
+
+    return {
+      total_collections: members.length,
+      total_videos: videos.length,
+      unique_videos: uniqueVideos,
+      duplicate_videos: videos.length - uniqueVideos,
+      total_comments: comments.length,
+      total_chunks: chunks.length,
+      source_collections: members.map(m => ({
+        id: m.id,
+        name: m.search_term,
+        video_count: m.video_count,
+        comment_count: m.comment_count
+      }))
+    };
+  }
+
+  /**
+   * Delete a merge (soft delete by default)
+   * @param {number} mergeId - The merge ID
+   * @param {boolean} hard - If true, permanently delete
+   */
+  async deleteMerge(mergeId, hard = false) {
+    if (hard) {
+      // Hard delete (cascade will remove members)
+      await this.run('DELETE FROM collection_merges WHERE id = ?', [mergeId]);
+      console.log(`[Database] Hard deleted merge ${mergeId}`);
+    } else {
+      // Soft delete
+      await this.run('UPDATE collection_merges SET is_active = 0 WHERE id = ?', [mergeId]);
+      console.log(`[Database] Soft deleted merge ${mergeId}`);
+    }
+  }
+
+  /**
+   * Update merge metadata
+   * @param {number} mergeId - The merge ID
+   * @param {Object} updates - Fields to update
+   */
+  async updateMerge(mergeId, updates) {
+    const allowedFields = ['name', 'description', 'settings'];
+    const fields = Object.keys(updates).filter(k => allowedFields.includes(k));
+
+    if (fields.length === 0) return;
+
+    const setClause = fields.map(f => {
+      if (f === 'settings') return `${f} = ?`;
+      return `${f} = ?`;
+    }).join(', ');
+
+    const values = fields.map(f => {
+      if (f === 'settings') return JSON.stringify(updates[f]);
+      return updates[f];
+    });
+
+    await this.run(`
+      UPDATE collection_merges
+      SET ${setClause}, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [...values, mergeId]);
+
+    console.log(`[Database] Updated merge ${mergeId}`);
   }
 
   close() {

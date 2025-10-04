@@ -99,12 +99,60 @@ async function migrateDatabase() {
           }
         });
 
-        console.log('[MIGRATION] Migration complete!');
-        resolve();
+        // Step 3: Add collection merge tables
+        db.all("SELECT name FROM sqlite_master WHERE type='table' AND name='collection_merges'", (err, tables) => {
+          if (err) {
+            console.error('[MIGRATION] Error checking collection_merges:', err);
+            reject(err);
+            return;
+          }
+
+          if (tables.length === 0) {
+            console.log('[MIGRATION] Creating collection merge tables...');
+
+            // Create collection_merges table
+            db.run(`
+              CREATE TABLE IF NOT EXISTS collection_merges (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                settings TEXT,
+                is_active INTEGER DEFAULT 1
+              )
+            `);
+
+            // Create collection_merge_members table
+            db.run(`
+              CREATE TABLE IF NOT EXISTS collection_merge_members (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                merge_id INTEGER NOT NULL,
+                source_collection_id INTEGER NOT NULL,
+                added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                weight REAL DEFAULT 1.0,
+                notes TEXT,
+                FOREIGN KEY (merge_id) REFERENCES collection_merges(id) ON DELETE CASCADE,
+                FOREIGN KEY (source_collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+                UNIQUE(merge_id, source_collection_id)
+              )
+            `);
+
+            // Create indexes
+            db.run(`CREATE INDEX IF NOT EXISTS idx_merge_members_merge ON collection_merge_members(merge_id)`);
+            db.run(`CREATE INDEX IF NOT EXISTS idx_merge_members_source ON collection_merge_members(source_collection_id)`);
+
+            console.log('[MIGRATION] Collection merge tables created successfully');
+          } else {
+            console.log('[MIGRATION] Collection merge tables already exist');
+          }
+
+          console.log('[MIGRATION] Migration complete!');
+          db.close(); // ✅ Close AFTER all operations complete
+          resolve();
+        });
       });
     });
-
-    db.close();
   });
 }
 

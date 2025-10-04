@@ -18,13 +18,15 @@ class BwsTupleGenerator {
    * @param {number} config.tupleSize - Number of items per tuple (2-5)
    * @param {number} config.targetAppearances - Target times each item should appear (default: 3-5)
    * @param {string} config.method - Generation method: 'random', 'balanced', 'maxdiff'
+   * @param {Object} config.itemVideoMap - Optional map of item_id -> video_id for diversity constraint
    * @returns {Array<Array<number>>} - Array of tuples, each tuple is an array of item IDs
    */
   static generateTuples(items, config = {}) {
     const {
       tupleSize = 3,
       targetAppearances = 4,
-      method = 'random'
+      method = 'random',
+      itemVideoMap = null
     } = config;
 
     // Validation
@@ -43,13 +45,13 @@ class BwsTupleGenerator {
     // Select generation method
     switch (method) {
       case 'random':
-        return this.generateRandomTuples(items, tupleSize, targetAppearances);
+        return this.generateRandomTuples(items, tupleSize, targetAppearances, itemVideoMap);
       case 'balanced':
-        return this.generateBalancedTuples(items, tupleSize, targetAppearances);
+        return this.generateBalancedTuples(items, tupleSize, targetAppearances, itemVideoMap);
       case 'maxdiff':
         // Future implementation - falls back to balanced for now
         console.warn('MaxDiff not yet implemented, using balanced method');
-        return this.generateBalancedTuples(items, tupleSize, targetAppearances);
+        return this.generateBalancedTuples(items, tupleSize, targetAppearances, itemVideoMap);
       default:
         throw new Error(`Unknown generation method: ${method}`);
     }
@@ -59,13 +61,40 @@ class BwsTupleGenerator {
    * Random tuple generation
    * Fast but may result in uneven item coverage
    */
-  static generateRandomTuples(items, tupleSize, targetAppearances) {
+  static generateRandomTuples(items, tupleSize, targetAppearances, itemVideoMap = null) {
     const numItems = items.length;
     const totalTuples = Math.ceil((numItems * targetAppearances) / tupleSize);
     const tuples = [];
+    const maxAttemptsPerTuple = 100;
 
     for (let i = 0; i < totalTuples; i++) {
-      const tuple = this.sampleWithoutReplacement(items, tupleSize);
+      let tuple = null;
+      let attempts = 0;
+
+      // Try to generate a diverse tuple (if video mapping provided)
+      while (attempts < maxAttemptsPerTuple) {
+        const candidate = this.sampleWithoutReplacement(items, tupleSize);
+
+        // If no video map, accept any tuple
+        if (!itemVideoMap) {
+          tuple = candidate;
+          break;
+        }
+
+        // Check if tuple has diverse videos
+        if (this.hasDiverseVideos(candidate, itemVideoMap)) {
+          tuple = candidate;
+          break;
+        }
+
+        attempts++;
+      }
+
+      // If we couldn't find a diverse tuple after max attempts, accept last candidate
+      if (!tuple) {
+        tuple = this.sampleWithoutReplacement(items, tupleSize);
+      }
+
       tuples.push(tuple);
     }
 
@@ -76,7 +105,7 @@ class BwsTupleGenerator {
    * Balanced tuple generation
    * Ensures each item appears approximately the same number of times
    */
-  static generateBalancedTuples(items, tupleSize, targetAppearances) {
+  static generateBalancedTuples(items, tupleSize, targetAppearances, itemVideoMap = null) {
     const numItems = items.length;
     const tuples = [];
     const appearanceCounts = new Map();
@@ -88,7 +117,8 @@ class BwsTupleGenerator {
     const targetTuples = Math.ceil((numItems * targetAppearances) / tupleSize);
 
     let attempts = 0;
-    const maxAttempts = targetTuples * 10; // Prevent infinite loops
+    const maxAttempts = targetTuples * 20; // Prevent infinite loops (increased for diversity constraint)
+    let diversityFailures = 0;
 
     while (tuples.length < targetTuples && attempts < maxAttempts) {
       attempts++;
@@ -100,8 +130,31 @@ class BwsTupleGenerator {
 
       // Take tupleSize items with lowest appearance counts
       // Add some randomness to avoid always picking the same order
-      const candidates = sortedItems.slice(0, Math.min(tupleSize * 2, sortedItems.length));
-      const tuple = this.sampleWithoutReplacement(candidates, tupleSize);
+      const candidatePoolSize = Math.min(tupleSize * 3, sortedItems.length);
+      const candidates = sortedItems.slice(0, candidatePoolSize);
+
+      // Try multiple times to get a diverse tuple
+      let tuple = null;
+      let diversityAttempts = 0;
+      const maxDiversityAttempts = 50;
+
+      while (diversityAttempts < maxDiversityAttempts) {
+        const candidateTuple = this.sampleWithoutReplacement(candidates, tupleSize);
+
+        // If no video map or tuple is diverse, accept it
+        if (!itemVideoMap || this.hasDiverseVideos(candidateTuple, itemVideoMap)) {
+          tuple = candidateTuple;
+          break;
+        }
+
+        diversityAttempts++;
+      }
+
+      // If we couldn't find a diverse tuple, accept a non-diverse one
+      if (!tuple) {
+        tuple = this.sampleWithoutReplacement(candidates, tupleSize);
+        diversityFailures++;
+      }
 
       // Check for duplicate tuples
       if (!this.containsTuple(tuples, tuple)) {
@@ -125,7 +178,32 @@ class BwsTupleGenerator {
     console.log(`  Items: ${numItems}`);
     console.log(`  Appearances: min=${minAppearances}, max=${maxAppearances}, avg=${avgAppearances.toFixed(1)}`);
 
+    if (itemVideoMap) {
+      const diverseTuples = tuples.filter(t => this.hasDiverseVideos(t, itemVideoMap)).length;
+      const diversityRate = (diverseTuples / tuples.length * 100).toFixed(1);
+      console.log(`  Video diversity: ${diverseTuples}/${tuples.length} tuples (${diversityRate}%) have all different videos`);
+      if (diversityFailures > 0) {
+        console.log(`  Note: ${diversityFailures} tuples had to accept same-video chunks due to constraints`);
+      }
+    }
+
     return tuples;
+  }
+
+  /**
+   * Check if a tuple has items from diverse videos (no two items from same video)
+   * @param {Array} tuple - Array of item IDs
+   * @param {Object} itemVideoMap - Map of item_id -> video_id
+   * @returns {boolean} - True if all items are from different videos
+   */
+  static hasDiverseVideos(tuple, itemVideoMap) {
+    if (!itemVideoMap) return true;
+
+    const videoIds = tuple.map(itemId => itemVideoMap[itemId]).filter(v => v !== undefined);
+
+    // Check if all video IDs are unique
+    const uniqueVideoIds = new Set(videoIds);
+    return uniqueVideoIds.size === videoIds.length;
   }
 
   /**

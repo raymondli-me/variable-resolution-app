@@ -18,36 +18,52 @@ class RatingEngine extends EventEmitter {
     try {
       this.running = true;
       this.paused = false;
-      
-      // Create project in database
-      const projectId = await this.db.createRatingProject({
-        collectionId: projectConfig.collectionId,
-        projectName: projectConfig.projectName,
-        researchIntent: projectConfig.researchIntent,
-        ratingScale: projectConfig.ratingScale,
-        geminiModel: projectConfig.geminiModel,
-        parentProjectId: projectConfig.parentProjectId || null,  // NEW: hierarchical support
-        filterCriteria: projectConfig.filterCriteria || null,    // NEW: hierarchical support
-        settings: {
-          includeChunks: projectConfig.includeChunks,
-          includeComments: projectConfig.includeComments,
-          batchSize: projectConfig.batchSize,
-          rateLimit: projectConfig.rateLimit,
-          includeConfidence: projectConfig.includeConfidence
-        }
-      });
-      
+
+      let projectId;
+
+      // Check if resuming an existing project
+      if (projectConfig.projectId) {
+        // Resuming - use existing project
+        projectId = projectConfig.projectId;
+        console.log(`[RatingEngine] Resuming project ${projectId}`);
+
+        // Update status to in_progress
+        await this.db.updateRatingProject(projectId, {
+          status: 'in_progress'
+        });
+      } else {
+        // Create new project in database
+        projectId = await this.db.createRatingProject({
+          collectionId: projectConfig.collectionId,
+          projectName: projectConfig.projectName,
+          researchIntent: projectConfig.researchIntent,
+          ratingScale: projectConfig.ratingScale,
+          geminiModel: projectConfig.geminiModel,
+          parentProjectId: projectConfig.parentProjectId || null,  // NEW: hierarchical support
+          filterCriteria: projectConfig.filterCriteria || null,    // NEW: hierarchical support
+          settings: {
+            includeChunks: projectConfig.includeChunks,
+            includeComments: projectConfig.includeComments,
+            includePDFs: projectConfig.includePDFs,
+            batchSize: projectConfig.batchSize,
+            rateLimit: projectConfig.rateLimit,
+            includeConfidence: projectConfig.includeConfidence
+          }
+        });
+      }
+
       this.currentProject = { ...projectConfig, id: projectId };
       
       // Get items to rate
       console.log(`[RatingEngine] Fetching items for project ${projectId}, collection ${projectConfig.collectionId}...`);
-      console.log(`[RatingEngine] includeChunks: ${projectConfig.includeChunks}, includeComments: ${projectConfig.includeComments}`);
+      console.log(`[RatingEngine] includeChunks: ${projectConfig.includeChunks}, includeComments: ${projectConfig.includeComments}, includePDFs: ${projectConfig.includePDFs}`);
 
       const items = await this.db.getItemsForRating(
         projectConfig.collectionId,
         projectConfig.includeChunks,
         projectConfig.includeComments,
-        projectId  // NEW: Pass projectId to check for hierarchical projects
+        projectId,  // Pass projectId to check for hierarchical projects
+        projectConfig.includePDFs  // Pass includePDFs parameter
       );
       
       console.log(`[RatingEngine] Found ${items.length} items to rate`);
@@ -213,7 +229,11 @@ class RatingEngine extends EventEmitter {
             item: {
               type: item.type,
               id: item.id,
-              content: item.type === 'comment' ? item.text : item.transcript_text
+              content: item.type === 'comment'
+                ? item.text
+                : item.type === 'pdf_excerpt'
+                  ? item.text_content
+                  : item.transcript_text
             },
             rating: {
               relevance_score: rating.relevance,
@@ -241,7 +261,11 @@ class RatingEngine extends EventEmitter {
             item: {
               type: item.type,
               id: item.id,
-              content: item.type === 'comment' ? item.text : item.transcript_text
+              content: item.type === 'comment'
+                ? item.text
+                : item.type === 'pdf_excerpt'
+                  ? item.text_content
+                  : item.transcript_text
             },
             error: rating.error
           });
@@ -316,12 +340,23 @@ class RatingEngine extends EventEmitter {
           config.ratingScale
         );
         return { ...result, success: true };
+      } else if (item.type === 'pdf_excerpt') {
+        const result = await this.gemini.ratePDFExcerpt(
+          item.text_content,
+          {
+            title: item.pdf_title || 'PDF Document',
+            page_number: item.page_number
+          },
+          config.researchIntent,
+          config.ratingScale
+        );
+        return { ...result, success: true };
       } else {
         throw new Error(`Unknown item type: ${item.type}`);
       }
     } catch (error) {
       console.error(`Failed to rate item ${item.id} after retries:`, error);
-      
+
       // Return failed object instead of throwing
       return {
         success: false,
@@ -381,7 +416,9 @@ class RatingEngine extends EventEmitter {
       const items = await this.db.getItemsForRating(
         projectConfig.collectionId,
         projectConfig.includeChunks,
-        projectConfig.includeComments
+        projectConfig.includeComments,
+        null,  // No projectId for preview
+        projectConfig.includePDFs  // Include PDFs in preview
       );
       
       const sampleItems = items.slice(0, limit);
@@ -392,12 +429,21 @@ class RatingEngine extends EventEmitter {
         results.push({
           item: {
             type: item.type,
-            content: item.type === 'comment' ? item.text : item.transcript_text,
+            content: item.type === 'comment'
+              ? item.text
+              : item.type === 'pdf_excerpt'
+                ? item.text_content
+                : item.transcript_text,
             metadata: {
               video_title: item.video_title,
+              pdf_title: item.pdf_title,
               ...(item.type === 'video_chunk' && {
                 start_time: item.start_time,
                 end_time: item.end_time
+              }),
+              ...(item.type === 'pdf_excerpt' && {
+                page_number: item.page_number,
+                excerpt_number: item.excerpt_number
               })
             }
           },

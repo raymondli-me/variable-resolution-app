@@ -24,9 +24,19 @@ contextBridge.exposeInMainWorld('api', {
   collections: {
     checkIncomplete: () => ipcRenderer.invoke('collections:checkIncomplete'),
     resume: (params) => ipcRenderer.invoke('collections:resume', params),
-    markComplete: (params) => ipcRenderer.invoke('collections:markComplete', params)
+    markComplete: (params) => ipcRenderer.invoke('collections:markComplete', params),
+    list: () => ipcRenderer.invoke('db:getCollections'),
+    createPDFCollection: (params) => ipcRenderer.invoke('collections:createPDFCollection', params)
   },
-  
+
+  // PDF operations
+  pdf: {
+    upload: (params) => ipcRenderer.invoke('pdf:upload', params),
+    list: (collectionId) => ipcRenderer.invoke('pdf:list', collectionId),
+    getExcerpts: (pdfId) => ipcRenderer.invoke('pdf:getExcerpts', pdfId),
+    delete: (pdfId) => ipcRenderer.invoke('pdf:delete', pdfId)
+  },
+
   // Export operations
   export: {
     collection: (params) => ipcRenderer.invoke('export:collection', params),
@@ -70,6 +80,8 @@ contextBridge.exposeInMainWorld('api', {
   // AI Analysis operations
   ai: {
     getRatingProjects: (params) => ipcRenderer.invoke('ai:getRatingProjects', params),
+    getAllRatingProjects: () => ipcRenderer.invoke('ai:getAllRatingProjects'),
+    getRatingProject: (params) => ipcRenderer.invoke('ai:getRatingProject', params),
     getItemCounts: (params) => ipcRenderer.invoke('ai:getItemCounts', params),
     startRating: (config) => ipcRenderer.invoke('ai:startRating', config),
     pauseRating: () => ipcRenderer.invoke('ai:pauseRating'),
@@ -123,10 +135,12 @@ contextBridge.exposeInMainWorld('api', {
     getMergeVideos: (mergeId) => ipcRenderer.invoke('database:getMergeVideos', mergeId),
     getMergeComments: (mergeId) => ipcRenderer.invoke('database:getMergeComments', mergeId),
     getMergeVideoChunks: (mergeId) => ipcRenderer.invoke('database:getMergeVideoChunks', mergeId),
+    getMergePDFs: (mergeId) => ipcRenderer.invoke('database:getMergePDFs', mergeId),
+    getMergePDFExcerpts: (mergeId) => ipcRenderer.invoke('database:getMergePDFExcerpts', mergeId),
 
     // Rating/BWS operations
-    getItemsForRating: (collectionId, includeChunks, includeComments, projectId) =>
-      ipcRenderer.invoke('database:getItemsForRating', collectionId, includeChunks, includeComments, projectId)
+    getItemsForRating: (collectionId, includeChunks, includeComments, projectId, includePDFs) =>
+      ipcRenderer.invoke('database:getItemsForRating', collectionId, includeChunks, includeComments, projectId, includePDFs)
   },
 
   // Platform info

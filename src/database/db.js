@@ -368,13 +368,25 @@ class Database {
 
   // Rating project methods
   async createRatingProject(project) {
+    // Parse collectionId to check if it's a merge
+    let collectionId = 0;  // Sentinel value for merged collections
+    let mergeId = null;
+
+    if (typeof project.collectionId === 'string' && project.collectionId.startsWith('merge:')) {
+      mergeId = parseInt(project.collectionId.replace('merge:', ''));
+      collectionId = 0;  // Use 0 as sentinel for merged collections
+    } else {
+      collectionId = project.collectionId;
+    }
+
     const result = await this.run(`
       INSERT INTO rating_projects (
-        collection_id, project_name, research_intent, rating_scale,
+        collection_id, merge_id, project_name, research_intent, rating_scale,
         gemini_model, total_items, settings, parent_project_id, filter_criteria
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      project.collectionId,
+      collectionId,
+      mergeId,
       project.projectName,
       project.researchIntent,
       project.ratingScale,
@@ -387,12 +399,34 @@ class Database {
 
     return result.id;
   }
-  
+
   async getRatingProjects(collectionId) {
+    // Parse collectionId - might be "merge:123" string or regular collection ID
+    if (typeof collectionId === 'string' && collectionId.startsWith('merge:')) {
+      const mergeId = parseInt(collectionId.replace('merge:', ''));
+      return await this.all(
+        'SELECT * FROM rating_projects WHERE merge_id = ? ORDER BY created_at DESC',
+        [mergeId]
+      );
+    }
+
     return await this.all(
       'SELECT * FROM rating_projects WHERE collection_id = ? ORDER BY created_at DESC',
       [collectionId]
     );
+  }
+
+  async getAllRatingProjects() {
+    return await this.all(`
+      SELECT
+        rp.*,
+        COALESCE(c.search_term, cm.name) as collection_name,
+        CASE WHEN rp.merge_id IS NOT NULL THEN 1 ELSE 0 END as is_merged
+      FROM rating_projects rp
+      LEFT JOIN collections c ON rp.collection_id = c.id
+      LEFT JOIN collection_merges cm ON rp.merge_id = cm.id
+      ORDER BY rp.created_at DESC
+    `);
   }
   
   async getRatingProject(projectId) {
@@ -455,7 +489,7 @@ class Database {
     `, [projectId]);
   }
   
-  async getItemsForRating(collectionId, includeChunks, includeComments, projectId = null) {
+  async getItemsForRating(collectionId, includeChunks, includeComments, projectId = null, includePDFs = false) {
     const items = [];
 
     // If projectId provided, check if it's a child project (has parent_project_id)
@@ -469,7 +503,7 @@ class Database {
         const filterCriteria = project.filter_criteria ? JSON.parse(project.filter_criteria) : {};
         const minScore = filterCriteria.min_score || 0.0;
         const maxScore = filterCriteria.max_score || 1.0;
-        const allowedTypes = filterCriteria.content_types || ['video_chunk', 'comment'];
+        const allowedTypes = filterCriteria.content_types || ['video_chunk', 'comment', 'pdf_excerpt'];
 
         console.log(`[Database] Filter criteria: min_score=${minScore}, max_score=${maxScore}, types=${allowedTypes.join(',')}`);
 
@@ -487,11 +521,18 @@ class Database {
             vc.file_path as chunk_file_path,
             vc.video_id as chunk_video_id,
             vc.chunk_number,
+            pe.text_content as pdf_text,
+            pe.page_number as pdf_page,
+            pe.excerpt_number as pdf_excerpt_num,
+            pdf.title as pdf_title,
+            pdf.file_path as pdf_file_path,
             v.title as video_title,
             v.channel_title
           FROM relevance_ratings r
           LEFT JOIN comments c ON r.item_type = 'comment' AND r.item_id = c.id
           LEFT JOIN video_chunks vc ON r.item_type = 'video_chunk' AND r.item_id = vc.id
+          LEFT JOIN pdf_excerpts pe ON r.item_type = 'pdf_excerpt' AND r.item_id = pe.id
+          LEFT JOIN pdfs pdf ON pe.pdf_id = pdf.id
           LEFT JOIN videos v ON (c.video_id = v.id OR vc.video_id = v.id)
           WHERE r.project_id = ?
             AND r.status = 'success'
@@ -539,6 +580,20 @@ class Database {
                 parent_rating_reasoning: rating.reasoning
               });
             }
+          } else if (rating.item_type === 'pdf_excerpt') {
+            if (includePDFs && rating.pdf_text) {
+              items.push({
+                type: 'pdf_excerpt',
+                id: rating.item_id,
+                text_content: rating.pdf_text,
+                page_number: rating.pdf_page,
+                excerpt_number: rating.pdf_excerpt_num,
+                pdf_title: rating.pdf_title,
+                pdf_file_path: rating.pdf_file_path,
+                parent_rating_score: rating.relevance_score,
+                parent_rating_reasoning: rating.reasoning
+              });
+            }
           }
         }
 
@@ -550,33 +605,73 @@ class Database {
     // ROOT PROJECT or no projectId - fetch from collection as before
     console.log(`[Database] Fetching items from collection ${collectionId} (root project)`);
 
-    // Check if this is a merged collection
-    const merge = await this.get(`
-      SELECT id FROM collection_merges WHERE id = ? AND is_active = 1
-    `, [collectionId]);
+    // Parse collectionId - might be "merge:123" string or regular collection ID
+    let actualCollectionId = collectionId;
+    let mergeId = null;
 
-    let collectionIds = [collectionId];
+    if (typeof collectionId === 'string' && collectionId.startsWith('merge:')) {
+      mergeId = parseInt(collectionId.replace('merge:', ''));
+      actualCollectionId = null;
+    }
 
-    if (merge) {
+    let collectionIds = [];
+
+    if (mergeId) {
       // This is a merged collection - get all source collection IDs
       const sourceCollections = await this.all(`
         SELECT source_collection_id FROM collection_merge_members WHERE merge_id = ?
-      `, [collectionId]);
+      `, [mergeId]);
 
       if (sourceCollections.length > 0) {
         collectionIds = sourceCollections.map(sc => sc.source_collection_id);
-        console.log(`[Database] Merged collection detected, fetching from ${collectionIds.length} source collections`);
+        console.log(`[Database] Merged collection detected (ID ${mergeId}), fetching from ${collectionIds.length} source collections`);
+      }
+    } else {
+      // Check if the numeric ID is a merged collection
+      const merge = await this.get(`
+        SELECT id FROM collection_merges WHERE id = ? AND is_active = 1
+      `, [actualCollectionId]);
+
+      if (merge) {
+        // This is a merged collection - get all source collection IDs
+        const sourceCollections = await this.all(`
+          SELECT source_collection_id FROM collection_merge_members WHERE merge_id = ?
+        `, [actualCollectionId]);
+
+        if (sourceCollections.length > 0) {
+          collectionIds = sourceCollections.map(sc => sc.source_collection_id);
+          console.log(`[Database] Merged collection detected, fetching from ${collectionIds.length} source collections`);
+        }
+      } else {
+        // Regular collection
+        collectionIds = [actualCollectionId];
       }
     }
 
     if (includeChunks) {
       const placeholders = collectionIds.map(() => '?').join(',');
-      const chunks = await this.all(`
+
+      // If projectId provided, skip already-rated items
+      let chunksQuery = `
         SELECT vc.*, v.title as video_title, v.channel_title
         FROM video_chunks vc
         JOIN videos v ON vc.video_id = v.id
         WHERE vc.collection_id IN (${placeholders})
-      `, collectionIds);
+      `;
+
+      if (projectId) {
+        chunksQuery += `
+          AND NOT EXISTS (
+            SELECT 1 FROM relevance_ratings rr
+            WHERE rr.project_id = ${projectId}
+              AND rr.item_type = 'video_chunk'
+              AND rr.item_id = CAST(vc.id AS TEXT)
+              AND rr.status = 'success'
+          )
+        `;
+      }
+
+      const chunks = await this.all(chunksQuery, collectionIds);
 
       items.push(...chunks.map(chunk => ({
         type: 'video_chunk',
@@ -587,17 +682,65 @@ class Database {
 
     if (includeComments) {
       const placeholders = collectionIds.map(() => '?').join(',');
-      const comments = await this.all(`
+
+      // If projectId provided, skip already-rated items
+      let commentsQuery = `
         SELECT c.*, v.title as video_title
         FROM comments c
         JOIN videos v ON c.video_id = v.id
         WHERE c.collection_id IN (${placeholders})
-      `, collectionIds);
+      `;
+
+      if (projectId) {
+        commentsQuery += `
+          AND NOT EXISTS (
+            SELECT 1 FROM relevance_ratings rr
+            WHERE rr.project_id = ${projectId}
+              AND rr.item_type = 'comment'
+              AND rr.item_id = c.id
+              AND rr.status = 'success'
+          )
+        `;
+      }
+
+      const comments = await this.all(commentsQuery, collectionIds);
 
       items.push(...comments.map(comment => ({
         type: 'comment',
         id: comment.id,
         ...comment
+      })));
+    }
+
+    if (includePDFs) {
+      const placeholders = collectionIds.map(() => '?').join(',');
+
+      // If projectId provided, skip already-rated items
+      let pdfsQuery = `
+        SELECT pe.*, pdf.title as pdf_title, pdf.file_path as pdf_file_path
+        FROM pdf_excerpts pe
+        JOIN pdfs pdf ON pe.pdf_id = pdf.id
+        WHERE pe.collection_id IN (${placeholders})
+      `;
+
+      if (projectId) {
+        pdfsQuery += `
+          AND NOT EXISTS (
+            SELECT 1 FROM relevance_ratings rr
+            WHERE rr.project_id = ${projectId}
+              AND rr.item_type = 'pdf_excerpt'
+              AND rr.item_id = pe.id
+              AND rr.status = 'success'
+          )
+        `;
+      }
+
+      const pdfExcerpts = await this.all(pdfsQuery, collectionIds);
+
+      items.push(...pdfExcerpts.map(excerpt => ({
+        type: 'pdf_excerpt',
+        id: excerpt.id,
+        ...excerpt
       })));
     }
 
@@ -850,17 +993,38 @@ class Database {
 
     if (!tuple) return null;
 
+    // CRITICAL FIX: Get experiment type to avoid ID collisions between tables
+    const experiment = await this.get(`
+      SELECT item_type FROM bws_experiments WHERE id = ?
+    `, [tuple.experiment_id]);
+
+    if (!experiment) {
+      console.error('[BWS] Experiment not found for tuple', tupleId);
+      return null;
+    }
+
     tuple.item_ids = JSON.parse(tuple.item_ids);
 
-    // Fetch actual items (comments or video chunks)
+    // Fetch items from the CORRECT table based on experiment type
+    // This prevents ID collisions (e.g., video_chunks.id=4 vs pdf_excerpts.id=4)
     const items = [];
     for (const itemId of tuple.item_ids) {
-      // Try comments first
-      let item = await this.get('SELECT *, "comment" as item_type FROM comments WHERE id = ?', [itemId]);
+      let item = null;
 
-      // If not found, try video chunks
-      if (!item) {
+      // Query ONLY the table matching the experiment's item type
+      if (experiment.item_type === 'comment') {
+        item = await this.get('SELECT *, "comment" as item_type FROM comments WHERE id = ?', [itemId]);
+      } else if (experiment.item_type === 'video_chunk') {
         item = await this.get('SELECT *, "video_chunk" as item_type FROM video_chunks WHERE id = ?', [itemId]);
+      } else if (experiment.item_type === 'pdf_excerpt') {
+        item = await this.get(`
+          SELECT pe.*, "pdf_excerpt" as item_type, pdf.title as pdf_title, pdf.file_path as pdf_file_path
+          FROM pdf_excerpts pe
+          JOIN pdfs pdf ON pe.pdf_id = pdf.id
+          WHERE pe.id = ?
+        `, [itemId]);
+      } else {
+        console.error('[BWS] Unknown item_type:', experiment.item_type);
       }
 
       if (item) items.push(item);
@@ -1595,6 +1759,48 @@ class Database {
       JOIN videos v ON vc.video_id = v.id
       WHERE cmm.merge_id = ?
       ORDER BY vc.created_at DESC
+    `, [mergeId]);
+  }
+
+  /**
+   * Get all PDF excerpts in a merged collection
+   * @param {number} mergeId - The merge ID
+   * @returns {Array} List of PDF excerpts with source info
+   */
+  async getMergePDFExcerpts(mergeId) {
+    return await this.all(`
+      SELECT
+        pe.*,
+        c.search_term as source_collection_name,
+        c.id as source_collection_id,
+        p.title as pdf_title,
+        p.file_path as pdf_file_path
+      FROM pdf_excerpts pe
+      JOIN collection_merge_members cmm ON pe.collection_id = cmm.source_collection_id
+      JOIN collections c ON c.id = pe.collection_id
+      JOIN pdfs p ON pe.pdf_id = p.id
+      WHERE cmm.merge_id = ?
+      ORDER BY pe.created_at DESC
+    `, [mergeId]);
+  }
+
+  /**
+   * Get all PDFs in a merged collection (grouped by PDF file)
+   * @param {number} mergeId - The merge ID
+   * @returns {Array} List of PDFs with excerpt counts
+   */
+  async getMergePDFs(mergeId) {
+    return await this.all(`
+      SELECT DISTINCT
+        p.*,
+        c.search_term as source_collection_name,
+        c.id as source_collection_id,
+        (SELECT COUNT(*) FROM pdf_excerpts WHERE pdf_id = p.id) as excerpts_count
+      FROM pdfs p
+      JOIN collection_merge_members cmm ON p.collection_id = cmm.source_collection_id
+      JOIN collections c ON c.id = p.collection_id
+      WHERE cmm.merge_id = ?
+      ORDER BY p.created_at DESC
     `, [mergeId]);
   }
 

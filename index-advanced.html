@@ -578,6 +578,7 @@
           <div class="tabs">
             <button class="tab-btn active" data-tab="saved">Saved Collections</button>
             <button class="tab-btn" data-tab="merged">Merged Collections</button>
+            <button class="tab-btn" data-tab="pdfs">📄 PDF Documents</button>
           </div>
 
           <!-- Saved Collections Tab -->
@@ -628,6 +629,128 @@
                 <h3>No Merged Collections</h3>
                 <p>Combine multiple collections into one dataset for analysis or rating</p>
                 <button class="btn btn-primary" onclick="document.getElementById('createMergeBtn').click()">Create Your First Merge</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- PDF Documents Tab -->
+          <div id="pdfsTab" class="tab-content">
+            <div class="view-header">
+              <h3 style="margin: 0;">PDF Document Upload</h3>
+              <p style="margin: 8px 0 0; color: var(--text-secondary); font-size: 14px;">
+                Upload PDF documents to add to your collections for rating and comparison alongside YouTube content
+              </p>
+            </div>
+
+            <div class="pdf-upload-section" style="margin-top: 24px;">
+              <div class="option-group">
+                <h4>Collection</h4>
+                <div class="form-group">
+                  <label style="display: flex; align-items: center; margin-bottom: 8px;">
+                    <input type="radio" name="pdfCollectionMode" id="pdfNewCollection" value="new" checked style="margin-right: 8px;">
+                    Create new collection
+                  </label>
+                  <label style="display: flex; align-items: center;">
+                    <input type="radio" name="pdfCollectionMode" id="pdfExistingCollection" value="existing" style="margin-right: 8px;">
+                    Add to existing collection
+                  </label>
+                </div>
+
+                <div id="pdfNewCollectionSection" class="form-group">
+                  <label for="pdfCollectionName">Collection Name</label>
+                  <input type="text" id="pdfCollectionName" class="form-control" placeholder="e.g., Research Papers 2024" />
+                  <small>Name for your new PDF collection</small>
+                </div>
+
+                <div id="pdfExistingCollectionSection" class="form-group" style="display: none;">
+                  <label for="pdfCollectionSelect">Select Collection</label>
+                  <select id="pdfCollectionSelect" class="form-control">
+                    <option value="">Loading collections...</option>
+                  </select>
+                  <small>Add PDF to an existing collection</small>
+                </div>
+              </div>
+
+              <div class="option-group">
+                <h4>Upload PDF File</h4>
+                <div class="form-group">
+                  <label for="pdfFileInput">PDF Document</label>
+                  <div class="file-input-wrapper">
+                    <input type="file" id="pdfFileInput" accept=".pdf" style="display: none;" />
+                    <button id="pdfFileBrowseBtn" class="btn btn-secondary" style="width: 100%;">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"></path>
+                      </svg>
+                      Choose PDF File
+                    </button>
+                  </div>
+                  <div id="pdfFileName" style="margin-top: 8px; font-size: 14px; color: var(--text-secondary);"></div>
+                </div>
+
+                <div class="form-group">
+                  <label for="pdfTitle">Document Title (Optional)</label>
+                  <input type="text" id="pdfTitle" class="form-control" placeholder="Will use filename if not provided" />
+                  <small>Custom title for this PDF document</small>
+                </div>
+              </div>
+
+              <div class="option-group">
+                <h4>Chunking Strategy</h4>
+                <div class="form-group">
+                  <label for="pdfChunkingStrategy">How to Split PDF</label>
+                  <select id="pdfChunkingStrategy" class="form-control">
+                    <option value="page" selected>Page-based (one excerpt per page)</option>
+                    <option value="semantic">Semantic (paragraph/section-based)</option>
+                    <option value="fixed">Fixed-size (by word count)</option>
+                  </select>
+                  <small>Choose how to divide the PDF into excerpts for rating</small>
+                </div>
+
+                <div id="pdfFixedSizeOptions" class="sub-options" style="display: none;">
+                  <div class="form-group">
+                    <label for="pdfChunkSize">Words per Excerpt</label>
+                    <input type="number" id="pdfChunkSize" class="form-control" value="500" min="100" max="2000" step="50" />
+                    <small>Number of words in each excerpt (100-2000)</small>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-top: 24px;">
+                <button id="uploadPDFBtn" class="btn btn-primary" style="width: 100%;" disabled>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"></path>
+                  </svg>
+                  Upload and Process PDF
+                </button>
+              </div>
+
+              <div id="pdfUploadProgress" style="display: none; margin-top: 16px;">
+                <div class="progress-info">
+                  <span id="pdfUploadStatus">Processing...</span>
+                  <span id="pdfUploadPercentage">0%</span>
+                </div>
+                <div class="progress-bar">
+                  <div id="pdfUploadProgressBar" class="progress-fill" style="width: 0%;"></div>
+                </div>
+              </div>
+
+              <div id="pdfUploadLog" class="collection-log" style="margin-top: 16px; max-height: 300px; overflow-y: auto;"></div>
+
+              <div class="option-group" style="margin-top: 32px;">
+                <h4>Uploaded PDFs</h4>
+                <div id="pdfDocumentsList" class="pdf-list">
+                  <div class="empty-state">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path>
+                      <polyline points="14 2 14 8 20 8"></polyline>
+                      <line x1="16" y1="13" x2="8" y2="13"></line>
+                      <line x1="16" y1="17" x2="8" y2="17"></line>
+                      <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                    <h3>No PDFs Uploaded</h3>
+                    <p>Select a collection and upload your first PDF document to get started</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -794,6 +917,10 @@
                   <label class="checkbox-label">
                     <input type="checkbox" id="rate-comments" checked>
                     <span>Comments <span class="item-count" id="comments-count">(0 items)</span></span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="rate-pdfs" checked>
+                    <span>PDF Excerpts <span class="item-count" id="pdfs-count">(0 items)</span></span>
                   </label>
                 </div>
               </div>
@@ -1107,9 +1234,13 @@
                             <input type="checkbox" id="bws-include-comments" checked>
                             <span>Comments</span>
                           </label>
-                          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px;">
                             <input type="checkbox" id="bws-include-chunks">
                             <span>Video Chunks</span>
+                          </label>
+                          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="bws-include-pdfs">
+                            <span>PDF Excerpts</span>
                           </label>
                         </div>
                         <small>Select which types of content to include in the comparison</small>

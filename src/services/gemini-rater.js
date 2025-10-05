@@ -45,7 +45,7 @@ class GeminiRater {
             temperature: 0.3,
             topK: 1,
             topP: 0.8,
-            maxOutputTokens: 1000,
+            maxOutputTokens: 3000,  // Increased to account for thinking tokens (~1000) + response
             responseMimeType: 'application/json'
           }
         };
@@ -90,7 +90,7 @@ class GeminiRater {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         const prompt = this.buildCommentPrompt(commentText, videoContext, researchIntent, ratingScale);
-        
+
         const requestBody = {
           contents: [{
             parts: [{
@@ -101,7 +101,7 @@ class GeminiRater {
             temperature: 0.3,
             topK: 1,
             topP: 0.8,
-            maxOutputTokens: 1000,
+            maxOutputTokens: 3000,  // Increased to account for thinking tokens (~1000) + response
             responseMimeType: 'application/json'
           }
         };
@@ -124,9 +124,62 @@ class GeminiRater {
 
         const result = await response.json();
         return this.parseResponse(result, commentText);
-        
+
       } catch (error) {
         console.error(`Error rating comment (attempt ${attempt}/${retries}):`, error);
+        if (attempt === retries) {
+          throw error;
+        }
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      }
+    }
+  }
+
+  /**
+   * Rate a PDF excerpt using text analysis
+   */
+  async ratePDFExcerpt(excerptText, pdfContext, researchIntent, ratingScale, retries = 3) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const prompt = this.buildPDFPrompt(excerptText, pdfContext, researchIntent, ratingScale);
+
+        const requestBody = {
+          contents: [{
+            parts: [{
+              text: prompt
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.3,
+            topK: 1,
+            topP: 0.8,
+            maxOutputTokens: 3000,  // Increased to account for thinking tokens (~1000) + response
+            responseMimeType: 'application/json'
+          }
+        };
+
+        const response = await fetch(
+          `${this.baseURL}/${this.model}:generateContent?key=${this.apiKey}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody)
+          }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Gemini API error: ${response.status} ${response.statusText} - ${errorText}`);
+        }
+
+        const result = await response.json();
+        return this.parseResponse(result, excerptText);
+
+      } catch (error) {
+        console.error(`Error rating PDF excerpt (attempt ${attempt}/${retries}):`, error);
         if (attempt === retries) {
           throw error;
         }
@@ -174,6 +227,29 @@ Consider:
 - Does the comment relate to the research intent?
 - Is it substantive or just spam/reaction?
 - Does it add value to understanding the topic?
+
+IMPORTANT: Respond with ONLY valid JSON. No markdown, no code blocks, no explanatory text. Just the JSON object.`;
+  }
+
+  /**
+   * Build prompt for PDF excerpt rating
+   */
+  buildPDFPrompt(excerptText, pdfContext, researchIntent, ratingScale) {
+    return `You are rating content relevance for research purposes.
+
+Research Intent: ${researchIntent}
+
+PDF Document: "${pdfContext.title}"${pdfContext.page_number ? ` (Page ${pdfContext.page_number})` : ''}
+
+Excerpt to rate: "${excerptText}"
+
+${this.getRatingInstructions(ratingScale)}
+
+Consider:
+- Does the excerpt directly relate to the research intent?
+- Is there substantive discussion or analysis of the topic?
+- Would this excerpt be useful for understanding the research question?
+- Is this academic/technical content relevant to the topic?
 
 IMPORTANT: Respond with ONLY valid JSON. No markdown, no code blocks, no explanatory text. Just the JSON object.`;
   }
@@ -300,7 +376,7 @@ IMPORTANT: Respond with ONLY valid JSON. No markdown, no code blocks, no explana
             temperature: 0.3,
             topK: 1,
             topP: 0.8,
-            maxOutputTokens: 1500,  // Increased from 500 to handle verbose responses
+            maxOutputTokens: 3000,  // Increased to account for thinking tokens (~1000) + response
             responseMimeType: 'application/json'
           },
           safetySettings: [
@@ -356,21 +432,23 @@ IMPORTANT: Respond with ONLY valid JSON. No markdown, no code blocks, no explana
 
   /**
    * Build multimodal parts for BWS comparison
-   * Handles both video chunks (with actual video files) and comments (text)
+   * Handles video chunks (with actual video files), comments (text), and PDF excerpts (text)
    * INLINE ONLY: Videos must be < 20MB (File API upload can be added later if needed)
    */
   async buildBWSMultimodalParts(items, researchIntent) {
     const parts = [];
-    const videoCount = items.filter(item => item.item_type !== 'comment' && item.file_path).length;
+    const videoCount = items.filter(item => item.item_type === 'video_chunk' && item.file_path).length;
     const commentCount = items.filter(item => item.item_type === 'comment').length;
+    const pdfCount = items.filter(item => item.item_type === 'pdf_excerpt').length;
 
-    console.log(`[BWS Multimodal] Building parts for ${items.length} items (${videoCount} videos, ${commentCount} comments)`);
+    console.log(`[BWS Multimodal] Building parts for ${items.length} items (${videoCount} videos, ${commentCount} comments, ${pdfCount} PDFs)`);
 
     // Add each item (video or text)
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const isComment = item.item_type === 'comment';
-      const isVideo = !isComment && item.file_path;
+      const isPDF = item.item_type === 'pdf_excerpt';
+      const isVideo = item.item_type === 'video_chunk' && item.file_path;
 
       if (isVideo) {
         try {
@@ -410,6 +488,13 @@ IMPORTANT: Respond with ONLY valid JSON. No markdown, no code blocks, no explana
             text: `Video ${i + 1} (video unavailable, using transcript): "${item.transcript_text || 'No transcript available'}"`
           });
         }
+      } else if (isPDF) {
+        // PDF excerpt (text only)
+        const pdfLabel = item.pdf_title ? `from "${item.pdf_title}"` : 'from PDF';
+        const pageInfo = item.page_number ? ` (Page ${item.page_number})` : '';
+        parts.push({
+          text: `PDF Excerpt ${i + 1} ${pdfLabel}${pageInfo}: "${item.text_content || 'No content'}"`
+        });
       } else {
         // Comment (text only)
         parts.push({

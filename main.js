@@ -987,17 +987,55 @@ ipcMain.handle('collections:markComplete', async (event, { manifestPath }) => {
     const fs = require('fs').promises;
     const manifestData = await fs.readFile(manifestPath, 'utf8');
     const manifest = JSON.parse(manifestData);
-    
+
     // Update status to completed
     manifest.status = 'completed';
     manifest.markedCompleteAt = new Date().toISOString();
-    
+
     // Write back to file
     await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2));
-    
+
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
+  }
+});
+
+// Create a PDF collection
+ipcMain.handle('collections:createPDFCollection', async (event, { name }) => {
+  try {
+    const db = await getDatabase();
+
+    // Create collection with PDF-specific settings
+    const settings = {
+      type: 'pdf',
+      createdAt: new Date().toISOString()
+    };
+
+    const collectionId = await db.createCollection(name, settings);
+
+    // Create collection folder structure
+    const collectionsDir = path.join(app.getPath('userData'), 'collections');
+    const collectionFolder = path.join(collectionsDir, collectionId.toString());
+    const pdfsFolder = path.join(collectionFolder, 'pdfs');
+
+    const fs = require('fs');
+    if (!fs.existsSync(pdfsFolder)) {
+      fs.mkdirSync(pdfsFolder, { recursive: true });
+    }
+
+    return {
+      success: true,
+      collectionId,
+      collectionFolder,
+      pdfsFolder
+    };
+  } catch (error) {
+    console.error('Error creating PDF collection:', error);
+    return {
+      success: false,
+      error: error.message
+    };
   }
 });
 
@@ -1393,6 +1431,116 @@ ipcMain.handle('system:openFolder', async (event, folderPath) => {
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
+  }
+});
+
+// ========================================
+// PDF IPC Handlers
+// ========================================
+
+ipcMain.handle('pdf:upload', async (event, { filePath, collectionId, title, chunkingStrategy, chunkSize }) => {
+  try {
+    const db = require('./src/database/db');
+    const { PDFCollector } = require('./src/collectors/pdf-collector');
+
+    // Initialize PDF collector
+    const pdfCollector = new PDFCollector(db, app.getPath('userData'));
+
+    // Upload and process PDF
+    const result = await pdfCollector.uploadPDF(filePath, collectionId, {
+      title,
+      chunkingStrategy,
+      chunkSize
+    });
+
+    return {
+      success: true,
+      pdfId: result.pdfId,
+      metadata: result.metadata,
+      excerpts: result.excerpts,
+      filePath: result.filePath
+    };
+
+  } catch (error) {
+    console.error('PDF upload error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('pdf:list', async (event, collectionId) => {
+  try {
+    const db = require('./src/database/db');
+
+    const pdfs = await db.all(`
+      SELECT
+        p.*,
+        COUNT(pe.id) as excerpts_count
+      FROM pdfs p
+      LEFT JOIN pdf_excerpts pe ON p.id = pe.pdf_id
+      WHERE p.collection_id = ?
+      GROUP BY p.id
+      ORDER BY p.created_at DESC
+    `, [collectionId]);
+
+    return {
+      success: true,
+      pdfs
+    };
+
+  } catch (error) {
+    console.error('PDF list error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('pdf:getExcerpts', async (event, pdfId) => {
+  try {
+    const db = require('./src/database/db');
+
+    const excerpts = await db.all(`
+      SELECT * FROM pdf_excerpts
+      WHERE pdf_id = ?
+      ORDER BY excerpt_number ASC
+    `, [pdfId]);
+
+    return {
+      success: true,
+      excerpts
+    };
+
+  } catch (error) {
+    console.error('PDF excerpts error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('pdf:delete', async (event, pdfId) => {
+  try {
+    const db = require('./src/database/db');
+    const { PDFCollector } = require('./src/collectors/pdf-collector');
+
+    const pdfCollector = new PDFCollector(db, app.getPath('userData'));
+    await pdfCollector.deletePDF(pdfId);
+
+    return {
+      success: true
+    };
+
+  } catch (error) {
+    console.error('PDF delete error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
   }
 });
 
@@ -2212,11 +2360,39 @@ ipcMain.handle('ai:getRatingProjects', async (event, { collectionId }) => {
     const dbPath = path.join(app.getPath('userData'), 'collections.db');
     const db = require('./src/database/db');
     await db.initialize(dbPath);
-    
+
     const projects = await db.getRatingProjects(collectionId);
     return { success: true, data: projects };
   } catch (error) {
     console.error('Error getting rating projects:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('ai:getRatingProject', async (event, { projectId }) => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    const project = await db.getRatingProject(projectId);
+    return { success: true, data: project };
+  } catch (error) {
+    console.error('Error getting rating project:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('ai:getAllRatingProjects', async () => {
+  try {
+    const dbPath = path.join(app.getPath('userData'), 'collections.db');
+    const db = require('./src/database/db');
+    await db.initialize(dbPath);
+
+    const projects = await db.getAllRatingProjects();
+    return { success: true, data: projects };
+  } catch (error) {
+    console.error('Error getting all rating projects:', error);
     return { success: false, error: error.message };
   }
 });
@@ -2226,8 +2402,44 @@ ipcMain.handle('ai:getItemCounts', async (event, { collectionId }) => {
     const dbPath = path.join(app.getPath('userData'), 'collections.db');
     const db = require('./src/database/db');
     await db.initialize(dbPath);
-    
-    // Get chunk and comment counts
+
+    // Check if this is a merged collection
+    if (typeof collectionId === 'string' && collectionId.startsWith('merge:')) {
+      const mergeId = parseInt(collectionId.replace('merge:', ''));
+
+      // Get counts from all source collections in the merge
+      const chunks = await db.all(`
+        SELECT COUNT(*) as count
+        FROM video_chunks vc
+        JOIN collection_merge_members cmm ON vc.collection_id = cmm.source_collection_id
+        WHERE cmm.merge_id = ?
+      `, [mergeId]);
+
+      const comments = await db.all(`
+        SELECT COUNT(*) as count
+        FROM comments c
+        JOIN collection_merge_members cmm ON c.collection_id = cmm.source_collection_id
+        WHERE cmm.merge_id = ?
+      `, [mergeId]);
+
+      const pdfs = await db.all(`
+        SELECT COUNT(*) as count
+        FROM pdf_excerpts pe
+        JOIN collection_merge_members cmm ON pe.collection_id = cmm.source_collection_id
+        WHERE cmm.merge_id = ?
+      `, [mergeId]);
+
+      return {
+        success: true,
+        data: {
+          chunks: chunks[0].count,
+          comments: comments[0].count,
+          pdfs: pdfs[0].count
+        }
+      };
+    }
+
+    // Regular collection - get chunk, comment, and PDF counts
     const chunks = await db.all(
       'SELECT COUNT(*) as count FROM video_chunks WHERE collection_id = ?',
       [collectionId]
@@ -2236,12 +2448,17 @@ ipcMain.handle('ai:getItemCounts', async (event, { collectionId }) => {
       'SELECT COUNT(*) as count FROM comments WHERE collection_id = ?',
       [collectionId]
     );
-    
+    const pdfs = await db.all(
+      'SELECT COUNT(*) as count FROM pdf_excerpts WHERE collection_id = ?',
+      [collectionId]
+    );
+
     return {
       success: true,
       data: {
         chunks: chunks[0].count,
-        comments: comments[0].count
+        comments: comments[0].count,
+        pdfs: pdfs[0].count
       }
     };
   } catch (error) {
@@ -2625,6 +2842,7 @@ ipcMain.handle('bws:createExperiment', async (event, config) => {
       collection_id,
       include_comments,
       include_chunks,
+      include_pdfs,
       tuple_size,
       target_appearances,
       design_method,
@@ -2656,7 +2874,7 @@ ipcMain.handle('bws:createExperiment', async (event, config) => {
       // Determine item type (check if all same type)
       const itemTypes = new Set(filteredRatings.map(r => r.item_type));
       if (itemTypes.size > 1) {
-        return { success: false, error: 'Cannot mix video chunks and comments in BWS experiment' };
+        return { success: false, error: 'Cannot mix different content types in BWS experiment' };
       }
       item_type = filteredRatings[0].item_type;
 
@@ -2670,7 +2888,8 @@ ipcMain.handle('bws:createExperiment', async (event, config) => {
         collection_id,
         include_chunks,
         include_comments,
-        null // No projectId
+        null, // No projectId
+        include_pdfs
       );
 
       if (rawItems.length === 0) {
@@ -2680,9 +2899,9 @@ ipcMain.handle('bws:createExperiment', async (event, config) => {
       // Determine item type
       const itemTypes = new Set(rawItems.map(item => item.type));
       if (itemTypes.size > 1) {
-        return { success: false, error: 'Cannot mix video chunks and comments in BWS experiment. Uncheck one type.' };
+        return { success: false, error: 'Cannot mix different content types in BWS experiment. Uncheck one type.' };
       }
-      item_type = rawItems[0].type === 'comment' ? 'comment' : 'video_chunk';
+      item_type = rawItems[0].type || 'video_chunk';
 
       items = rawItems.map(item => ({ id: item.id, ...item }));
     } else {
@@ -3224,10 +3443,30 @@ ipcMain.handle('database:getMergeVideoChunks', async (event, mergeId) => {
   }
 });
 
-ipcMain.handle('database:getItemsForRating', async (event, collectionId, includeChunks, includeComments, projectId) => {
+ipcMain.handle('database:getMergePDFs', async (event, mergeId) => {
   try {
     const db = await getDatabase();
-    return await db.getItemsForRating(collectionId, includeChunks, includeComments, projectId);
+    return await db.getMergePDFs(mergeId);
+  } catch (error) {
+    console.error('[IPC] Error getting merge PDFs:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('database:getMergePDFExcerpts', async (event, mergeId) => {
+  try {
+    const db = await getDatabase();
+    return await db.getMergePDFExcerpts(mergeId);
+  } catch (error) {
+    console.error('[IPC] Error getting merge PDF excerpts:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('database:getItemsForRating', async (event, collectionId, includeChunks, includeComments, projectId, includePDFs) => {
+  try {
+    const db = await getDatabase();
+    return await db.getItemsForRating(collectionId, includeChunks, includeComments, projectId, includePDFs);
   } catch (error) {
     console.error('[IPC] Error getting items for rating:', error);
     throw error;

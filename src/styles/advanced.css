@@ -350,3 +350,139 @@
     grid-template-columns: 1fr;
   }
 }
+/* PDF Collection Viewer */
+.pdf-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--accent-secondary);
+  color: var(--text-primary);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pdf-viewer-modal,
+.pdf-excerpt-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.pdf-viewer-content,
+.pdf-excerpt-content {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  width: 90%;
+  max-width: 900px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.pdf-viewer-header,
+.pdf-excerpt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.pdf-viewer-header h2,
+.pdf-excerpt-header h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: var(--text-secondary);
+  transition: color 0.2s;
+}
+
+.close-btn:hover {
+  color: var(--text-primary);
+}
+
+.pdf-list-viewer {
+  padding: 20px;
+  overflow-y: auto;
+  max-height: calc(85vh - 80px);
+}
+
+.pdf-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.pdf-card:hover {
+  background: var(--bg-secondary);
+  border-color: var(--accent-primary);
+}
+
+.pdf-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.pdf-details {
+  flex: 1;
+}
+
+.pdf-details h3 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+}
+
+.pdf-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.excerpt-list {
+  padding: 20px;
+  overflow-y: auto;
+  max-height: calc(85vh - 80px);
+}
+
+.excerpt-card {
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.excerpt-number {
+  font-weight: 600;
+  color: var(--accent-primary);
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.excerpt-text {
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}

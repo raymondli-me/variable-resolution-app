@@ -125,6 +125,65 @@ function setupEventListeners() {
       loadCollections();
     });
   }
+
+  // PDF Upload handlers
+  const pdfFileBrowseBtn = document.getElementById('pdfFileBrowseBtn');
+  if (pdfFileBrowseBtn) {
+    pdfFileBrowseBtn.addEventListener('click', () => {
+      document.getElementById('pdfFileInput').click();
+    });
+  }
+
+  const pdfFileInput = document.getElementById('pdfFileInput');
+  if (pdfFileInput) {
+    pdfFileInput.addEventListener('change', handlePDFFileSelection);
+  }
+
+  // PDF Collection mode toggle
+  const pdfNewCollection = document.getElementById('pdfNewCollection');
+  const pdfExistingCollection = document.getElementById('pdfExistingCollection');
+  if (pdfNewCollection && pdfExistingCollection) {
+    pdfNewCollection.addEventListener('change', () => {
+      document.getElementById('pdfNewCollectionSection').style.display = 'block';
+      document.getElementById('pdfExistingCollectionSection').style.display = 'none';
+      updatePDFUploadButton();
+    });
+    pdfExistingCollection.addEventListener('change', () => {
+      document.getElementById('pdfNewCollectionSection').style.display = 'none';
+      document.getElementById('pdfExistingCollectionSection').style.display = 'block';
+      updatePDFUploadButton();
+    });
+  }
+
+  const pdfCollectionName = document.getElementById('pdfCollectionName');
+  if (pdfCollectionName) {
+    pdfCollectionName.addEventListener('input', updatePDFUploadButton);
+  }
+
+  const pdfCollectionSelect = document.getElementById('pdfCollectionSelect');
+  if (pdfCollectionSelect) {
+    pdfCollectionSelect.addEventListener('change', (e) => {
+      updatePDFUploadButton();
+      if (e.target.value) {
+        loadPDFDocuments(parseInt(e.target.value));
+      }
+    });
+  }
+
+  const pdfChunkingStrategy = document.getElementById('pdfChunkingStrategy');
+  if (pdfChunkingStrategy) {
+    pdfChunkingStrategy.addEventListener('change', (e) => {
+      const fixedSizeOptions = document.getElementById('pdfFixedSizeOptions');
+      if (fixedSizeOptions) {
+        fixedSizeOptions.style.display = e.target.value === 'fixed' ? 'block' : 'none';
+      }
+    });
+  }
+
+  const uploadPDFBtn = document.getElementById('uploadPDFBtn');
+  if (uploadPDFBtn) {
+    uploadPDFBtn.addEventListener('click', uploadPDF);
+  }
 }
 
 // Tab management
@@ -631,13 +690,27 @@ async function loadCollections() {
     // Add merged collections
     if (mergesResult && Array.isArray(mergesResult)) {
       mergesResult.forEach(merge => {
-        // Calculate total video/comment counts from source collections
+        // Calculate total video/comment/PDF counts from source collections
         let videoCount = 0;
         let commentCount = 0;
+        let pdfCount = 0;
+        let hasPDFSources = false;
+
         if (merge.source_collections) {
           merge.source_collections.forEach(sc => {
-            videoCount += sc.video_count || 0;
-            commentCount += sc.comment_count || 0;
+            // Check if this source collection is a PDF collection
+            const isPDFSource = sc.settings && typeof sc.settings === 'string'
+              ? JSON.parse(sc.settings).type === 'pdf'
+              : sc.settings?.type === 'pdf';
+
+            if (isPDFSource) {
+              hasPDFSources = true;
+              // PDF counts will be loaded asynchronously
+              pdfCount += 0; // Placeholder, will be updated by loadMergedPDFStats
+            } else {
+              videoCount += sc.video_count || 0;
+              commentCount += sc.comment_count || 0;
+            }
           });
         }
 
@@ -647,6 +720,8 @@ async function loadCollections() {
           created_at: merge.created_at,
           video_count: videoCount,
           comment_count: commentCount,
+          pdf_count: pdfCount,
+          hasPDFSources: hasPDFSources,
           isMerge: true,
           mergeData: merge
         });
@@ -723,16 +798,32 @@ async function displayCollections(collections) {
   filteredCollections.forEach(collection => {
     const card = document.createElement('div');
     card.className = 'collection-card';
-    
+
+    // Check if this is a PDF collection
+    const isPDFCollection = collection.settings && typeof collection.settings === 'string'
+      ? JSON.parse(collection.settings).type === 'pdf'
+      : collection.settings?.type === 'pdf';
+
     // Check if this collection is incomplete
     const incompleteInfo = incompleteMap.get(collection.id);
     const isIncomplete = !!incompleteInfo;
     const status = isIncomplete ? 'incomplete' : 'completed';
     const statusText = isIncomplete ? `Incomplete (${incompleteInfo.remainingVideos} remaining)` : 'Completed';
-    const statusIcon = isIncomplete ? 
-      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>' : 
+    const statusIcon = isIncomplete ?
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>' :
       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>';
-    
+
+    // Build PDF badge if this is a PDF collection
+    const pdfBadge = isPDFCollection ? `
+      <span class="pdf-badge" title="PDF Document Collection">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+        </svg>
+        PDF
+      </span>
+    ` : '';
+
     // Build merge badge if this is a merged collection
     const mergeBadge = collection.isMerge ? `
       <span class="merge-badge" title="Merged from ${collection.mergeData.source_collections.length} collections">
@@ -751,10 +842,19 @@ async function displayCollections(collections) {
       <div class="collection-header">
         <div class="collection-title">
           ${escapeHtml(collection.search_term)}
+          ${pdfBadge}
           ${mergeBadge}
         </div>
         <div class="collection-actions">
-          ${!collection.isMerge && isIncomplete ? `
+          ${isPDFCollection ? `
+            <button class="btn btn-sm" onclick="viewPDFCollection(${collection.id}, event);" title="View PDFs">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              View
+            </button>
+          ` : !collection.isMerge && isIncomplete ? `
             <button class="btn btn-sm btn-primary" onclick="resumeCollectionFromGallery('${incompleteInfo.folderPath}/collection_manifest.json', event);" title="Resume Collection">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -779,21 +879,35 @@ async function displayCollections(collections) {
       <div class="collection-meta">
         ${new Date(collection.created_at).toLocaleDateString()} ${new Date(collection.created_at).toLocaleTimeString()}
       </div>
-      <div class="collection-stats">
-        <span>${collection.video_count || 0} videos</span>
-        <span>${collection.comment_count || 0} comments</span>
-        ${mergeInfo}
-        ${!collection.isMerge ? `<span class="status-${status}">
-          ${statusIcon}
-          ${statusText}
-        </span>` : ''}
+      <div class="collection-stats" data-pdf="${isPDFCollection}" data-merged-pdf="${collection.isMerge && collection.hasPDFSources}">
+        ${isPDFCollection ? `
+          <span>📄 <span id="pdf-count-${collection.id}">Loading...</span> PDFs</span>
+          <span>📝 <span id="excerpt-count-${collection.id}">Loading...</span> excerpts</span>
+        ` : collection.isMerge && collection.hasPDFSources ? `
+          <span>${collection.video_count || 0} videos</span>
+          <span>${collection.comment_count || 0} comments</span>
+          <span>📄 <span id="pdf-count-${collection.id}">Loading...</span> PDFs</span>
+          <span>📝 <span id="excerpt-count-${collection.id}">Loading...</span> excerpts</span>
+          ${mergeInfo}
+        ` : `
+          <span>${collection.video_count || 0} videos</span>
+          <span>${collection.comment_count || 0} comments</span>
+          ${mergeInfo}
+          ${!collection.isMerge ? `<span class="status-${status}">
+            ${statusIcon}
+            ${statusText}
+          </span>` : ''}
+        `}
       </div>
     `;
     
     card.addEventListener('click', (e) => {
       // Don't navigate if clicking buttons
       if (!e.target.closest('button')) {
-        if (collection.isMerge) {
+        if (isPDFCollection) {
+          // Open PDF collection viewer
+          viewPDFCollection(collection.id);
+        } else if (collection.isMerge) {
           // Open merge viewer with the same viewer as regular collections
           if (typeof galleryViewer !== 'undefined') {
             galleryViewer.showMerge(collection.id);
@@ -809,7 +923,197 @@ async function displayCollections(collections) {
       }
     });
     list.appendChild(card);
+
+    // Load PDF stats if this is a PDF collection
+    if (isPDFCollection) {
+      loadPDFStats(collection.id);
+    }
+    // Load aggregated PDF stats for merged collections with PDF sources
+    else if (collection.isMerge && collection.hasPDFSources) {
+      loadMergedPDFStats(collection);
+    }
   });
+}
+
+// Load PDF statistics for a collection
+async function loadPDFStats(collectionId) {
+  try {
+    const result = await window.api.pdf.list(collectionId);
+    if (result.success && result.pdfs) {
+      const pdfCount = result.pdfs.length;
+      const excerptCount = result.pdfs.reduce((sum, pdf) => sum + (pdf.excerpts_count || 0), 0);
+
+      const pdfCountEl = document.getElementById(`pdf-count-${collectionId}`);
+      const excerptCountEl = document.getElementById(`excerpt-count-${collectionId}`);
+
+      if (pdfCountEl) pdfCountEl.textContent = pdfCount;
+      if (excerptCountEl) excerptCountEl.textContent = excerptCount;
+    }
+  } catch (error) {
+    console.error(`Failed to load PDF stats for collection ${collectionId}:`, error);
+  }
+}
+
+// Load aggregated PDF statistics for merged collections
+async function loadMergedPDFStats(collection) {
+  try {
+    let totalPdfCount = 0;
+    let totalExcerptCount = 0;
+
+    // Iterate through source collections and aggregate PDF stats
+    if (collection.mergeData && collection.mergeData.source_collections) {
+      const pdfPromises = collection.mergeData.source_collections.map(async (sc) => {
+        // Check if this source collection is a PDF collection
+        const isPDFSource = sc.settings && typeof sc.settings === 'string'
+          ? JSON.parse(sc.settings).type === 'pdf'
+          : sc.settings?.type === 'pdf';
+
+        if (isPDFSource) {
+          const result = await window.api.pdf.list(sc.id);
+          if (result.success && result.pdfs) {
+            return {
+              pdfCount: result.pdfs.length,
+              excerptCount: result.pdfs.reduce((sum, pdf) => sum + (pdf.excerpts_count || 0), 0)
+            };
+          }
+        }
+        return { pdfCount: 0, excerptCount: 0 };
+      });
+
+      const results = await Promise.all(pdfPromises);
+      results.forEach(r => {
+        totalPdfCount += r.pdfCount;
+        totalExcerptCount += r.excerptCount;
+      });
+    }
+
+    // Update display
+    const pdfCountEl = document.getElementById(`pdf-count-${collection.id}`);
+    const excerptCountEl = document.getElementById(`excerpt-count-${collection.id}`);
+
+    if (pdfCountEl) pdfCountEl.textContent = totalPdfCount;
+    if (excerptCountEl) excerptCountEl.textContent = totalExcerptCount;
+
+  } catch (error) {
+    console.error(`Failed to load merged PDF stats for collection ${collection.id}:`, error);
+  }
+}
+
+// View PDF collection with excerpts
+async function viewPDFCollection(collectionId, event) {
+  if (event) event.stopPropagation();
+
+  try {
+    const result = await window.api.pdf.list(collectionId);
+    if (!result.success || !result.pdfs || result.pdfs.length === 0) {
+      showNotification('No PDFs found in this collection', 'warning');
+      return;
+    }
+
+    // Create modal viewer
+    const modal = document.createElement('div');
+    modal.className = 'pdf-viewer-modal';
+    modal.innerHTML = `
+      <div class="pdf-viewer-content">
+        <div class="pdf-viewer-header">
+          <h2>PDF Collection Documents</h2>
+          <button class="close-btn" onclick="this.closest('.pdf-viewer-modal').remove()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="pdf-list-viewer">
+          ${result.pdfs.map(pdf => `
+            <div class="pdf-card" onclick="viewPDFExcerpts(${pdf.id})">
+              <div class="pdf-icon">📄</div>
+              <div class="pdf-details">
+                <h3>${escapeHtml(pdf.title || 'Untitled')}</h3>
+                <div class="pdf-meta">
+                  <span>${pdf.num_pages || 0} pages</span>
+                  <span>${pdf.excerpts_count || 0} excerpts</span>
+                  <span>${new Date(pdf.created_at).toLocaleDateString()}</span>
+                </div>
+              </div>
+              <button class="btn btn-sm" onclick="event.stopPropagation(); deletePDF(${pdf.id}, ${collectionId})">Delete</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+  } catch (error) {
+    console.error('Failed to view PDF collection:', error);
+    showNotification('Failed to load PDF collection', 'error');
+  }
+}
+
+// View excerpts for a specific PDF
+async function viewPDFExcerpts(pdfId) {
+  try {
+    const result = await window.api.pdf.getExcerpts(pdfId);
+    if (!result.success || !result.excerpts || result.excerpts.length === 0) {
+      showNotification('No excerpts found for this PDF', 'warning');
+      return;
+    }
+
+    // Create excerpt viewer modal
+    const modal = document.createElement('div');
+    modal.className = 'pdf-excerpt-modal';
+    modal.innerHTML = `
+      <div class="pdf-excerpt-content">
+        <div class="pdf-excerpt-header">
+          <h2>${escapeHtml(result.pdfTitle || 'PDF Excerpts')}</h2>
+          <button class="close-btn" onclick="this.closest('.pdf-excerpt-modal').remove()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="excerpt-list">
+          ${result.excerpts.map((excerpt, index) => `
+            <div class="excerpt-card">
+              <div class="excerpt-number">Excerpt ${excerpt.excerpt_number}${excerpt.page_number ? ` (Page ${excerpt.page_number})` : ''}</div>
+              <div class="excerpt-text">${escapeHtml(excerpt.text_content)}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+  } catch (error) {
+    console.error('Failed to load excerpts:', error);
+    showNotification('Failed to load excerpts', 'error');
+  }
+}
+
+// Delete a PDF document
+async function deletePDF(pdfId, collectionId) {
+  if (!confirm('Are you sure you want to delete this PDF and all its excerpts?')) {
+    return;
+  }
+
+  try {
+    const result = await window.api.pdf.delete(pdfId);
+    if (result.success) {
+      showNotification('PDF deleted successfully', 'success');
+
+      // Close any open modals and refresh the collection view
+      document.querySelectorAll('.pdf-viewer-modal, .pdf-excerpt-modal').forEach(modal => modal.remove());
+
+      // Re-open the collection viewer
+      viewPDFCollection(collectionId);
+    } else {
+      showNotification('Failed to delete PDF: ' + result.error, 'error');
+    }
+  } catch (error) {
+    console.error('Failed to delete PDF:', error);
+    showNotification('Failed to delete PDF', 'error');
+  }
 }
 
 // Export functions
@@ -839,6 +1143,248 @@ async function exportToCsv() {
 async function exportToSupabase() {
   showNotification('Export to Supabase not implemented yet', 'info');
 }
+
+// ========================================
+// PDF Upload Functions
+// ========================================
+
+let selectedPDFFile = null;
+
+function handlePDFFileSelection(e) {
+  const file = e.target.files[0];
+  if (file && file.type === 'application/pdf') {
+    selectedPDFFile = file;
+    document.getElementById('pdfFileName').textContent = `Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+
+    // Auto-fill title from filename if empty
+    const titleInput = document.getElementById('pdfTitle');
+    if (!titleInput.value) {
+      titleInput.value = file.name.replace(/\.pdf$/i, '');
+    }
+
+    updatePDFUploadButton();
+  } else {
+    showNotification('Please select a valid PDF file', 'error');
+  }
+}
+
+function updatePDFUploadButton() {
+  const uploadBtn = document.getElementById('uploadPDFBtn');
+  const isNewCollection = document.getElementById('pdfNewCollection').checked;
+
+  let hasValidCollection = false;
+  if (isNewCollection) {
+    const collectionName = document.getElementById('pdfCollectionName').value.trim();
+    hasValidCollection = collectionName.length > 0;
+  } else {
+    const collectionId = document.getElementById('pdfCollectionSelect').value;
+    hasValidCollection = collectionId !== '';
+  }
+
+  console.log('PDF Upload Button Update - Mode:', isNewCollection ? 'new' : 'existing', 'Valid:', hasValidCollection, 'File:', selectedPDFFile ? selectedPDFFile.name : 'none');
+
+  if (uploadBtn) {
+    uploadBtn.disabled = !(selectedPDFFile && hasValidCollection);
+  }
+}
+
+async function uploadPDF() {
+  if (!selectedPDFFile) {
+    showNotification('Please select a PDF file', 'error');
+    return;
+  }
+
+  const isNewCollection = document.getElementById('pdfNewCollection').checked;
+  let collectionId;
+
+  // Show progress UI
+  document.getElementById('pdfUploadProgress').style.display = 'block';
+  document.getElementById('uploadPDFBtn').disabled = true;
+
+  const statusEl = document.getElementById('pdfUploadStatus');
+  const percentageEl = document.getElementById('pdfUploadPercentage');
+  const progressBar = document.getElementById('pdfUploadProgressBar');
+  const logEl = document.getElementById('pdfUploadLog');
+
+  function addPDFLog(message, type = 'info') {
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type}`;
+    entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+    logEl.appendChild(entry);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  try {
+    // Create new collection if needed
+    if (isNewCollection) {
+      const collectionName = document.getElementById('pdfCollectionName').value.trim();
+      if (!collectionName) {
+        showNotification('Please enter a collection name', 'error');
+        document.getElementById('uploadPDFBtn').disabled = false;
+        return;
+      }
+
+      addPDFLog('Creating new collection...');
+      statusEl.textContent = 'Creating collection...';
+      percentageEl.textContent = '5%';
+      progressBar.style.width = '5%';
+
+      const createResult = await window.api.collections.createPDFCollection({ name: collectionName });
+      if (!createResult.success) {
+        throw new Error(createResult.error || 'Failed to create collection');
+      }
+
+      collectionId = createResult.collectionId;
+      addPDFLog(`✓ Collection created: ${collectionName}`, 'success');
+    } else {
+      collectionId = parseInt(document.getElementById('pdfCollectionSelect').value);
+      if (!collectionId) {
+        showNotification('Please select a collection', 'error');
+        document.getElementById('uploadPDFBtn').disabled = false;
+        return;
+      }
+    }
+
+    const title = document.getElementById('pdfTitle').value || selectedPDFFile.name.replace(/\.pdf$/i, '');
+    const chunkingStrategy = document.getElementById('pdfChunkingStrategy').value;
+    const chunkSize = parseInt(document.getElementById('pdfChunkSize').value) || 500;
+
+    addPDFLog('Starting PDF upload...');
+    statusEl.textContent = 'Uploading PDF file...';
+    percentageEl.textContent = '10%';
+    progressBar.style.width = '10%';
+
+    // Call IPC to upload PDF
+    const result = await window.api.pdf.upload({
+      filePath: selectedPDFFile.path,
+      collectionId,
+      title,
+      chunkingStrategy,
+      chunkSize
+    });
+
+    if (result.success) {
+      statusEl.textContent = 'PDF processed successfully!';
+      percentageEl.textContent = '100%';
+      progressBar.style.width = '100%';
+
+      addPDFLog(`✓ PDF uploaded: ${result.metadata.title}`, 'success');
+      addPDFLog(`✓ Created ${result.excerpts} excerpts`, 'success');
+      addPDFLog(`✓ Chunking strategy: ${chunkingStrategy}`, 'info');
+
+      showNotification(`PDF processed: ${result.excerpts} excerpts created`, 'success');
+
+      // Reset form
+      setTimeout(() => {
+        selectedPDFFile = null;
+        document.getElementById('pdfFileInput').value = '';
+        document.getElementById('pdfFileName').textContent = '';
+        document.getElementById('pdfTitle').value = '';
+        document.getElementById('pdfUploadProgress').style.display = 'none';
+        document.getElementById('uploadPDFBtn').disabled = false;
+        logEl.innerHTML = '';
+
+        // Reload PDF list
+        loadPDFDocuments(collectionId);
+      }, 2000);
+
+    } else {
+      throw new Error(result.error || 'Upload failed');
+    }
+
+  } catch (error) {
+    console.error('PDF upload error:', error);
+    addPDFLog(`✗ Error: ${error.message}`, 'error');
+    statusEl.textContent = 'Upload failed';
+    showNotification(`PDF upload failed: ${error.message}`, 'error');
+    document.getElementById('uploadPDFBtn').disabled = false;
+  }
+}
+
+async function loadPDFCollections() {
+  const select = document.getElementById('pdfCollectionSelect');
+  if (!select) return;
+
+  select.innerHTML = '<option value="">Loading collections...</option>';
+
+  try {
+    const result = await window.api.collections.list();
+    console.log('PDF collections loaded:', result);
+
+    if (result.success && result.data && result.data.length > 0) {
+      select.innerHTML = '<option value="">Select a collection...</option>';
+      result.data.forEach(collection => {
+        const option = document.createElement('option');
+        option.value = collection.id;
+        option.textContent = `${collection.search_term} (${new Date(collection.created_at).toLocaleDateString()})`;
+        select.appendChild(option);
+      });
+    } else {
+      select.innerHTML = '<option value="">No collections found</option>';
+    }
+  } catch (error) {
+    console.error('Failed to load collections:', error);
+    select.innerHTML = '<option value="">Error loading collections</option>';
+  }
+}
+
+async function loadPDFDocuments(collectionId) {
+  const listEl = document.getElementById('pdfDocumentsList');
+  if (!listEl || !collectionId) return;
+
+  try {
+    const result = await window.api.pdf.list(collectionId);
+    if (result.success && result.pdfs && result.pdfs.length > 0) {
+      listEl.innerHTML = result.pdfs.map(pdf => `
+        <div class="pdf-item">
+          <div class="pdf-info">
+            <h4>${escapeHtml(pdf.title)}</h4>
+            <p>${pdf.num_pages} pages • ${pdf.excerpts_count} excerpts</p>
+            <small>${new Date(pdf.created_at).toLocaleString()}</small>
+          </div>
+          <div class="pdf-actions">
+            <button class="btn btn-sm" onclick="viewPDFExcerpts(${pdf.id})">View Excerpts</button>
+            <button class="btn btn-sm btn-danger" onclick="deletePDF(${pdf.id}, ${collectionId})">Delete</button>
+          </div>
+        </div>
+      `).join('');
+    } else {
+      listEl.innerHTML = `
+        <div class="empty-state">
+          <h3>No PDFs in this collection</h3>
+          <p>Upload a PDF to get started</p>
+        </div>
+      `;
+    }
+  } catch (error) {
+    console.error('Failed to load PDF documents:', error);
+  }
+}
+
+// Listen for view changes to load PDF collections
+document.addEventListener('viewChanged', (e) => {
+  if (e.detail.view === 'collections') {
+    // Small delay to ensure tab switching is complete
+    setTimeout(() => {
+      const pdfsTab = document.getElementById('pdfsTab');
+      if (pdfsTab && pdfsTab.classList.contains('active')) {
+        loadPDFCollections();
+      }
+    }, 100);
+  }
+});
+
+// Also listen for tab changes within collections view
+document.addEventListener('DOMContentLoaded', () => {
+  const collectionsTabs = document.querySelectorAll('#collectionsView .tab-btn');
+  collectionsTabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.tab === 'pdfs') {
+        loadPDFCollections();
+      }
+    });
+  });
+});
 
 // Open output folder
 async function openOutputFolder() {
@@ -1198,10 +1744,8 @@ class AIAnalysisController {
 
   async initialize() {
     await this.loadCollections();
-    await this.loadAllProjects();
+    await this.loadAllProjects();  // This now calls updateStatsBar() and renderProjectsGallery()
     this.populateCollectionDropdown();
-    this.updateStatsBar();
-    this.renderProjectsGallery();
   }
 
   setupEventListeners() {
@@ -1292,8 +1836,10 @@ class AIAnalysisController {
     // Content type checkboxes - update counts
     const rateChunks = document.getElementById('rate-chunks');
     const rateComments = document.getElementById('rate-comments');
+    const ratePDFs = document.getElementById('rate-pdfs');
     if (rateChunks) rateChunks.addEventListener('change', () => this.updateEstimate());
     if (rateComments) rateComments.addEventListener('change', () => this.updateEstimate());
+    if (ratePDFs) ratePDFs.addEventListener('change', () => this.updateEstimate());
     
     // Buttons
     const startBtn = document.getElementById('start-rating-btn');
@@ -1725,9 +2271,14 @@ class AIAnalysisController {
           <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); window.aiController.showProjectDetails(${project.id})">
             View Details
           </button>
+          ${(project.status === 'paused' || project.status === 'in_progress') && project.rated_items < project.total_items ? `
+            <button class="btn btn-success btn-sm" onclick="event.stopPropagation(); window.aiController.resumeProject(${project.id})">
+              ▶ Resume
+            </button>
+          ` : ''}
           ${project.failed_items > 0 ? `
             <button class="btn btn-warning btn-sm" onclick="event.stopPropagation(); window.aiController.resumeProject(${project.id})">
-              Resume (${project.failed_items})
+              🔄 Retry Failed (${project.failed_items})
             </button>
           ` : ''}
           ${project.completed_at ? `
@@ -2167,9 +2718,57 @@ class AIAnalysisController {
   }
 
   async resumeProject(projectId) {
-    console.log('Resume project:', projectId);
-    // TODO: Implement resume functionality
-    alert('Resume functionality coming soon!');
+    try {
+      // Get the project details
+      const project = await window.api.ai.getRatingProject({ projectId });
+      if (!project.success || !project.data) {
+        showNotification('Failed to load project', 'error');
+        return;
+      }
+
+      const proj = project.data;
+      const settings = typeof proj.settings === 'string' ? JSON.parse(proj.settings) : proj.settings;
+
+      // Resume by calling startRating with the existing config
+      const config = {
+        collectionId: proj.merge_id ? `merge:${proj.merge_id}` : proj.collection_id,
+        projectId: proj.id,  // Pass projectId to skip already-rated items
+        projectName: proj.project_name,
+        researchIntent: proj.research_intent,
+        ratingScale: proj.rating_scale,
+        includeChunks: settings.includeChunks || false,
+        includeComments: settings.includeComments || false,
+        includePDFs: settings.includePDFs || false,
+        batchSize: settings.batchSize || 50,
+        concurrentRequests: settings.concurrentRequests || 5,
+        retryDelay: settings.retryDelay || 2,
+        includeConfidence: settings.includeConfidence !== false,
+        parentProjectId: proj.parent_project_id || null,
+        filterCriteria: proj.filter_criteria ? (typeof proj.filter_criteria === 'string' ? JSON.parse(proj.filter_criteria) : proj.filter_criteria) : null
+      };
+
+      const result = await window.api.ai.startRating(config);
+
+      if (result.success) {
+        this.ratingInProgress = true;
+        const progressSection = document.getElementById('rating-progress-section');
+        if (progressSection) progressSection.style.display = 'block';
+
+        const projectNameSpan = document.getElementById('progress-project-name');
+        if (projectNameSpan) projectNameSpan.textContent = proj.project_name;
+
+        showNotification(`Resumed: ${proj.project_name}`, 'success');
+
+        // Close modal and refresh projects list
+        document.getElementById('create-project-modal').style.display = 'none';
+        this.loadRatingProjects();
+      } else {
+        showNotification(`Error: ${result.error}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error resuming project:', error);
+      showNotification(`Error resuming: ${error.message}`, 'error');
+    }
   }
 
   async exportProject(projectId) {
@@ -2181,17 +2780,37 @@ class AIAnalysisController {
   async populateCollectionDropdown() {
     const select = document.getElementById('ai-collection-select');
     if (!select) return;
-    
+
     try {
-      const result = await window.api.db.getCollections();
-      
-      if (result.success && result.data) {
-        select.innerHTML = '<option value="">Choose a collection...</option>';
-        result.data.forEach(col => {
+      // Load both regular and merged collections
+      const [collectionsResult, mergesResult] = await Promise.all([
+        window.api.db.getCollections(),
+        window.api.database.getAllMerges()
+      ]);
+
+      select.innerHTML = '<option value="">Choose a collection...</option>';
+
+      // Add regular collections
+      if (collectionsResult.success && collectionsResult.data) {
+        collectionsResult.data.forEach(col => {
           const option = document.createElement('option');
           option.value = col.id;
+          option.dataset.isMerge = 'false';
           const collectionName = col.search_term || col.name || 'Unnamed Collection';
           option.textContent = `${collectionName} (${new Date(col.created_at).toLocaleDateString()})`;
+          select.appendChild(option);
+        });
+      }
+
+      // Add merged collections
+      if (mergesResult && Array.isArray(mergesResult)) {
+        mergesResult.forEach(merge => {
+          const option = document.createElement('option');
+          option.value = `merge:${merge.id}`;
+          option.dataset.isMerge = 'true';
+          option.dataset.mergeId = merge.id;
+          const mergeName = merge.name || 'Unnamed Merge';
+          option.textContent = `${mergeName} (${new Date(merge.created_at).toLocaleDateString()}) [MERGED]`;
           select.appendChild(option);
         });
       }
@@ -2202,36 +2821,71 @@ class AIAnalysisController {
 
   async onCollectionSelected(collectionId) {
     if (!collectionId) return;
-    this.currentCollection = parseInt(collectionId);
-    
+
+    // Check if this is a merged collection
+    if (collectionId.startsWith('merge:')) {
+      // Keep as string for merged collections
+      this.currentCollection = collectionId;
+      this.isMergedCollection = true;
+    } else {
+      // Parse as integer for regular collections
+      this.currentCollection = parseInt(collectionId);
+      this.isMergedCollection = false;
+    }
+
     // Get item counts
     try {
       const result = await window.api.ai.getItemCounts({ collectionId: this.currentCollection });
+      console.log('[Rating UI] Item counts result:', result);
+
       if (result.success) {
         const chunksCount = document.getElementById('chunks-count');
         const commentsCount = document.getElementById('comments-count');
-        
+        const pdfsCount = document.getElementById('pdfs-count');
+
         if (chunksCount) chunksCount.textContent = `(${result.data.chunks} items)`;
         if (commentsCount) commentsCount.textContent = `(${result.data.comments} items)`;
-        
+        if (pdfsCount) pdfsCount.textContent = `(${result.data.pdfs || 0} items)`;
+
+        console.log('[Rating UI] Updated counts - chunks:', result.data.chunks, 'comments:', result.data.comments, 'pdfs:', result.data.pdfs);
+
         this.updateEstimate();
       }
     } catch (error) {
       console.error('Error getting item counts:', error);
     }
-    
+
     // Load existing projects
     this.loadRatingProjects();
   }
 
+  async loadAllProjects() {
+    try {
+      console.log('[AI] Loading all rating projects...');
+      const result = await window.api.ai.getAllRatingProjects();
+      console.log('[AI] getAllRatingProjects result:', result);
+      if (result.success) {
+        console.log('[AI] Found', result.data.length, 'projects');
+        this.allProjects = result.data;  // Store in the instance variable
+        this.updateStatsBar();           // Update the stats bar
+        this.renderProjectsGallery();    // Render the gallery
+      } else {
+        console.error('[AI] Failed to load projects:', result.error);
+      }
+    } catch (error) {
+      console.error('Error loading all projects:', error);
+    }
+  }
+
   async loadRatingProjects() {
     if (!this.currentCollection) return;
-    
+
     try {
-      const result = await window.api.ai.getRatingProjects({ 
-        collectionId: this.currentCollection 
+      // Pass the current collection (which might be "merge:2" format)
+      const result = await window.api.ai.getRatingProjects({
+        collectionId: this.currentCollection
       });
-      
+
       if (result.success) {
         this.renderProjectsList(result.data);
       }
@@ -2276,15 +2930,19 @@ class AIAnalysisController {
   updateEstimate() {
     const includeChunks = document.getElementById('rate-chunks')?.checked || false;
     const includeComments = document.getElementById('rate-comments')?.checked || false;
-    
+    const includePDFs = document.getElementById('rate-pdfs')?.checked || false;
+
     const chunksText = document.getElementById('chunks-count')?.textContent || '(0 items)';
     const commentsText = document.getElementById('comments-count')?.textContent || '(0 items)';
-    
+    const pdfsText = document.getElementById('pdfs-count')?.textContent || '(0 items)';
+
     const chunksCount = parseInt(chunksText.match(/\d+/)?.[0] || 0);
     const commentsCount = parseInt(commentsText.match(/\d+/)?.[0] || 0);
-    
-    const totalItems = (includeChunks ? chunksCount : 0) + 
-                      (includeComments ? commentsCount : 0);
+    const pdfsCount = parseInt(pdfsText.match(/\d+/)?.[0] || 0);
+
+    const totalItems = (includeChunks ? chunksCount : 0) +
+                      (includeComments ? commentsCount : 0) +
+                      (includePDFs ? pdfsCount : 0);
     const cost = totalItems * 0.00015;
     
     const itemsEstimate = document.getElementById('items-estimate');
@@ -2316,7 +2974,7 @@ class AIAnalysisController {
     // Check if this is a child project
     const parentProjectId = document.getElementById('parent-project-id')?.value;
     let filterCriteria = null;
-    let includeChunks, includeComments;
+    let includeChunks, includeComments, includePDFs;
 
     if (parentProjectId) {
       // This is a CHILD PROJECT - collect filter criteria
@@ -2330,6 +2988,9 @@ class AIAnalysisController {
       if (document.getElementById('filter-comments')?.checked) {
         contentTypes.push('comment');
       }
+      if (document.getElementById('filter-pdfs')?.checked) {
+        contentTypes.push('pdf_excerpt');
+      }
 
       filterCriteria = {
         min_score: minScore,
@@ -2340,15 +3001,19 @@ class AIAnalysisController {
       // For child projects, content types come from filter checkboxes
       includeChunks = document.getElementById('filter-video-chunks')?.checked || false;
       includeComments = document.getElementById('filter-comments')?.checked || false;
+      includePDFs = document.getElementById('filter-pdfs')?.checked || false;
 
       console.log('[Hierarchical] Creating child project with filter:', filterCriteria);
     } else {
       // For root projects, content types come from regular checkboxes
       includeChunks = document.getElementById('rate-chunks')?.checked || false;
       includeComments = document.getElementById('rate-comments')?.checked || false;
+      includePDFs = document.getElementById('rate-pdfs')?.checked || false;
+
+      console.log('[Rating] Content types selected - chunks:', includeChunks, 'comments:', includeComments, 'pdfs:', includePDFs);
     }
 
-    if (!includeChunks && !includeComments) {
+    if (!includeChunks && !includeComments && !includePDFs) {
       showNotification('Please select at least one content type to rate', 'error');
       return;
     }
@@ -2360,6 +3025,7 @@ class AIAnalysisController {
       ratingScale,
       includeChunks,
       includeComments,
+      includePDFs,
       batchSize,
       concurrentRequests,
       retryDelay,
@@ -2406,7 +3072,7 @@ class AIAnalysisController {
     // Check if this is a child project (same logic as startRating)
     const parentProjectId = document.getElementById('parent-project-id')?.value;
     let filterCriteria = null;
-    let includeChunks, includeComments;
+    let includeChunks, includeComments, includePDFs;
 
     if (parentProjectId) {
       // Child project - use filter checkboxes
@@ -2420,6 +3086,9 @@ class AIAnalysisController {
       if (document.getElementById('filter-comments')?.checked) {
         contentTypes.push('comment');
       }
+      if (document.getElementById('filter-pdfs')?.checked) {
+        contentTypes.push('pdf_excerpt');
+      }
 
       filterCriteria = {
         min_score: minScore,
@@ -2429,13 +3098,15 @@ class AIAnalysisController {
 
       includeChunks = document.getElementById('filter-video-chunks')?.checked || false;
       includeComments = document.getElementById('filter-comments')?.checked || false;
+      includePDFs = document.getElementById('filter-pdfs')?.checked || false;
     } else {
       // Root project - use regular checkboxes
       includeChunks = document.getElementById('rate-chunks')?.checked || false;
       includeComments = document.getElementById('rate-comments')?.checked || false;
+      includePDFs = document.getElementById('rate-pdfs')?.checked || false;
     }
 
-    if (!includeChunks && !includeComments) {
+    if (!includeChunks && !includeComments && !includePDFs) {
       showNotification('Please select at least one content type to rate', 'error');
       return;
     }
@@ -2447,6 +3118,7 @@ class AIAnalysisController {
       ratingScale,
       includeChunks,
       includeComments,
+      includePDFs,
       parentProjectId: parentProjectId ? parseInt(parentProjectId) : null,
       filterCriteria: filterCriteria
     };

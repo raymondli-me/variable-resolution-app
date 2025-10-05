@@ -918,8 +918,25 @@ class GalleryViewer {
         return;
       }
 
+      // Check if this merge has PDF sources
+      let hasPDFSources = false;
+      if (merge.source_collections) {
+        hasPDFSources = merge.source_collections.some(sc => {
+          const isPDFSource = sc.settings && typeof sc.settings === 'string'
+            ? JSON.parse(sc.settings).type === 'pdf'
+            : sc.settings?.type === 'pdf';
+          return isPDFSource;
+        });
+      }
+
       // Get videos from all source collections
       const videos = await window.api.database.getMergeVideos(mergeId);
+
+      // If this merge has PDF sources and no videos, show PDF merge viewer instead
+      if (hasPDFSources && videos.length === 0) {
+        this.showMergePDFView(merge, mergeId);
+        return;
+      }
 
       // Calculate total comment count
       let totalComments = 0;
@@ -1739,6 +1756,158 @@ Comments: ${this.currentCollection.comment_count || 0}</pre>`;
       const text = item.textContent.toLowerCase();
       item.style.display = text.includes(term) ? 'block' : 'none';
     });
+  }
+
+  async showMergePDFView(merge, mergeId) {
+    try {
+      // Get PDFs from all source collections
+      const pdfs = await window.api.database.getMergePDFs(mergeId);
+
+      // Calculate total excerpt count
+      let totalExcerpts = 0;
+      pdfs.forEach(pdf => {
+        totalExcerpts += pdf.excerpts_count || 0;
+      });
+
+      // Update header
+      const mergeBadge = `<span style="background: linear-gradient(135deg, var(--accent) 0%, #2563eb 100%); color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600; margin-left: 0.5rem;">MERGED</span>`;
+      document.getElementById('galleryTitle').innerHTML = `${merge.name}${mergeBadge}`;
+      document.getElementById('galleryStats').textContent = `${pdfs.length} PDFs, ${totalExcerpts} excerpts from ${merge.source_collections.length} collections`;
+
+      // Populate source collection filter
+      const sourceFilter = document.getElementById('sourceCollectionFilter');
+      if (sourceFilter) {
+        sourceFilter.innerHTML = '<option value="all">All Sources</option>';
+        if (merge.source_collections) {
+          merge.source_collections.forEach(sc => {
+            const option = document.createElement('option');
+            option.value = sc.id;
+            option.textContent = sc.search_term;
+            sourceFilter.appendChild(option);
+          });
+        }
+      }
+
+      // Show merge filters
+      const mergeFilters = document.getElementById('mergeFilters');
+      if (mergeFilters) {
+        mergeFilters.style.display = 'flex';
+      }
+
+      // Hide gallery/list view, show custom PDF list
+      const galleryView = document.getElementById('galleryView');
+      const listView = document.getElementById('listView');
+      const reportView = document.getElementById('reportView');
+
+      if (galleryView) galleryView.style.display = 'none';
+      if (listView) listView.style.display = 'none';
+      if (reportView) reportView.style.display = 'block';
+
+      // Render PDF list in report view
+      if (reportView) {
+        reportView.innerHTML = `
+          <div class="merged-pdf-list" style="padding: 2rem;">
+            <div style="margin-bottom: 1.5rem;">
+              <h3 style="margin-bottom: 1rem;">PDF Documents</h3>
+              <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                <select id="pdfSourceFilter" style="padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
+                  <option value="all">All Sources</option>
+                  ${merge.source_collections.map(sc => `<option value="${sc.id}">${this.escapeHtml(sc.search_term)}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <div id="mergedPDFContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
+              ${this.renderMergedPDFs(pdfs)}
+            </div>
+          </div>
+        `;
+
+        // Add filter listener
+        const pdfSourceFilter = document.getElementById('pdfSourceFilter');
+        if (pdfSourceFilter) {
+          pdfSourceFilter.addEventListener('change', () => {
+            const selectedSource = pdfSourceFilter.value;
+            const filteredPDFs = selectedSource === 'all'
+              ? pdfs
+              : pdfs.filter(pdf => pdf.source_collection_id == selectedSource);
+
+            const container = document.getElementById('mergedPDFContainer');
+            if (container) {
+              container.innerHTML = this.renderMergedPDFs(filteredPDFs);
+            }
+          });
+        }
+      }
+
+      // Show modal
+      this.modal.style.display = 'block';
+
+    } catch (error) {
+      console.error('Error showing merged PDF view:', error);
+    }
+  }
+
+  renderMergedPDFs(pdfs) {
+    if (!pdfs || pdfs.length === 0) {
+      return '<div style="grid-column: 1/-1; text-align: center; padding: 3rem; color: var(--text-secondary);">No PDFs found</div>';
+    }
+
+    return pdfs.map(pdf => `
+      <div class="pdf-card" style="border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.2s;"
+           onclick="galleryViewer.viewMergedPDFExcerpts(${pdf.id}, '${this.escapeHtml(pdf.title)}', '${this.escapeHtml(pdf.source_collection_name)}')">
+        <div style="display: flex; align-items: flex-start; gap: 1rem;">
+          <div style="font-size: 2rem;">📄</div>
+          <div style="flex: 1; min-width: 0;">
+            <h4 style="margin: 0 0 0.5rem 0; font-size: 1rem; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(pdf.title)}</h4>
+            <div style="font-size: 0.875rem; color: var(--text-secondary);">
+              <div>${pdf.num_pages || 0} pages</div>
+              <div>${pdf.excerpts_count || 0} excerpts</div>
+              <div style="margin-top: 0.5rem; padding: 0.25rem 0.5rem; background: var(--accent-secondary); border-radius: 4px; display: inline-block;">
+                ${this.escapeHtml(pdf.source_collection_name)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async viewMergedPDFExcerpts(pdfId, pdfTitle, sourceName) {
+    try {
+      const result = await window.api.pdf.getExcerpts(pdfId);
+      if (!result.success || !result.excerpts || result.excerpts.length === 0) {
+        showNotification('No excerpts found for this PDF', 'warning');
+        return;
+      }
+
+      // Create modal for excerpts
+      const modal = document.createElement('div');
+      modal.className = 'pdf-excerpts-modal';
+      modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.9); display: flex; align-items: center; justify-content: center; z-index: 20000;';
+      modal.innerHTML = `
+        <div style="background: var(--bg-primary); border-radius: 12px; max-width: 800px; max-height: 90vh; overflow-y: auto; padding: 2rem; position: relative;">
+          <button onclick="this.closest('.pdf-excerpts-modal').remove()" style="position: absolute; top: 1rem; right: 1rem; background: none; border: none; color: var(--text-primary); font-size: 2rem; cursor: pointer; line-height: 1;">&times;</button>
+          <h2 style="margin: 0 0 0.5rem 0;">${this.escapeHtml(pdfTitle)}</h2>
+          <p style="color: var(--text-secondary); margin: 0 0 1.5rem 0;">From: ${this.escapeHtml(sourceName)}</p>
+          <div style="display: flex; flex-direction: column; gap: 1rem;">
+            ${result.excerpts.map((excerpt, idx) => `
+              <div style="padding: 1rem; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                  <strong style="color: var(--accent-primary);">Excerpt ${excerpt.excerpt_number || idx + 1}</strong>
+                  <span style="color: var(--text-secondary); font-size: 0.875rem;">Page ${excerpt.page_number || '?'}</span>
+                </div>
+                <div style="white-space: pre-wrap; line-height: 1.6; color: var(--text-primary);">${this.escapeHtml(excerpt.text_content)}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+    } catch (error) {
+      console.error('Failed to load PDF excerpts:', error);
+      showNotification('Failed to load excerpts', 'error');
+    }
   }
 
   // Utility functions

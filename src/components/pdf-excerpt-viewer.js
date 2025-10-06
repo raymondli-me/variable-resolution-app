@@ -170,7 +170,7 @@ class PDFExcerptViewer {
 
       // Show loading state
       const excerptsList = this.getElement('excerptsList');
-      const loadingState = this.getElement('pdfLoadingState');
+      const loadingState = this.getElement('pdfLoadingState', true); // Silent - may not exist after container cleared
 
       if (excerptsList) excerptsList.innerHTML = '<div class="loading">Loading excerpts...</div>';
       if (loadingState) loadingState.style.display = 'flex';
@@ -201,7 +201,7 @@ class PDFExcerptViewer {
       console.error('[PDFExcerptViewer] Error loading excerpts:', error);
       const excerptsList = this.getElement('excerptsList');
       if (excerptsList) excerptsList.innerHTML = '<div class="empty-state error">Error loading excerpts</div>';
-      const loadingState = this.getElement('pdfLoadingState');
+      const loadingState = this.getElement('pdfLoadingState', true);
       if (loadingState) loadingState.textContent = 'Error loading PDF';
     }
   }
@@ -211,7 +211,7 @@ class PDFExcerptViewer {
       // Check if PDF.js is loaded
       if (typeof pdfjsLib === 'undefined') {
         console.error('[PDFExcerptViewer] PDF.js library not loaded');
-        const loadingState = this.getElement('pdfLoadingState');
+        const loadingState = this.getElement('pdfLoadingState', true);
         if (loadingState) loadingState.textContent = 'PDF.js library not found';
         return;
       }
@@ -220,7 +220,7 @@ class PDFExcerptViewer {
       const filePathResult = await window.api.pdf.getFilePath(pdfId);
       if (!filePathResult || !filePathResult.success) {
         console.error('[PDFExcerptViewer] Failed to get PDF file path:', filePathResult?.error);
-        const loadingState = this.getElement('pdfLoadingState');
+        const loadingState = this.getElement('pdfLoadingState', true);
         if (loadingState) loadingState.textContent = 'Failed to locate PDF file';
         return;
       }
@@ -268,7 +268,7 @@ class PDFExcerptViewer {
 
     } catch (error) {
       console.error('[PDFExcerptViewer] Error initializing PDF viewer:', error);
-      const loadingState = this.getElement('pdfLoadingState');
+      const loadingState = this.getElement('pdfLoadingState', true);
       if (loadingState) {
         loadingState.innerHTML = `
           <div class="pdf-error">
@@ -560,11 +560,12 @@ class PDFExcerptViewer {
   /**
    * Safely get element by ID with null check
    * @param {string} id - Element ID
+   * @param {boolean} silent - Skip warning if true
    * @returns {HTMLElement|null}
    */
-  getElement(id) {
+  getElement(id, silent = false) {
     const el = document.getElementById(id);
-    if (!el) {
+    if (!el && !silent) {
       console.warn(`[PDFExcerptViewer] Element not found: ${id}`);
     }
     return el;

@@ -948,6 +948,23 @@ ipcMain.handle('folders:import', async (event, zipPath, options) => {
   }
 });
 
+// Dialog handlers for file pickers
+ipcMain.handle('dialog:openFile', async (event, options) => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: options.filters || []
+  });
+  return result.filePaths[0]; // Return first selected file or undefined
+});
+
+ipcMain.handle('dialog:saveFile', async (event, options) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: options.defaultPath || '',
+    filters: options.filters || []
+  });
+  return result.filePath; // Return selected path or undefined
+});
+
 // Check for incomplete collections handler
 ipcMain.handle('collections:checkIncomplete', async (event) => {
   try {
@@ -1569,7 +1586,7 @@ ipcMain.handle('pdf:getExcerpts', async (event, pdfId) => {
 
     return {
       success: true,
-      excerpts
+      data: excerpts  // Fixed: renamed 'excerpts' to 'data' for API consistency
     };
 
   } catch (error) {

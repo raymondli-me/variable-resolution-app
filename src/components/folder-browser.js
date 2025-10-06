@@ -473,8 +473,10 @@ class FolderBrowser {
         return;
       }
 
-      // Check collection type
-      const settings = JSON.parse(collection.settings || '{}');
+      // Check collection type - handle settings being string or already-parsed object
+      const settings = typeof collection.settings === 'string'
+        ? JSON.parse(collection.settings || '{}')
+        : (collection.settings || {});
       const isPDF = settings.type === 'pdf';
 
       if (isPDF) {

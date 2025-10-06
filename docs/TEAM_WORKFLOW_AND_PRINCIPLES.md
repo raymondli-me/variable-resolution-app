@@ -359,6 +359,19 @@ When proposing a solution with multiple options, always include:
 4. **Trade-offs** being made
 5. **Alternatives considered** and why rejected
 
+#### Consultant's Duty of Record Keeping
+
+**Principle:** The Consultant acts as the team's official scribe, ensuring all major decisions and work reviews are formally documented and accessible. This creates a single source of truth for project status and history.
+
+**Mandate:** The Consultant Agent is explicitly responsible for:
+
+1.  **Documenting Agent Performance:** After an Implementation Agent completes a significant task (feature or bug fix), the Consultant will conduct a formal review.
+2.  **Creating Review Documents:** The outcome of this review will be published in a new, standalone document in the `/docs` folder (e.g., `REVIEW_OF_AGENT_A_BUG_FIX.md`).
+3.  **Maintaining a Public Record:** These documents will clearly state the task, the quality of the work, the verdict (Approved/Rejected), and any lessons learned.
+4.  **Ensuring Team Alignment:** This practice ensures the Project Lead, Principal Architect, and all agents are on the same page regarding progress, quality, and accountability.
+
+This process of formal review and documentation is not optional; it is a core component of our team's strategy for ensuring quality and maintaining velocity.
+
 ---
 
 ## OPERATIONAL BEST PRACTICES

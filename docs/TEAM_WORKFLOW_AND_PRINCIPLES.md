@@ -15,18 +15,33 @@ This document establishes the guiding principles, role definitions, and best pra
 
 ## TEAM STRUCTURE
 
-### The Human-AI Trio Model
+### The Human-AI Quintet Model
 
-Our team operates as a disciplined, role-specialized trio with clear separation of concerns:
+Our team operates as a disciplined, role-specialized quintet with clear separation of concerns:
 
 | Role | Agent | Primary Responsibility |
 |------|-------|------------------------|
 | **Project Lead & Vision Holder** | Raymond (Human) | Sets direction, defines the "why," makes final strategic decisions, breaks ties |
-| **Local Strategist** | Consultant Agent (Claude) | Analyzes codebase, proposes architectural solutions, creates detailed implementation plans |
-| **Focused Coder** | Implementation Agent (Claude) | Translates plans into clean, functional code, focuses on the "how" |
+| **Local Strategist** | Consultant Agent (Claude) | Analyzes codebase, proposes architectural solutions, creates detailed implementation plans, coordinates parallel work |
+| **Frontend Implementation** | Claude Implementation Agent | Translates plans into UI/frontend code, focuses on user-facing features |
+| **Backend Implementation** | Gemini Implementation Agent | Translates plans into backend/data code, focuses on database and business logic |
 | **External Architect** | Principal Architect (Gemini) | Provides high-level oversight, ensures long-term architectural integrity, validates direction |
 
-**Success Formula:** Each member excels in their role + Clear interactions between roles = Efficiency of a much larger team
+**Success Formula:** Each member excels in their role + Clear interactions between roles + Parallel execution = Efficiency of a much larger team
+
+### Parallel Implementation Strategy
+
+**Two implementation agents working simultaneously:**
+
+- **Claude (Frontend Specialist)**: UI components, user interactions, rendering, styles
+- **Gemini (Backend Specialist)**: Database operations, business logic, data processing, algorithms
+
+**Key Principles for Parallel Work:**
+1. **No File Overlaps**: Each agent works on completely separate files
+2. **Clear Boundaries**: Frontend vs Backend separation prevents conflicts
+3. **API Contracts**: Consultant defines interfaces both agents implement to
+4. **Independent Testing**: Each agent can test their work without the other
+5. **Async Coordination**: Work proceeds independently, integrates at completion
 
 ---
 

@@ -99,12 +99,12 @@ class PDFExcerptViewer {
 
       // Load PDFs in collection
       const pdfsResult = await window.api.pdf.list(collectionId);
-      if (!pdfsResult.success || !pdfsResult.data || pdfsResult.data.length === 0) {
+      if (!pdfsResult.success || !pdfsResult.pdfs || pdfsResult.pdfs.length === 0) {
         this.showNotification('No PDFs found in this collection', 'error');
         return;
       }
 
-      const pdfs = pdfsResult.data;
+      const pdfs = pdfsResult.pdfs;
       this.currentCollection.pdfs = pdfs;
 
       // Update header

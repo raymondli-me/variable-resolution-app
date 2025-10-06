@@ -374,6 +374,34 @@ This process of formal review and documentation is not optional; it is a core co
 
 ---
 
+## WORKFLOW PROTOCOL
+
+This section defines the standard, multi-stage process for taking a feature from concept to completion.
+
+### Phase 1: Planning (Consultant & Project Lead)
+
+1.  **Concept:** The Project Lead (Raymond) defines a high-level goal.
+2.  **Proposal:** The Consultant Agent analyzes the codebase and architecture, then proposes a detailed implementation plan, including handoff documents for implementation agents.
+3.  **Approval:** The Project Lead reviews and approves the plan.
+
+### Phase 2: Parallel Implementation (Implementation Agents)
+
+1.  **Assignment:** The Consultant assigns tasks to the appropriate specialist agents (e.g., Agent A for Backend, Agent B for Frontend).
+2.  **Execution:** Agents work in parallel on their assigned, non-conflicting tasks.
+3.  **Completion:** Agents report completion and commit their work.
+
+### Phase 3: Integration & Testing (Consultant-Led, Human-Executed)
+
+1.  **Code Review:** The Consultant reviews the submitted code from all agents for quality and correctness.
+2.  **Test Plan Creation:** The Consultant creates a detailed, step-by-step **Integration Test Plan** document.
+3.  **Guided Testing:** The **Consultant coaches the Project Lead (Raymond) through executing the test plan.** Because testing involves visual UI confirmation and user workflows, the human is the ideal tester.
+4.  **Logging:** The Consultant observes the outcomes and logs the results of each test step.
+5.  **Decision:** Based on the results, the Consultant either:
+    -   **Approves** the phase and moves to the next.
+    -   **Rejects** the phase, creates new bug reports, and delegates them back to the implementation agents (returning to Phase 2).
+
+---
+
 ## OPERATIONAL BEST PRACTICES
 
 ### For Raymond (Project Lead)

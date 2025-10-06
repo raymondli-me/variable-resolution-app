@@ -651,11 +651,12 @@
               <div class="form-group">
                 <label for="pdfChunkingStrategy">How to Split PDF</label>
                 <select id="pdfChunkingStrategy" class="form-control">
-                  <option value="page" selected>Page-based (one excerpt per page)</option>
+                  <option value="page">Page-based (one excerpt per page)</option>
+                  <option value="sentence" selected>Sentence-based (recommended for visual highlighting)</option>
                   <option value="semantic">Semantic (paragraph/section-based)</option>
                   <option value="fixed">Fixed-size (by word count)</option>
                 </select>
-                <small>Choose how to divide the PDF into excerpts for rating</small>
+                <small>Sentence-based provides the best granularity for visual PDF viewer with highlighting</small>
               </div>
 
               <div id="pdfFixedSizeOptions" class="sub-options" style="display: none;">

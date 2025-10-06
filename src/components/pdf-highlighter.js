@@ -94,10 +94,15 @@ class PDFHighlighter {
 
       const bbox = typeof excerpt.bbox === 'string' ? JSON.parse(excerpt.bbox) : excerpt.bbox;
 
-      // Scale bbox to current zoom level
+      // PDF.js uses bottom-left origin, canvas uses top-left
+      // Flip Y coordinate: canvasY = canvasHeight - (pdfY + height)
+      const canvasHeight = this.highlightCanvas.height;
+      const flippedY = canvasHeight - ((bbox.y + bbox.height) * scale);
+
+      // Scale bbox to current zoom level with flipped Y
       const scaledBbox = {
         x: bbox.x * scale,
-        y: bbox.y * scale,
+        y: flippedY,
         width: bbox.width * scale,
         height: bbox.height * scale
       };

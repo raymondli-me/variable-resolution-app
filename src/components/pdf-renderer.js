@@ -36,15 +36,15 @@ class PDFRenderer {
     console.log('[PDFRenderer] Loading PDF from:', filePath);
 
     try {
-      // Import PDF.js (using legacy build for better compatibility)
-      const pdfjsLib = window['pdfjs-dist/build/pdf'];
+      // Access PDF.js library (loaded via script tag in index-advanced.html)
+      const pdfjsLib = window.pdfjsLib;
 
       if (!pdfjsLib) {
         throw new Error('PDF.js library not loaded. Make sure to include it in your HTML.');
       }
 
-      // Set worker path
-      pdfjsLib.GlobalWorkerOptions.workerSrc = '../node_modules/pdfjs-dist/legacy/build/pdf.worker.js';
+      // Worker path is already set in index-advanced.html
+      // pdfjsLib.GlobalWorkerOptions.workerSrc is configured there
 
       // Load PDF document
       const loadingTask = pdfjsLib.getDocument(filePath);
@@ -249,7 +249,5 @@ class PDFRenderer {
   }
 }
 
-// Export for use in other components
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { PDFRenderer };
-}
+// Expose globally for browser use
+window.PDFRenderer = PDFRenderer;

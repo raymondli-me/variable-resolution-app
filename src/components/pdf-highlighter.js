@@ -238,7 +238,5 @@ class PDFHighlighter {
   }
 }
 
-// Export for use in other components
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { PDFHighlighter };
-}
+// Expose globally for browser use
+window.PDFHighlighter = PDFHighlighter;

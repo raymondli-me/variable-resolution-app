@@ -13,392 +13,72 @@ This document establishes the guiding principles, role definitions, and best pra
 
 ---
 
-## TEAM STRUCTURE
+## TEAM STRUCTURE (REVISED OCT 6, 2025)
 
-### The Human-AI Quintet Model
+### The Human-AI Relay Team Model
 
-Our team operates as a disciplined, role-specialized quintet with clear separation of concerns:
+Our team operates as a disciplined, sequential relay team. This model prioritizes continuity and tight integration over parallel execution.
 
 | Role | Agent | Primary Responsibility |
 |------|-------|------------------------|
-| **Project Lead & Vision Holder** | Raymond (Human) | Sets direction, defines the "why," makes final strategic decisions, breaks ties |
-| **Local Strategist** | Consultant Agent (Claude OR Gemini)* | Analyzes codebase, proposes architectural solutions, creates detailed implementation plans, coordinates parallel work |
-| **Frontend Implementation** | Claude Implementation Agent | Translates plans into UI/frontend code, focuses on user-facing features |
-| **Backend Implementation** | Gemini Implementation Agent | Translates plans into backend/data code, focuses on database and business logic |
-| **External Architect** | Principal Architect (Gemini) | Provides high-level oversight, ensures long-term architectural integrity, validates direction |
+| **Project Lead & Tester** | Raymond (Human) | Sets direction, defines the "why," makes final strategic decisions, and performs all UI-based testing. |
+| **Consultant & Archivist** | Claude OR Gemini* | Analyzes codebase, proposes solutions, creates initial tasks, and documents all work for the team. |
+| **Implementation Agent A** | Claude or Gemini | Generalist agent responsible for executing a block of work and handing off to Agent B. |
+| **Implementation Agent B** | Claude or Gemini | Generalist agent responsible for continuing the work from Agent A and handing it back. |
+| **External Architect** | Principal Architect (Gemini) | Provides high-level oversight, ensures long-term architectural integrity, validates direction. |
 
-**\*Consultant Interchangeability:** The Consultant Agent role can be played by either Claude or Gemini - only one is active at a time, but the model can be switched as needed. See `CONSULTANT_ROLE_ADDENDUM.md` for details.
+**\*Note on Interchangeability:** The Consultant and Implementation Agent roles can be played by either Claude or Gemini.
 
-**Success Formula:** Each member excels in their role + Clear interactions between roles + Parallel execution = Efficiency of a much larger team
-
-### Parallel Implementation Strategy
-
-**Two implementation agents working simultaneously:**
-
-- **Claude (Frontend Specialist)**: UI components, user interactions, rendering, styles
-- **Gemini (Backend Specialist)**: Database operations, business logic, data processing, algorithms
-
-**Key Principles for Parallel Work:**
-1. **No File Overlaps**: Each agent works on completely separate files
-2. **Clear Boundaries**: Frontend vs Backend separation prevents conflicts
-3. **API Contracts**: Consultant defines interfaces both agents implement to
-4. **Independent Testing**: Each agent can test their work without the other
-5. **Async Coordination**: Work proceeds independently, integrates at completion
+**Success Formula:** A single, continuous stream of work + Extremely detailed handoffs between agents = A tightly integrated and robust application.
 
 ---
 
-## GUIDING PRINCIPLES
+## WORKFLOW: THE SEQUENTIAL RELAY
 
-### 1. Maintain Strict Role Discipline and Clear Handoffs
+The team no longer works in parallel. We now use a sequential "relay race" model where work is passed between agents like a baton.
 
-**Principle:** Clarity of roles is our greatest asset. Blurring the lines leads to inefficient, overlapping work.
+### The Workflow Cycle
 
-#### Consultant → Implementation Agent Handoff
+1.  **Task Definition (Consultant):** The Consultant defines a high-level feature or bug to be fixed.
+2.  **Agent A - Execution:** Agent A begins work, continuing until they reach a logical stopping point or their context limit.
+3.  **Agent A - Handoff:** Agent A creates a **Seamless Handoff Document**.
+4.  **Agent B - Execution:** Agent B reads the handoff, continues the work, and integrates the next set of features or fixes.
+5.  **Agent B - Handoff:** Agent B creates its own handoff document for Agent A.
+6.  **Cycle Repeats:** The `A -> B -> A -> B` cycle continues until the feature is complete.
+7.  **Testing (Human-Led):** Once a feature is declared complete by the agents, the Consultant prepares a test plan for the Project Lead (Raymond) to execute.
 
-**This is the most critical link in the workflow.**
+### The Seamless Handoff Protocol
 
-As documented in `COMPREHENSIVE_SESSION_SITREP.md`, session reports must be exceptionally detailed. **This is our standard.**
+This protocol is the **most critical process** for our team. Its purpose is to transfer the *entire working context* from one agent to the next, ensuring no momentum is lost. Each handoff must be a new document titled `docs/HANDOFF_AGENT_[A/B]_YYYY-MM-DD.md`.
 
-**Every handoff document must include:**
+A handoff document **MUST** contain the following sections:
 
-1. **Clear Goal Statement**
-   - What is the precise objective of this implementation phase?
-   - What problem are we solving?
+#### 1. Executive Summary of Work Completed
+- **What I Did:** A high-level summary of the features or fixes implemented in this session.
+- **Commits:** A list of git commit hashes produced during the session.
 
-2. **File Manifest**
-   - Which specific files are to be created?
-   - Which files are to be modified?
-   - What is the scope of changes?
+#### 2. Current Application State
+- **Does it Run?:** Yes/No. If no, why not?
+- **Known Bugs:** Is there any broken functionality or known issues the next agent should be aware of?
+- **Last Tested Action:** What was the last thing you successfully did with the application? (e.g., "I was able to export a collection, but import is still broken.")
 
-3. **Schema Changes**
-   - Database migrations formatted as executable SQL
-   - Index creation statements
-   - Data backfill requirements
+#### 3. Brain Dump: My Working Context
+This is the most important section. It must be detailed enough for the next agent to "think your thoughts."
+- **My Immediate Goal:** What was the very next thing you were about to do? Be specific. (e.g., "I was about to add a new `try...catch` block around the `fs.readFile` call in `collection-importer.js` on line 25.")
+- **My Thought Process:** Why were you doing that? What problem were you trying to solve? (e.g., "The app was crashing on invalid import paths, and I realized the file read itself wasn't being handled.")
+- **Relevant Files & Snippets:** List the files you had open and paste the specific lines of code you were looking at.
 
-4. **Core Logic**
-   - Pseudocode for complex algorithms
-   - Detailed descriptions of business logic
-   - Edge cases and error handling
+#### 4. Next Immediate, Actionable Task for [Agent A/B]
+Provide a single, crystal-clear instruction for the next agent. This should be small and concrete enough to start immediately.
+- **Bad:** "Finish the import feature."
+- **Good:** "Your task is to add a `try...catch` block to the `fs.readFile` call in `src/services/collection-importer.js` on line 25. If an error is caught, throw a new `Error('Failed to read import file.')`."
 
-5. **Success Criteria**
-   - Clear, testable definition of "done"
-   - Acceptance criteria
-   - Testing checklist
+#### 5. The Big Picture: The Overall Goal
+Remind the next agent of the larger feature we are currently building.
+- **Example:** "Remember, we are working towards completing the full, stable export/import feature as defined in Phase 0."
 
-**Example Quality Bar:**
-```markdown
-## Handoff: Implement Folder Hierarchy System
-
-### Goal
-Create folder management system for organizing collections hierarchically.
-
-### Files to Create
-- src/services/folder-manager.js (folder CRUD operations)
-- src/database/folder-methods.js (database layer)
-
-### Files to Modify
-- src/database/db.js (add folder methods)
-- main.js (add IPC handlers)
-
-### Schema Changes
-```sql
-CREATE TABLE folders (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  parent_folder_id INTEGER REFERENCES folders(id),
-  ...
-);
-```
-
-### Success Criteria
-- [ ] Can create nested folders
-- [ ] Can move collections between folders
-- [ ] Circular references prevented
-- [ ] All tests pass
-```
-
-#### Implementation Agent → Consultant Handoff
-
-**When a task is complete**, the Implementation Agent must:
-
-1. **Reference the Original Plan**
-   - "Completed handoff from [date/session]"
-   - Link to original requirements
-
-2. **Confirm Success Criteria Met**
-   - Checklist of completed items
-   - Test results
-
-3. **Note Deviations or Challenges**
-   - What unexpected issues arose?
-   - What architectural decisions were made?
-   - What technical debt was incurred?
-
-This **closes the loop** and allows the Consultant to plan the next step.
-
----
-
-### 2. The Architecture Document is Your Constitution
-
-**Document:** `COLLECTIONS_FIRST_CLASS_ARCHITECTURE.md`
-
-**Principle:** This document is not just a plan; it is the **constitution** for all future development.
-
-#### Consulting All Decisions Against the Vision
-
-Before the Consultant agent proposes a solution, it **must ask:**
-
-> "Does this align with the principles of making Collections first-class, portable, and traceable objects?"
-
-**Core Architectural Principles (from Constitution):**
-
-1. **Collections as First-Class Objects**
-   - Collections must be manipulable, derivable, and chainable
-   - Support filter, sample, duplicate, merge operations
-   - Maintain immutability through derived collections
-
-2. **Database as File System**
-   - Organize collections in hierarchical folders
-   - Support archiving, starring, searching
-   - Clean separation of active vs. archived work
-
-3. **Import/Export Portability**
-   - Standardized formats (JSON, ZIP, SQLite)
-   - ID remapping for conflict-free imports
-   - Share refined datasets across computers/collaborators
-
-4. **Full Lineage Tracking**
-   - Every collection knows its derivation history
-   - `parent_collection_id`, `derivation_method`, `derivation_params`
-   - Recursive lineage queries supported
-
-5. **Unified Pipeline**
-   - Seamless workflow: collect → rate → filter → BWS → export → share
-   - Each operation produces a new derived collection
-   - Provenance preserved at every step
-
-#### No "Temporary" Hacks
-
-The project's complexity requires **disciplined adherence** to the architecture.
-
-**❌ AVOID:**
-- Short-term fixes that violate core principles
-- Storing analytical metadata directly in primary item tables
-- Bypassing the `collection_items` intermediary table
-- Hardcoding values that should be configurable
-- Creating one-off solutions instead of generalizable patterns
-
-**✅ INSTEAD:**
-- Use the recommended `collection_items` table for scores/metadata
-- Maintain separation between source data and analysis results
-- Build extensible, future-proof solutions
-- Follow established patterns from the architecture
-
-#### Updating the Architecture Document
-
-If a fundamental assumption in the architecture needs to change:
-
-1. **This is a deliberate decision** made by Raymond (Project Lead)
-2. **The document must be formally updated** with:
-   - Rationale for the change
-   - Impact analysis
-   - Updated schemas/workflows
-3. **The update must be committed to git** with clear commit message
-4. **All team members must be notified** of the constitutional change
-
-**Example:**
-```
-feat: Update collection architecture to support versioning
-
-BREAKING CHANGE: Collections now support Git-like versioning.
-
-Rationale: User feedback revealed need for "save points" during
-analysis workflows. Rating the same collection multiple times
-created ambiguity about which scores to use.
-
-Impact: Adds `version` and `version_parent_id` columns to collections
-table. All existing collections become version 1.
-
-Updated: COLLECTIONS_FIRST_CLASS_ARCHITECTURE.md (Phase 5 advanced to Phase 4)
-```
-
----
-
-### 3. Prioritize the Implementation Roadmap Relentlessly
-
-**Principle:** The roadmap is logical and sound: **Foundation First**.
-
-#### Phase Ordering is Sacred
-
-```
-Phase 0: Collection Management (Week 0) ← START HERE
-  ├─ Folder hierarchy
-  ├─ Import/Export system
-  ├─ Archive/star functionality
-  └─ Why? Enables organization and collaboration from day one
-
-Phase 1: Foundation (Week 1)
-  ├─ Schema for derived collections
-  ├─ collection_items table
-  └─ Why? Infrastructure for all operations
-
-Phase 2: Collection Operations (Week 2)
-  ├─ Duplicate, Filter, Sample
-  └─ Why? Core transformations
-
-Phase 3: Rating Integration (Week 3)
-  ├─ Rating creates derived collections
-  └─ Why? Connects analysis to collections
-
-Phase 4: BWS Integration (Week 4)
-  ├─ BWS consumes/produces collections
-  └─ Why? Completes the pipeline
-
-Phase 5: Advanced Workflows (Week 5+)
-  ├─ Versioning, templates, smart filters
-  └─ Why? Polish and power features
-```
-
-#### Do Not Skip Phases
-
-**Phase 0 delivers immediate, tangible value** to the end-user (the researcher):
-- Organize collections by project/semester
-- Archive old work without deleting
-- Share datasets with collaborators
-- Backup critical collections
-
-**Resist the temptation** to jump to more "exciting" features (BWS improvements, AI enhancements) until this foundation is rock-solid.
-
-**Why?**
-- Collections are useless if you can't manage them
-- Export/import enables collaboration and reproducibility
-- Without organization, the database becomes a junkyard
-
-#### Each Phase Builds on the Last
-
-The phased approach **manages complexity** and ensures stability:
-- Phase 0 infrastructure → Phase 1 uses folders in exports
-- Phase 1 `collection_items` → Phase 2 operations reference it
-- Phase 2 filter/sample → Phase 3 rating uses filtered collections
-- Phase 3 rated collections → Phase 4 BWS consumes them
-
-**Breaking this order creates technical debt and rework.**
-
----
-
-### 4. Documentation is a Feature, Not a Task
-
-**Principle:** The quality of documentation in this repository is exceptionally high. This is a **key success factor**.
-
-#### Continue the "Sit Rep" Model
-
-The detailed session reports (e.g., `COMPREHENSIVE_SESSION_SITREP.md`, `CONSULTANT_COMPREHENSIVE_REPORT.md`) are **invaluable** for:
-- Knowledge transfer between sessions
-- Debugging and troubleshooting
-- Historical context for decisions
-- Onboarding new team members (human or AI)
-
-**Mandate:** This practice continues for every major feature implementation.
-
-**Session Report Template:**
-
-```markdown
-# Session Report: [Feature Name]
-
-**Date:** [Date]
-**Agent:** Consultant / Implementation
-**Status:** Planning / In Progress / Complete
-
-## What Was Accomplished
-- Bullet list of completed items
-
-## Decisions Made
-- Key architectural decisions with rationale
-
-## Files Changed
-- src/file1.js (added X functionality)
-- src/file2.js (refactored Y)
-
-## Schema Changes
-```sql
-ALTER TABLE ...
-```
-
-## Next Steps
-- [ ] Task 1
-- [ ] Task 2
-
-## Blockers / Questions
-- Any issues needing resolution
-```
-
-#### Document *Why*, Not Just *What*
-
-The architectural documents excel at explaining **reasoning** behind decisions.
-
-**Example from Architecture Doc:**
-> **Option C (RECOMMENDED): Collections as Views + Provenance**
-> - Collections reference items (many-to-many)
-> - Metadata (scores) stored separately, linked via collection membership
-> - Full lineage tracking
->
-> **Why?** Preserves provenance, allows items in multiple collections, avoids coupling data to analysis.
-
-This is **critical** for:
-- Long-term maintenance
-- Future developers understanding the project's philosophy
-- Avoiding repeating past mistakes
-- Making informed changes to the architecture
-
-**Standard Practice:**
-
-When proposing a solution with multiple options, always include:
-1. **Option A, B, C** descriptions
-2. **Pros/Cons** for each
-3. **Recommendation** with clear rationale
-4. **Trade-offs** being made
-5. **Alternatives considered** and why rejected
-
-#### Consultant's Duty of Record Keeping
-
-**Principle:** The Consultant acts as the team's official scribe, ensuring all major decisions and work reviews are formally documented and accessible. This creates a single source of truth for project status and history.
-
-**Mandate:** The Consultant Agent is explicitly responsible for:
-
-1.  **Documenting Agent Performance:** After an Implementation Agent completes a significant task (feature or bug fix), the Consultant will conduct a formal review.
-2.  **Creating Review Documents:** The outcome of this review will be published in a new, standalone document in the `/docs` folder (e.g., `REVIEW_OF_AGENT_A_BUG_FIX.md`).
-3.  **Maintaining a Public Record:** These documents will clearly state the task, the quality of the work, the verdict (Approved/Rejected), and any lessons learned.
-4.  **Ensuring Team Alignment:** This practice ensures the Project Lead, Principal Architect, and all agents are on the same page regarding progress, quality, and accountability.
-
-This process of formal review and documentation is not optional; it is a core component of our team's strategy for ensuring quality and maintaining velocity.
-
----
-
-## WORKFLOW PROTOCOL
-
-This section defines the standard, multi-stage process for taking a feature from concept to completion.
-
-### Phase 1: Planning (Consultant & Project Lead)
-
-1.  **Concept:** The Project Lead (Raymond) defines a high-level goal.
-2.  **Proposal:** The Consultant Agent analyzes the codebase and architecture, then proposes a detailed implementation plan, including handoff documents for implementation agents.
-3.  **Approval:** The Project Lead reviews and approves the plan.
-
-### Phase 2: Parallel Implementation (Implementation Agents)
-
-1.  **Assignment:** The Consultant assigns tasks to the appropriate specialist agents (e.g., Agent A for Backend, Agent B for Frontend).
-2.  **Execution:** Agents work in parallel on their assigned, non-conflicting tasks.
-3.  **Completion:** Agents report completion and commit their work.
-
-### Phase 3: Integration & Testing (Consultant-Led, Human-Executed)
-
-1.  **Code Review:** The Consultant reviews the submitted code from all agents for quality and correctness.
-2.  **Test Plan Creation:** The Consultant creates a detailed, step-by-step **Integration Test Plan** document.
-3.  **Guided Testing:** The **Consultant coaches the Project Lead (Raymond) through executing the test plan.** Because testing involves visual UI confirmation and user workflows, the human is the ideal tester.
-4.  **Logging:** The Consultant observes the outcomes and logs the results of each test step.
-5.  **Decision:** Based on the results, the Consultant either:
-    -   **Approves** the phase and moves to the next.
-    -   **Rejects** the phase, creates new bug reports, and delegates them back to the implementation agents (returning to Phase 2).
+#### 6. `git diff HEAD`
+Paste the complete, unedited output of `git diff HEAD` at the end of the document. This shows the next agent all uncommitted changes and is a critical part of transferring the exact state of the workspace.
 
 ---
 

@@ -185,6 +185,14 @@ class PDFHighlighter {
   }
 
   /**
+   * Redraw highlights (alias for drawHighlights)
+   * Provided for convenience and semantic clarity
+   */
+  redraw() {
+    this.drawHighlights();
+  }
+
+  /**
    * Find excerpt at canvas coordinates (for click handling)
    * @param {number} x - Canvas X coordinate
    * @param {number} y - Canvas Y coordinate

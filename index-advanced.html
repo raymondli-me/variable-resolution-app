@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="src/styles/rating-projects.css">
     <link rel="stylesheet" href="src/styles/merged-collections.css">
     <link rel="stylesheet" href="src/styles/folder-browser.css">
+    <link rel="stylesheet" href="src/styles/pdf-excerpt-viewer.css">
   </head>
 <body>
   <div id="app">
@@ -720,6 +721,9 @@
               <div class="folder-browser-header">
                 <h3>Collections</h3>
                 <div style="display: flex; gap: 0.5rem;">
+                  <button id="new-collection-btn" class="btn btn-success" onclick="window.folderBrowser.showNewCollectionModal()">
+                    <span>➕</span> New Collection
+                  </button>
                   <button id="create-folder-btn" class="btn btn-primary">
                     <span>📁</span> New Folder
                   </button>
@@ -2003,8 +2007,9 @@
   <script src="src/components/gallery-viewer.js"></script>
   <script src="src/components/modern-single-page.js"></script>
   <script src="src/components/merge-manager.js"></script>
-  <script src="src/components/folder-browser-stubs.js"></script>
+  <!-- Stubs removed - using real APIs now -->
   <script src="src/components/folder-browser.js"></script>
+  <script src="src/components/pdf-excerpt-viewer.js"></script>
   <script src="src/bws-manager.js"></script>
   <script src="src/renderer-advanced.js"></script>
 </body>

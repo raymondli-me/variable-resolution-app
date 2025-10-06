@@ -220,11 +220,9 @@ class FolderBrowser {
     collectionItems.forEach(item => {
       const collectionId = parseInt(item.dataset.collectionId);
 
-      // Click to view collection (existing functionality)
-      item.addEventListener('click', () => {
-        // Trigger existing collection viewer
-        // This would integrate with existing collection viewing code
-        console.log('Open collection:', collectionId);
+      // Click to view collection - detect PDF vs YouTube collections
+      item.addEventListener('click', async () => {
+        await this.openCollection(collectionId);
       });
 
       // Right-click context menu
@@ -464,6 +462,45 @@ class FolderBrowser {
     }
   }
 
+  /**
+   * Open collection - routes to appropriate viewer based on type
+   */
+  async openCollection(collectionId) {
+    try {
+      const collection = await window.api.database.getCollection(collectionId);
+      if (!collection) {
+        this.showError('Collection not found');
+        return;
+      }
+
+      // Check collection type
+      const settings = JSON.parse(collection.settings || '{}');
+      const isPDF = settings.type === 'pdf';
+
+      if (isPDF) {
+        // Route to dedicated PDF excerpt viewer
+        if (window.pdfExcerptViewer) {
+          window.pdfExcerptViewer.show(collectionId);
+        } else {
+          console.warn('PDF excerpt viewer not loaded, falling back to collection viewer');
+          if (window.collectionViewer) {
+            window.collectionViewer.show(collectionId);
+          }
+        }
+      } else {
+        // Route to regular collection viewer (for YouTube videos)
+        if (window.collectionViewer) {
+          window.collectionViewer.show(collectionId);
+        } else {
+          this.showError('Collection viewer not loaded');
+        }
+      }
+    } catch (error) {
+      console.error('Error opening collection:', error);
+      this.showError('Error opening collection: ' + error.message);
+    }
+  }
+
   // ============================================
   // EXPORT/IMPORT METHODS
   // ============================================
@@ -700,12 +737,728 @@ class FolderBrowser {
 
   showSuccess(message) {
     console.log('✓', message);
-    // TODO: Implement toast notification
+    if (window.toastNotification) {
+      window.toastNotification.success(message);
+    }
   }
 
   showError(message) {
     console.error('✗', message);
-    // TODO: Implement toast notification
+    if (window.toastNotification) {
+      window.toastNotification.error(message);
+    }
+  }
+
+  showInfo(message) {
+    console.log('ℹ', message);
+    if (window.toastNotification) {
+      window.toastNotification.info(message);
+    }
+  }
+
+  // ========== NEW COLLECTION WORKFLOW METHODS ==========
+
+  /**
+   * Show the main "New Collection" modal with source selection
+   */
+  showNewCollectionModal() {
+    this.showSourceSelectionModal();
+  }
+
+  /**
+   * Show source selection modal (YouTube, PDF, Reddit, News)
+   */
+  showSourceSelectionModal() {
+    const modalHTML = `
+      <div class="modal-overlay" id="source-selection-modal">
+        <div class="modal-content source-selection-content">
+          <div class="modal-header">
+            <h3>Create New Collection</h3>
+            <button class="close-btn" onclick="document.getElementById('source-selection-modal').remove()">×</button>
+          </div>
+          <div class="modal-body">
+            <div class="source-grid">
+              <button class="source-card" onclick="window.folderBrowser.showYouTubeForm()">
+                <div class="source-icon">📹</div>
+                <h4>YouTube</h4>
+                <p>Search and collect YouTube videos with comments</p>
+              </button>
+
+              <button class="source-card" onclick="window.folderBrowser.showPDFForm()">
+                <div class="source-icon">📄</div>
+                <h4>PDF Document</h4>
+                <p>Upload and extract excerpts from PDF files</p>
+              </button>
+
+              <button class="source-card disabled" title="Coming soon">
+                <div class="source-icon">🔴</div>
+                <h4>Reddit</h4>
+                <p>Collect Reddit posts and comments</p>
+                <span class="badge">Soon</span>
+              </button>
+
+              <button class="source-card disabled" title="Coming soon">
+                <div class="source-icon">📰</div>
+                <h4>News Articles</h4>
+                <p>Aggregate news from multiple sources</p>
+                <span class="badge">Soon</span>
+              </button>
+            </div>
+
+            <hr style="margin: 24px 0;" />
+
+            <h4>Or, transform an existing collection:</h4>
+            <div class="transform-actions">
+              <button class="action-btn" onclick="window.folderBrowser.showDuplicateForm()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                </svg>
+                Duplicate Collection
+              </button>
+
+              <button class="action-btn" onclick="window.folderBrowser.showSubsampleForm()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"></path>
+                </svg>
+                Random Subsample
+              </button>
+
+              <button class="action-btn" onclick="window.folderBrowser.showFilterForm()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                </svg>
+                Filter by Criteria
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // Close on background click
+    const modal = document.getElementById('source-selection-modal');
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.remove();
+      }
+    });
+  }
+
+  /**
+   * Show YouTube collection creation form
+   */
+  async showYouTubeForm() {
+    // Close source selection modal
+    document.getElementById('source-selection-modal')?.remove();
+
+    const modalHTML = `
+      <div class="modal-overlay" id="youtube-form-modal">
+        <div class="modal-content youtube-form-content">
+          <div class="modal-header">
+            <h3>Create YouTube Collection</h3>
+            <button class="close-btn" onclick="document.getElementById('youtube-form-modal').remove()">×</button>
+          </div>
+          <div class="modal-body">
+            <form id="youtubeCollectionForm">
+              <div class="form-group">
+                <label>Search Term *</label>
+                <input type="text" id="searchTerm" placeholder="e.g., machine learning" required />
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Max Results</label>
+                  <select id="maxResults">
+                    <option value="10">10 videos</option>
+                    <option value="25" selected>25 videos</option>
+                    <option value="50">50 videos</option>
+                    <option value="100">100 videos</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label>Sort By</label>
+                  <select id="orderBy">
+                    <option value="relevance" selected>Relevance</option>
+                    <option value="date">Upload Date</option>
+                    <option value="viewCount">View Count</option>
+                    <option value="rating">Rating</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>
+                  <input type="checkbox" id="includeComments" checked />
+                  Extract comments from videos
+                </label>
+              </div>
+
+              <div class="form-group" id="commentOptions">
+                <label>Max Comments per Video</label>
+                <input type="number" id="maxComments" value="100" min="10" max="1000" />
+              </div>
+
+              <div class="modal-footer">
+                <button type="button" class="btn btn-cancel" onclick="document.getElementById('youtube-form-modal').remove()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create Collection</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    const modal = document.getElementById('youtube-form-modal');
+    const form = document.getElementById('youtubeCollectionForm');
+
+    // Handle form submission
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await this.createYouTubeCollection({
+        searchTerm: document.getElementById('searchTerm').value,
+        maxResults: parseInt(document.getElementById('maxResults').value),
+        orderBy: document.getElementById('orderBy').value,
+        includeComments: document.getElementById('includeComments').checked,
+        maxComments: parseInt(document.getElementById('maxComments').value)
+      });
+    });
+
+    // Toggle comment options
+    document.getElementById('includeComments').addEventListener('change', (e) => {
+      document.getElementById('commentOptions').style.display = e.target.checked ? 'block' : 'none';
+    });
+  }
+
+  /**
+   * Create YouTube collection (uses existing search→collect workflow)
+   */
+  async createYouTubeCollection(params) {
+    try {
+      this.showInfo('Searching YouTube...');
+      document.getElementById('youtube-form-modal')?.remove();
+
+      // Get API key
+      const apiKeyResult = await window.api.settings.getApiKey('youtube');
+      if (!apiKeyResult?.success || !apiKeyResult.apiKey) {
+        this.showError('YouTube API key not configured. Please add it in Settings.');
+        return;
+      }
+
+      // Step 1: Search YouTube
+      const searchOptions = {
+        apiKey: apiKeyResult.apiKey,
+        maxResults: params.maxResults,
+        orderBy: params.orderBy
+      };
+
+      const searchResult = await window.api.youtube.search({
+        searchTerm: params.searchTerm,
+        options: searchOptions
+      });
+
+      if (!searchResult.success || !searchResult.data || searchResult.data.length === 0) {
+        this.showError('No videos found for this search term');
+        return;
+      }
+
+      // Step 2: Collect all videos
+      this.showInfo(`Found ${searchResult.data.length} videos. Starting collection...`);
+
+      const collectOptions = {
+        apiKey: apiKeyResult.apiKey,
+        searchTerm: params.searchTerm,
+        includeComments: params.includeComments,
+        maxComments: params.maxComments,
+        downloadVideo: false, // Don't download by default
+        downloadThumbnail: true
+      };
+
+      const jobId = `job_${Date.now()}`;
+      const collectResult = await window.api.youtube.collect({
+        jobId,
+        videos: searchResult.data,
+        options: collectOptions
+      });
+
+      if (collectResult.success) {
+        this.showSuccess(`Collection "${params.searchTerm}" created with ${searchResult.data.length} videos!`);
+        this.loadFolderTree();
+      } else {
+        this.showError(`Collection failed: ${collectResult.error}`);
+      }
+    } catch (error) {
+      console.error('[FolderBrowser] YouTube collection creation failed:', error);
+      this.showError('Error creating collection: ' + error.message);
+    }
+  }
+
+  /**
+   * Show PDF upload form
+   */
+  async showPDFForm() {
+    // Close source selection modal
+    document.getElementById('source-selection-modal')?.remove();
+
+    const modalHTML = `
+      <div class="modal-overlay" id="pdf-form-modal">
+        <div class="modal-content pdf-form-content">
+          <div class="modal-header">
+            <h3>Upload PDF Document</h3>
+            <button class="close-btn" onclick="document.getElementById('pdf-form-modal').remove()">×</button>
+          </div>
+          <div class="modal-body">
+            <form id="pdfUploadForm">
+              <div class="form-group">
+                <label>Collection Name *</label>
+                <input type="text" id="pdfCollectionNameModal" placeholder="e.g., Research Papers" required />
+              </div>
+
+              <div class="form-group">
+                <label>Select PDF File *</label>
+                <div class="file-upload-area" id="pdfDropZoneModal">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                  </svg>
+                  <p>Drag & drop PDF here or click to browse</p>
+                  <input type="file" id="pdfFileInputModal" accept=".pdf" style="display: none;" />
+                  <button type="button" class="btn" onclick="document.getElementById('pdfFileInputModal').click()">
+                    Choose File
+                  </button>
+                  <div id="selectedFileNameModal" style="margin-top: 12px; color: #4ade80;"></div>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Document Title (Optional)</label>
+                <input type="text" id="pdfTitleModal" placeholder="Will use filename if not provided" />
+              </div>
+
+              <div class="form-group">
+                <label>Chunking Strategy</label>
+                <select id="pdfChunkingStrategyModal">
+                  <option value="page">Page-based (one excerpt per page)</option>
+                  <option value="paragraph">Paragraph-based</option>
+                  <option value="section">Section-based</option>
+                </select>
+              </div>
+
+              <div class="modal-footer">
+                <button type="button" class="btn btn-cancel" onclick="document.getElementById('pdf-form-modal').remove()">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="uploadPDFBtnModal">Upload & Process</button>
+              </div>
+            </form>
+
+            <div id="uploadProgressModal" style="display: none; margin-top: 20px;">
+              <div class="progress-bar">
+                <div class="progress-fill" id="progressFillModal" style="width: 0%;"></div>
+              </div>
+              <p id="progressTextModal">Uploading...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    const modal = document.getElementById('pdf-form-modal');
+    const fileInput = document.getElementById('pdfFileInputModal');
+    const dropZone = document.getElementById('pdfDropZoneModal');
+    let selectedFile = null;
+
+    // File selection handler
+    fileInput.addEventListener('change', (e) => {
+      selectedFile = e.target.files[0];
+      if (selectedFile) {
+        document.getElementById('selectedFileNameModal').textContent = `📄 ${selectedFile.name}`;
+      }
+    });
+
+    // Drag & drop
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('drag-over');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('drag-over');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+
+      const files = e.dataTransfer.files;
+      if (files.length > 0 && files[0].type === 'application/pdf') {
+        selectedFile = files[0];
+        fileInput.files = files;
+        document.getElementById('selectedFileNameModal').textContent = `📄 ${files[0].name}`;
+      }
+    });
+
+    // Form submission
+    document.getElementById('pdfUploadForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      if (!selectedFile) {
+        this.showError('Please select a PDF file');
+        return;
+      }
+
+      await this.uploadPDFFromModal({
+        file: selectedFile,
+        collectionName: document.getElementById('pdfCollectionNameModal').value,
+        title: document.getElementById('pdfTitleModal').value || selectedFile.name.replace(/\.pdf$/i, ''),
+        chunkingStrategy: document.getElementById('pdfChunkingStrategyModal').value
+      });
+    });
+
+    // Close on background click
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.remove();
+      }
+    });
+  }
+
+  /**
+   * Upload PDF from folder browser modal
+   */
+  async uploadPDFFromModal(params) {
+    try {
+      // Show progress
+      document.getElementById('pdfUploadForm').style.display = 'none';
+      document.getElementById('uploadProgressModal').style.display = 'block';
+      const progressFill = document.getElementById('progressFillModal');
+      const progressText = document.getElementById('progressTextModal');
+
+      // Step 1: Create collection
+      progressText.textContent = 'Creating collection...';
+      progressFill.style.width = '10%';
+
+      const createResult = await window.api.collections.createPDFCollection({ name: params.collectionName });
+      if (!createResult.success) {
+        throw new Error(createResult.error || 'Failed to create collection');
+      }
+
+      const collectionId = createResult.collectionId;
+
+      // Step 2: Upload PDF
+      progressText.textContent = 'Uploading PDF...';
+      progressFill.style.width = '30%';
+
+      const uploadResult = await window.api.pdf.upload({
+        filePath: params.file.path,
+        collectionId,
+        title: params.title,
+        chunkingStrategy: params.chunkingStrategy,
+        chunkSize: 500
+      });
+
+      if (uploadResult.success) {
+        progressText.textContent = 'PDF processed successfully!';
+        progressFill.style.width = '100%';
+
+        this.showSuccess(`PDF collection "${params.collectionName}" created with ${uploadResult.excerpts} excerpts!`);
+
+        // Reload folder tree
+        this.loadFolderTree();
+
+        // Close modal after short delay
+        setTimeout(() => {
+          document.getElementById('pdf-form-modal')?.remove();
+        }, 1500);
+      } else {
+        throw new Error(uploadResult.error || 'Upload failed');
+      }
+    } catch (error) {
+      console.error('[FolderBrowser] PDF upload failed:', error);
+      this.showError('Error uploading PDF: ' + error.message);
+      document.getElementById('pdfUploadForm').style.display = 'block';
+      document.getElementById('uploadProgressModal').style.display = 'none';
+    }
+  }
+
+  /**
+   * Show collection duplication form
+   */
+  async showDuplicateForm() {
+    document.getElementById('source-selection-modal')?.remove();
+
+    // Get all collections
+    const collections = await window.api.database.getCollections(1000, 0);
+
+    const modalHTML = `
+      <div class="modal-overlay" id="duplicate-form-modal">
+        <div class="modal-content youtube-form-content">
+          <div class="modal-header">
+            <h3>Duplicate Collection</h3>
+            <button class="close-btn" onclick="document.getElementById('duplicate-form-modal').remove()">×</button>
+          </div>
+          <div class="modal-body">
+            <form id="duplicateForm">
+              <div class="form-group">
+                <label>Select Collection to Duplicate *</label>
+                <select id="sourceCollection" required>
+                  <option value="">-- Choose Collection --</option>
+                  ${collections.map(c => `
+                    <option value="${c.id}">${this.escapeHtml(c.search_term)} (${c.video_count || 0} videos)</option>
+                  `).join('')}
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>New Collection Name *</label>
+                <input type="text" id="newCollectionName" placeholder="Copy of..." required />
+              </div>
+
+              <div class="form-group">
+                <label>
+                  <input type="checkbox" id="includeComments" checked />
+                  Include all comments
+                </label>
+              </div>
+
+              <div class="modal-footer">
+                <button type="button" class="btn btn-cancel" onclick="document.getElementById('duplicate-form-modal').remove()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Duplicate</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    document.getElementById('duplicateForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await this.duplicateCollection({
+        sourceId: parseInt(document.getElementById('sourceCollection').value),
+        newName: document.getElementById('newCollectionName').value,
+        includeComments: document.getElementById('includeComments').checked
+      });
+    });
+  }
+
+  async duplicateCollection(params) {
+    try {
+      this.showInfo('Duplicating collection...');
+      document.getElementById('duplicate-form-modal')?.remove();
+
+      const result = await window.api.collections.duplicate(params);
+
+      if (result.success) {
+        this.showSuccess('Collection duplicated successfully!');
+        this.loadFolderTree();
+      } else {
+        this.showError(`Duplication failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('[FolderBrowser] Duplication failed:', error);
+      this.showError('Error duplicating collection: ' + error.message);
+    }
+  }
+
+  /**
+   * Show random subsample form
+   */
+  async showSubsampleForm() {
+    document.getElementById('source-selection-modal')?.remove();
+
+    const collections = await window.api.database.getCollections(1000, 0);
+
+    const modalHTML = `
+      <div class="modal-overlay" id="subsample-form-modal">
+        <div class="modal-content youtube-form-content">
+          <div class="modal-header">
+            <h3>Random Subsample</h3>
+            <button class="close-btn" onclick="document.getElementById('subsample-form-modal').remove()">×</button>
+          </div>
+          <div class="modal-body">
+            <form id="subsampleForm">
+              <div class="form-group">
+                <label>Source Collection *</label>
+                <select id="sourceCollection" required>
+                  <option value="">-- Choose Collection --</option>
+                  ${collections.map(c => `
+                    <option value="${c.id}">${this.escapeHtml(c.search_term)} (${c.video_count || 0} videos)</option>
+                  `).join('')}
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Sample Size *</label>
+                <input type="number" id="sampleSize" min="1" placeholder="e.g., 10" required />
+                <small style="color: #94a3b8;">Number of videos to randomly select</small>
+              </div>
+
+              <div class="form-group">
+                <label>New Collection Name *</label>
+                <input type="text" id="newCollectionName" placeholder="Sample of..." required />
+              </div>
+
+              <div class="form-group">
+                <label>
+                  <input type="checkbox" id="withReplacement" />
+                  Allow duplicates (sample with replacement)
+                </label>
+              </div>
+
+              <div class="modal-footer">
+                <button type="button" class="btn btn-cancel" onclick="document.getElementById('subsample-form-modal').remove()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create Sample</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    document.getElementById('subsampleForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await this.createSubsample({
+        sourceId: parseInt(document.getElementById('sourceCollection').value),
+        sampleSize: parseInt(document.getElementById('sampleSize').value),
+        newName: document.getElementById('newCollectionName').value,
+        withReplacement: document.getElementById('withReplacement').checked
+      });
+    });
+  }
+
+  async createSubsample(params) {
+    try {
+      this.showInfo('Creating subsample...');
+      document.getElementById('subsample-form-modal')?.remove();
+
+      const result = await window.api.collections.subsample(params);
+
+      if (result.success) {
+        this.showSuccess('Subsample created successfully!');
+        this.loadFolderTree();
+      } else {
+        this.showError(`Subsample failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('[FolderBrowser] Subsample failed:', error);
+      this.showError('Error creating subsample: ' + error.message);
+    }
+  }
+
+  /**
+   * Show filter form
+   */
+  async showFilterForm() {
+    document.getElementById('source-selection-modal')?.remove();
+
+    const collections = await window.api.database.getCollections(1000, 0);
+
+    const modalHTML = `
+      <div class="modal-overlay" id="filter-form-modal">
+        <div class="modal-content youtube-form-content">
+          <div class="modal-header">
+            <h3>Filter Collection</h3>
+            <button class="close-btn" onclick="document.getElementById('filter-form-modal').remove()">×</button>
+          </div>
+          <div class="modal-body">
+            <form id="filterForm">
+              <div class="form-group">
+                <label>Source Collection *</label>
+                <select id="sourceCollection" required>
+                  <option value="">-- Choose Collection --</option>
+                  ${collections.map(c => `
+                    <option value="${c.id}">${this.escapeHtml(c.search_term)} (${c.video_count || 0} videos)</option>
+                  `).join('')}
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Filter Criteria</label>
+
+                <div style="margin-bottom: 12px;">
+                  <label style="font-size: 13px; color: #94a3b8;">Min Views:</label>
+                  <input type="number" id="minViews" placeholder="e.g., 1000" style="margin-top: 4px;" />
+                </div>
+
+                <div style="margin-bottom: 12px;">
+                  <label style="font-size: 13px; color: #94a3b8;">Min Comments:</label>
+                  <input type="number" id="minComments" placeholder="e.g., 10" style="margin-top: 4px;" />
+                </div>
+
+                <div style="margin-bottom: 12px;">
+                  <label style="font-size: 13px; color: #94a3b8;">Date Range:</label>
+                  <select id="dateRange" style="margin-top: 4px;">
+                    <option value="all">All Time</option>
+                    <option value="today">Today</option>
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                    <option value="year">This Year</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style="font-size: 13px; color: #94a3b8;">Title Contains:</label>
+                  <input type="text" id="titleKeyword" placeholder="keyword" style="margin-top: 4px;" />
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>New Collection Name *</label>
+                <input type="text" id="newCollectionName" placeholder="Filtered..." required />
+              </div>
+
+              <div class="modal-footer">
+                <button type="button" class="btn btn-cancel" onclick="document.getElementById('filter-form-modal').remove()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Apply Filter</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    document.getElementById('filterForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await this.filterCollection({
+        sourceId: parseInt(document.getElementById('sourceCollection').value),
+        filters: {
+          minViews: parseInt(document.getElementById('minViews').value) || 0,
+          minComments: parseInt(document.getElementById('minComments').value) || 0,
+          dateRange: document.getElementById('dateRange').value,
+          titleKeyword: document.getElementById('titleKeyword').value
+        },
+        newName: document.getElementById('newCollectionName').value
+      });
+    });
+  }
+
+  async filterCollection(params) {
+    try {
+      this.showInfo('Applying filters...');
+      document.getElementById('filter-form-modal')?.remove();
+
+      const result = await window.api.collections.filter(params);
+
+      if (result.success) {
+        this.showSuccess(`Filtered collection created with ${result.matchCount || 0} items`);
+        this.loadFolderTree();
+      } else {
+        this.showError(`Filter failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('[FolderBrowser] Filter failed:', error);
+      this.showError('Error filtering collection: ' + error.message);
+    }
   }
 }
 

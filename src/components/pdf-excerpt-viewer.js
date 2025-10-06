@@ -1,6 +1,6 @@
 /**
- * PDF Excerpt Viewer Component
- * Dedicated viewer for browsing PDF excerpts with pagination
+ * PDF Excerpt Viewer Component - Visual PDF Rendering with Highlights
+ * Displays PDF with sentence-level excerpts highlighted on the actual document
  */
 class PDFExcerptViewer {
   constructor() {
@@ -9,76 +9,77 @@ class PDFExcerptViewer {
     this.allExcerpts = [];
     this.filteredExcerpts = [];
     this.currentPage = 1;
-    this.excerptsPerPage = 20;
+    this.excerptsPerPage = 50;
     this.searchTerm = '';
+    this.renderer = null;
+    this.highlighter = null;
+    this.activeExcerptId = null;
     this.createModal();
   }
 
   createModal() {
     const modalHtml = `
-      <div id="pdfExcerptViewerModal" class="pdf-modal" style="display: none;">
-        <div class="pdf-modal-content">
-          <div class="pdf-modal-header">
-            <div class="pdf-header-info">
-              <h2 id="pdfCollectionTitle">PDF Collection</h2>
-              <div class="pdf-meta" id="pdfCollectionMeta"></div>
+      <div id="pdfExcerptViewerModal" class="pdf-viewer-modal" style="display: none;">
+        <!-- Header -->
+        <div class="pdf-viewer-header">
+          <div>
+            <h2 id="pdfCollectionTitle">PDF Collection</h2>
+            <small id="pdfCollectionMeta"></small>
+          </div>
+          <button onclick="window.pdfExcerptViewer.close()">✕ Close</button>
+        </div>
+
+        <!-- PDF Selector (if multiple PDFs) -->
+        <div id="pdfSelectorSection" class="pdf-selector-section" style="display: none; padding: 12px 24px; background: #2a2a2a; border-bottom: 1px solid #3a3a3a;">
+          <label style="color: #e0e0e0; margin-right: 8px;">Select PDF:</label>
+          <select id="pdfSelector" onchange="window.pdfExcerptViewer.switchPDF(this.value)" style="background: #1e1e1e; border: 1px solid #3a3a3a; color: #e0e0e0; padding: 6px 12px; border-radius: 4px;">
+          </select>
+        </div>
+
+        <!-- Main Content: Side-by-side -->
+        <div class="pdf-viewer-main">
+          <!-- LEFT: PDF Viewer Panel (60%) -->
+          <div class="pdf-viewer-panel">
+            <div id="pdfViewerContainer" class="pdf-viewer-container">
+              <div class="pdf-loading" id="pdfLoadingState">Loading PDF...</div>
             </div>
-            <button class="pdf-close-btn" onclick="window.pdfExcerptViewer.close()">×</button>
+            <div class="pdf-controls">
+              <button id="pdfPrevPage">◀ Prev</button>
+              <span>Page <span id="pdfCurrentPage">1</span> / <span id="pdfTotalPages">1</span></span>
+              <button id="pdfNextPage">Next ▶</button>
+              <span style="margin-left: 16px;">|</span>
+              <button id="pdfZoomOut">-</button>
+              <span id="pdfZoomLevel">100%</span>
+              <button id="pdfZoomIn">+</button>
+            </div>
           </div>
 
-          <!-- PDF Selector (if multiple PDFs) -->
-          <div id="pdfSelectorSection" class="pdf-selector-section" style="display: none;">
-            <label>Select PDF:</label>
-            <select id="pdfSelector" onchange="window.pdfExcerptViewer.switchPDF(this.value)">
-            </select>
-          </div>
+          <!-- RIGHT: Excerpt List Panel (40%) -->
+          <div class="excerpt-list-panel">
+            <!-- Search Bar -->
+            <div class="excerpt-search">
+              <input type="text" id="excerptSearch" placeholder="Search excerpts..." oninput="window.pdfExcerptViewer.handleSearch(this.value)" />
+              <span id="searchResultCount" style="color: #808080; font-size: 13px; margin-left: 8px;"></span>
+            </div>
 
-          <!-- Search Bar -->
-          <div class="pdf-search-section">
-            <input
-              type="text"
-              id="excerptSearch"
-              placeholder="Search within excerpts..."
-              oninput="window.pdfExcerptViewer.handleSearch(this.value)"
-            />
-            <span id="searchResultCount"></span>
-          </div>
-
-          <!-- Excerpts List -->
-          <div class="pdf-excerpts-container">
-            <div id="excerptsList" class="excerpts-list">
+            <!-- Excerpts List -->
+            <div class="excerpt-list" id="excerptsList">
               <div class="loading">Loading excerpts...</div>
             </div>
-          </div>
 
-          <!-- Pagination Controls -->
-          <div class="pdf-pagination">
-            <button
-              id="prevPageBtn"
-              class="pagination-btn"
-              onclick="window.pdfExcerptViewer.prevPage()"
-              disabled
-            >
-              « Previous
-            </button>
-            <span id="pageInfo">Page 1 of 1</span>
-            <button
-              id="nextPageBtn"
-              class="pagination-btn"
-              onclick="window.pdfExcerptViewer.nextPage()"
-              disabled
-            >
-              Next »
-            </button>
+            <!-- Pagination -->
+            <div class="excerpt-pagination">
+              <button id="excerptPrevBtn" onclick="window.pdfExcerptViewer.prevPage()">◀</button>
+              <span id="excerptPageInfo">Page 1</span>
+              <button id="excerptNextBtn" onclick="window.pdfExcerptViewer.nextPage()">▶</button>
+            </div>
           </div>
+        </div>
 
-          <!-- Actions -->
-          <div class="pdf-modal-actions">
-            <button class="btn btn-secondary" onclick="window.pdfExcerptViewer.exportExcerpts()">
-              Export to Text
-            </button>
-            <button class="btn" onclick="window.pdfExcerptViewer.close()">Close</button>
-          </div>
+        <!-- Footer -->
+        <div class="pdf-viewer-footer">
+          <button onclick="window.pdfExcerptViewer.exportExcerpts()">Export</button>
+          <button onclick="window.pdfExcerptViewer.close()">Close</button>
         </div>
       </div>
     `;
@@ -121,7 +122,7 @@ class PDFExcerptViewer {
         document.getElementById('pdfSelectorSection').style.display = 'none';
       }
 
-      // Load excerpts for first PDF
+      // Load first PDF with visual viewer
       await this.switchPDF(pdfs[0].id);
 
       // Show modal
@@ -162,11 +163,13 @@ class PDFExcerptViewer {
 
       // Show loading state
       document.getElementById('excerptsList').innerHTML = '<div class="loading">Loading excerpts...</div>';
+      document.getElementById('pdfLoadingState').style.display = 'flex';
 
       // Load excerpts
       const result = await window.api.pdf.getExcerpts(pdfId);
       if (!result.success || !result.data) {
         document.getElementById('excerptsList').innerHTML = '<div class="empty-state">No excerpts found</div>';
+        document.getElementById('pdfLoadingState').textContent = 'No excerpts available';
         return;
       }
 
@@ -176,10 +179,137 @@ class PDFExcerptViewer {
       this.searchTerm = '';
       document.getElementById('excerptSearch').value = '';
 
+      // Initialize visual PDF viewer
+      await this.initializePDFViewer(pdfId);
+
+      // Render excerpts list
       this.renderExcerpts();
+
     } catch (error) {
       console.error('[PDFExcerptViewer] Error loading excerpts:', error);
       document.getElementById('excerptsList').innerHTML = '<div class="empty-state error">Error loading excerpts</div>';
+      document.getElementById('pdfLoadingState').textContent = 'Error loading PDF';
+    }
+  }
+
+  async initializePDFViewer(pdfId) {
+    try {
+      // Check if PDF.js is loaded
+      if (typeof pdfjsLib === 'undefined') {
+        console.error('[PDFExcerptViewer] PDF.js library not loaded');
+        document.getElementById('pdfLoadingState').textContent = 'PDF.js library not found';
+        return;
+      }
+
+      // Get PDF file path
+      const filePathResult = await window.api.pdf.getFilePath(pdfId);
+      if (!filePathResult || !filePathResult.success) {
+        console.error('[PDFExcerptViewer] Failed to get PDF file path:', filePathResult?.error);
+        document.getElementById('pdfLoadingState').textContent = 'Failed to locate PDF file';
+        return;
+      }
+
+      const filePath = filePathResult.filePath;
+      console.log('[PDFExcerptViewer] Loading PDF from:', filePath);
+
+      // Clear container
+      const container = document.getElementById('pdfViewerContainer');
+      container.innerHTML = '';
+
+      // Create renderer
+      if (!window.PDFRenderer) {
+        console.error('[PDFExcerptViewer] PDFRenderer class not found');
+        container.innerHTML = '<div class="pdf-error">PDFRenderer component not loaded</div>';
+        return;
+      }
+
+      this.renderer = new PDFRenderer(container);
+
+      // Create highlighter
+      if (!window.PDFHighlighter) {
+        console.error('[PDFExcerptViewer] PDFHighlighter class not found');
+      } else {
+        this.highlighter = new PDFHighlighter(container, this.renderer);
+      }
+
+      // Load PDF (use file:// protocol for local files)
+      const pdfUrl = filePath.startsWith('file://') ? filePath : 'file://' + filePath;
+      await this.renderer.loadPDF(pdfUrl);
+
+      console.log('[PDFExcerptViewer] PDF loaded successfully');
+
+      // Load highlights if highlighter exists
+      if (this.highlighter && this.allExcerpts.length > 0) {
+        this.highlighter.loadExcerpts(this.allExcerpts);
+      }
+
+      // Setup controls
+      this.setupControls();
+
+    } catch (error) {
+      console.error('[PDFExcerptViewer] Error initializing PDF viewer:', error);
+      document.getElementById('pdfLoadingState').innerHTML = `
+        <div class="pdf-error">
+          <p>Failed to load PDF</p>
+          <small>${error.message}</small>
+        </div>
+      `;
+    }
+  }
+
+  setupControls() {
+    // Page navigation
+    const prevBtn = document.getElementById('pdfPrevPage');
+    const nextBtn = document.getElementById('pdfNextPage');
+
+    prevBtn.onclick = () => {
+      if (this.renderer) {
+        this.renderer.prevPage();
+      }
+    };
+
+    nextBtn.onclick = () => {
+      if (this.renderer) {
+        this.renderer.nextPage();
+      }
+    };
+
+    // Zoom controls
+    document.getElementById('pdfZoomIn').onclick = () => {
+      if (this.renderer) {
+        const scale = this.renderer.getScale() * 1.25;
+        this.renderer.setZoom(Math.min(scale, 2.0));
+        this.updateZoom();
+      }
+    };
+
+    document.getElementById('pdfZoomOut').onclick = () => {
+      if (this.renderer) {
+        const scale = this.renderer.getScale() / 1.25;
+        this.renderer.setZoom(Math.max(scale, 0.5));
+        this.updateZoom();
+      }
+    };
+
+    // Listen for page render events
+    document.addEventListener('pdfRenderer:pageRendered', (e) => {
+      document.getElementById('pdfCurrentPage').textContent = e.detail.pageNum;
+      document.getElementById('pdfTotalPages').textContent = e.detail.totalPages;
+
+      // Update highlights when page changes
+      if (this.highlighter) {
+        this.highlighter.redraw();
+      }
+    });
+
+    // Update initial zoom display
+    this.updateZoom();
+  }
+
+  updateZoom() {
+    if (this.renderer) {
+      const scale = this.renderer.getScale();
+      document.getElementById('pdfZoomLevel').textContent = Math.round(scale * 100) + '%';
     }
   }
 
@@ -200,23 +330,15 @@ class PDFExcerptViewer {
     const endIdx = Math.min(startIdx + this.excerptsPerPage, this.filteredExcerpts.length);
     const pageExcerpts = this.filteredExcerpts.slice(startIdx, endIdx);
 
-    // Render excerpt cards
+    // Render excerpt items for sidebar
     excerptsList.innerHTML = pageExcerpts.map(excerpt => {
       const text = excerpt.text_content || '';
-      const highlightedText = this.searchTerm
-        ? this.highlightText(text, this.searchTerm)
-        : this.escapeHtml(text);
+      const activeClass = excerpt.id === this.activeExcerptId ? ' active' : '';
 
       return `
-        <div class="excerpt-card">
-          <div class="excerpt-card-header">
-            <span class="excerpt-number">Excerpt ${excerpt.excerpt_number || '?'}</span>
-            <span class="excerpt-page-badge">Page ${excerpt.page_number || '?'}</span>
-          </div>
-          <div class="excerpt-text">${highlightedText}</div>
-          <div class="excerpt-card-footer">
-            <span class="excerpt-meta">${text.length} characters</span>
-          </div>
+        <div class="excerpt-list-item${activeClass}" data-excerpt-id="${excerpt.id}" onclick="window.pdfExcerptViewer.onExcerptClick(${excerpt.id})">
+          <div class="excerpt-page-number">Page ${excerpt.page_number || '?'} • Excerpt ${excerpt.excerpt_number || '?'}</div>
+          <div class="excerpt-text">${this.escapeHtml(text.substring(0, 200))}${text.length > 200 ? '...' : ''}</div>
         </div>
       `;
     }).join('');
@@ -224,25 +346,53 @@ class PDFExcerptViewer {
     this.updatePagination();
   }
 
+  onExcerptClick(excerptId) {
+    // Find the excerpt
+    const excerpt = this.allExcerpts.find(e => e.id === excerptId);
+    if (!excerpt) return;
+
+    // Set as active
+    this.activeExcerptId = excerptId;
+
+    // Update visual state in list
+    document.querySelectorAll('.excerpt-list-item').forEach(el => {
+      el.classList.remove('active');
+    });
+    const element = document.querySelector(`[data-excerpt-id="${excerptId}"]`);
+    if (element) {
+      element.classList.add('active');
+    }
+
+    // Jump to page in PDF viewer
+    if (this.renderer && excerpt.page_number) {
+      this.renderer.goToPage(excerpt.page_number);
+    }
+
+    // Highlight in PDF
+    if (this.highlighter) {
+      this.highlighter.setActiveExcerpt(excerptId);
+    }
+  }
+
   updatePagination() {
     const totalPages = Math.ceil(this.filteredExcerpts.length / this.excerptsPerPage);
 
     // Update page info
-    const pageInfo = document.getElementById('pageInfo');
+    const pageInfo = document.getElementById('excerptPageInfo');
     if (this.filteredExcerpts.length === 0) {
       pageInfo.textContent = 'No results';
     } else {
       const startIdx = (this.currentPage - 1) * this.excerptsPerPage + 1;
       const endIdx = Math.min(this.currentPage * this.excerptsPerPage, this.filteredExcerpts.length);
-      pageInfo.textContent = `${startIdx}-${endIdx} of ${this.filteredExcerpts.length} excerpts (Page ${this.currentPage} of ${totalPages})`;
+      pageInfo.textContent = `Showing ${startIdx}-${endIdx} of ${this.filteredExcerpts.length} (Page ${this.currentPage}/${totalPages})`;
     }
 
     // Update button states
-    const prevBtn = document.getElementById('prevPageBtn');
-    const nextBtn = document.getElementById('nextPageBtn');
+    const prevBtn = document.getElementById('excerptPrevBtn');
+    const nextBtn = document.getElementById('excerptNextBtn');
 
-    prevBtn.disabled = this.currentPage <= 1;
-    nextBtn.disabled = this.currentPage >= totalPages || totalPages === 0;
+    if (prevBtn) prevBtn.disabled = this.currentPage <= 1;
+    if (nextBtn) nextBtn.disabled = this.currentPage >= totalPages || totalPages === 0;
 
     // Update search result count
     if (this.searchTerm) {
@@ -258,7 +408,7 @@ class PDFExcerptViewer {
     if (this.currentPage < totalPages) {
       this.currentPage++;
       this.renderExcerpts();
-      document.querySelector('.pdf-excerpts-container').scrollTop = 0;
+      document.querySelector('.excerpt-list').scrollTop = 0;
     }
   }
 
@@ -266,7 +416,7 @@ class PDFExcerptViewer {
     if (this.currentPage > 1) {
       this.currentPage--;
       this.renderExcerpts();
-      document.querySelector('.pdf-excerpts-container').scrollTop = 0;
+      document.querySelector('.excerpt-list').scrollTop = 0;
     }
   }
 
@@ -283,16 +433,8 @@ class PDFExcerptViewer {
 
     this.currentPage = 1;
     this.renderExcerpts();
-  }
 
-  highlightText(text, searchTerm) {
-    if (!searchTerm) return this.escapeHtml(text);
-
-    const escapedText = this.escapeHtml(text);
-    const escapedSearch = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`(${escapedSearch})`, 'gi');
-
-    return escapedText.replace(regex, '<mark>$1</mark>');
+    // TODO: Highlight search matches in PDF (future enhancement)
   }
 
   async exportExcerpts() {
@@ -343,6 +485,17 @@ class PDFExcerptViewer {
       this.escapeHandler = null;
     }
 
+    // Cleanup PDF renderer
+    if (this.renderer) {
+      this.renderer.destroy && this.renderer.destroy();
+      this.renderer = null;
+    }
+
+    if (this.highlighter) {
+      this.highlighter.destroy && this.highlighter.destroy();
+      this.highlighter = null;
+    }
+
     // Reset state
     this.currentCollection = null;
     this.currentPDF = null;
@@ -350,6 +503,7 @@ class PDFExcerptViewer {
     this.filteredExcerpts = [];
     this.currentPage = 1;
     this.searchTerm = '';
+    this.activeExcerptId = null;
   }
 
   // Helpers

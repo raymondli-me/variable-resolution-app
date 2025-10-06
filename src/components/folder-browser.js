@@ -1046,9 +1046,14 @@ class FolderBrowser {
                 <label>Chunking Strategy</label>
                 <select id="pdfChunkingStrategyModal">
                   <option value="page">Page-based (one excerpt per page)</option>
+                  <option value="sentence" selected>Sentence-based (recommended for visual highlighting)</option>
                   <option value="paragraph">Paragraph-based</option>
                   <option value="section">Section-based</option>
+                  <option value="fixed">Fixed size (500 words)</option>
                 </select>
+                <small style="color: #808080; display: block; margin-top: 4px;">
+                  Sentence-based chunking provides the best granularity for visual PDF viewer with highlighting
+                </small>
               </div>
 
               <div class="modal-footer">

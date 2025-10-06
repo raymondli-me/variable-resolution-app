@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="src/styles/merged-collections.css">
     <link rel="stylesheet" href="src/styles/folder-browser.css">
     <link rel="stylesheet" href="src/styles/pdf-excerpt-viewer.css">
+    <link rel="stylesheet" href="src/styles/pdf-renderer.css">
   </head>
 <body>
   <div id="app">
@@ -2009,6 +2010,19 @@
   <script src="src/components/merge-manager.js"></script>
   <!-- Stubs removed - using real APIs now -->
   <script src="src/components/folder-browser.js"></script>
+
+  <!-- PDF.js Library for visual PDF rendering -->
+  <script src="node_modules/pdfjs-dist/build/pdf.js"></script>
+  <script>
+    // Configure PDF.js worker
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'node_modules/pdfjs-dist/build/pdf.worker.js';
+    }
+  </script>
+
+  <!-- PDF Components -->
+  <script src="src/components/pdf-renderer.js"></script>
+  <script src="src/components/pdf-highlighter.js"></script>
   <script src="src/components/pdf-excerpt-viewer.js"></script>
   <script src="src/bws-manager.js"></script>
   <script src="src/renderer-advanced.js"></script>

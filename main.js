@@ -1657,6 +1657,45 @@ ipcMain.handle('pdf:getFilePath', async (event, pdfId) => {
   }
 });
 
+ipcMain.handle('pdf:generatePageImage', async (event, { pdfPath, pageNumber, bbox, excerptId, scale }) => {
+  try {
+    console.log(`[Main] Generating page image for ${pdfPath} page ${pageNumber}...`);
+
+    // Execute image generation in the renderer process (which has access to browser APIs)
+    const result = await event.sender.executeJavaScript(`
+      (async () => {
+        try {
+          const generator = window.PDFPageImageGenerator;
+          if (!generator) {
+            throw new Error('PDFPageImageGenerator not available');
+          }
+
+          const result = await generator.generatePageImage(
+            ${JSON.stringify(pdfPath)},
+            ${pageNumber},
+            ${JSON.stringify(bbox)},
+            ${JSON.stringify(excerptId)},
+            ${scale || 2.0}
+          );
+
+          return { success: true, ...result };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      })()
+    `);
+
+    return result;
+
+  } catch (error) {
+    console.error('[Main] Error generating page image:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
 // Helper function for checking commands
 const checkCommand = (command, args = ['-version']) => {
   const { spawn } = require('child_process');
@@ -2790,9 +2829,9 @@ ipcMain.handle('ai:startRating', async (event, config) => {
     await db.initialize(dbPath);
     
     const geminiRater = new GeminiRater(geminiKey);
-    
-    // Create and start rating engine
-    ratingEngine = new RatingEngine(db, geminiRater);
+
+    // Create and start rating engine (pass mainWindow for PDF image generation)
+    ratingEngine = new RatingEngine(db, geminiRater, mainWindow);
     
     // Setup event listeners
     ratingEngine.on('progress', (data) => {

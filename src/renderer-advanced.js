@@ -2748,6 +2748,9 @@ class AIAnalysisController {
       return;
     }
 
+    // Get PDF visual mode setting (default: true)
+    const pdfVisualMode = document.getElementById('pdf-visual-mode')?.checked !== false;
+
     const config = {
       collectionId: this.currentCollection,
       projectName,
@@ -2756,6 +2759,7 @@ class AIAnalysisController {
       includeChunks,
       includeComments,
       includePDFs,
+      pdfVisualMode,  // NEW: Send page images with highlights to AI
       batchSize,
       concurrentRequests,
       retryDelay,

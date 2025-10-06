@@ -48,7 +48,8 @@ contextBridge.exposeInMainWorld('api', {
     list: (collectionId) => ipcRenderer.invoke('pdf:list', collectionId),
     getExcerpts: (pdfId) => ipcRenderer.invoke('pdf:getExcerpts', pdfId),
     getFilePath: (pdfId) => ipcRenderer.invoke('pdf:getFilePath', pdfId),
-    delete: (pdfId) => ipcRenderer.invoke('pdf:delete', pdfId)
+    delete: (pdfId) => ipcRenderer.invoke('pdf:delete', pdfId),
+    generatePageImage: (params) => ipcRenderer.invoke('pdf:generatePageImage', params)
   },
   
   // Dialog operations

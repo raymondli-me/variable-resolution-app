@@ -137,18 +137,42 @@ class GeminiRater {
   }
 
   /**
-   * Rate a PDF excerpt using text analysis
+   * Rate a PDF excerpt using text analysis (with optional visual context)
+   *
+   * @param {string} excerptText - The text content to rate
+   * @param {Object} pdfContext - Context object with title, page_number, pageImageDataURL (optional)
+   * @param {string} researchIntent - The research question
+   * @param {string} ratingScale - Rating scale type
+   * @param {number} retries - Number of retry attempts
    */
   async ratePDFExcerpt(excerptText, pdfContext, researchIntent, ratingScale, retries = 3) {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const prompt = this.buildPDFPrompt(excerptText, pdfContext, researchIntent, ratingScale);
+        const hasImage = pdfContext.pageImageDataURL && pdfContext.pageImageDataURL.length > 0;
+        const prompt = this.buildPDFPrompt(excerptText, pdfContext, researchIntent, ratingScale, hasImage);
+
+        // Build parts array: always include text, optionally include image
+        const parts = [{ text: prompt }];
+
+        if (hasImage) {
+          // Extract base64 data from data URL (format: "data:image/png;base64,...")
+          const base64Data = pdfContext.pageImageDataURL.split(',')[1];
+
+          parts.push({
+            inline_data: {
+              mime_type: 'image/png',
+              data: base64Data
+            }
+          });
+
+          console.log(`[GeminiRater] Sending PDF excerpt with page image (${Math.round(base64Data.length / 1024)}KB)`);
+        } else {
+          console.log(`[GeminiRater] Sending PDF excerpt (text-only mode)`);
+        }
 
         const requestBody = {
           contents: [{
-            parts: [{
-              text: prompt
-            }]
+            parts: parts
           }],
           generationConfig: {
             temperature: 0.3,
@@ -232,16 +256,24 @@ IMPORTANT: Respond with ONLY valid JSON. No markdown, no code blocks, no explana
   }
 
   /**
-   * Build prompt for PDF excerpt rating
+   * Build prompt for PDF excerpt rating (with optional image context)
    */
-  buildPDFPrompt(excerptText, pdfContext, researchIntent, ratingScale) {
+  buildPDFPrompt(excerptText, pdfContext, researchIntent, ratingScale, hasImage = false) {
+    const imageInstructions = hasImage
+      ? `\n\nVISUAL CONTEXT: An image of the PDF page is provided showing the excerpt highlighted in yellow. Use this visual context to understand:
+- Document layout and typography (heading vs body text)
+- Surrounding content and context
+- Visual emphasis (bold, italic, font size)
+- Position within the document structure`
+      : '';
+
     return `You are rating content relevance for research purposes.
 
 Research Intent: ${researchIntent}
 
 PDF Document: "${pdfContext.title}"${pdfContext.page_number ? ` (Page ${pdfContext.page_number})` : ''}
 
-Excerpt to rate: "${excerptText}"
+Excerpt to rate: "${excerptText}"${imageInstructions}
 
 ${this.getRatingInstructions(ratingScale)}
 
@@ -249,7 +281,7 @@ Consider:
 - Does the excerpt directly relate to the research intent?
 - Is there substantive discussion or analysis of the topic?
 - Would this excerpt be useful for understanding the research question?
-- Is this academic/technical content relevant to the topic?
+- Is this academic/technical content relevant to the topic?${hasImage ? '\n- What does the visual layout tell you about the importance/context of this text?' : ''}
 
 IMPORTANT: Respond with ONLY valid JSON. No markdown, no code blocks, no explanatory text. Just the JSON object.`;
   }

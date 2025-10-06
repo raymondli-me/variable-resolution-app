@@ -2,10 +2,11 @@
 const EventEmitter = require('events');
 
 class RatingEngine extends EventEmitter {
-  constructor(db, geminiRater) {
+  constructor(db, geminiRater, mainWindow = null) {
     super();
     this.db = db;
     this.gemini = geminiRater;
+    this.mainWindow = mainWindow; // For generating PDF page images via IPC
     this.running = false;
     this.paused = false;
     this.currentProject = null;
@@ -341,12 +342,55 @@ class RatingEngine extends EventEmitter {
         );
         return { ...result, success: true };
       } else if (item.type === 'pdf_excerpt') {
+        // Prepare PDF context
+        const pdfContext = {
+          title: item.pdf_title || 'PDF Document',
+          page_number: item.page_number
+        };
+
+        // Generate page image if visual mode is enabled
+        if (config.pdfVisualMode && this.mainWindow && item.pdf_path && item.bbox) {
+          try {
+            console.log(`[RatingEngine] Generating page image for PDF excerpt ${item.id}...`);
+
+            const imageResult = await this.mainWindow.webContents.executeJavaScript(`
+              (async () => {
+                try {
+                  const generator = window.PDFPageImageGenerator;
+                  if (!generator) {
+                    throw new Error('PDFPageImageGenerator not available');
+                  }
+
+                  const result = await generator.generatePageImage(
+                    ${JSON.stringify(item.pdf_path)},
+                    ${item.page_number},
+                    ${JSON.stringify(item.bbox)},
+                    ${JSON.stringify(`excerpt_${item.id}`)},
+                    2.0
+                  );
+
+                  return { success: true, ...result };
+                } catch (error) {
+                  return { success: false, error: error.message };
+                }
+              })()
+            `);
+
+            if (imageResult.success) {
+              pdfContext.pageImageDataURL = imageResult.imageDataURL;
+              console.log(`[RatingEngine] ✅ Page image generated (${Math.round(imageResult.imageDataURL.length / 1024)}KB)`);
+            } else {
+              console.warn(`[RatingEngine] ⚠️ Failed to generate page image: ${imageResult.error}`);
+            }
+          } catch (error) {
+            console.error(`[RatingEngine] Error generating page image:`, error);
+            // Continue without image if generation fails
+          }
+        }
+
         const result = await this.gemini.ratePDFExcerpt(
           item.text_content,
-          {
-            title: item.pdf_title || 'PDF Document',
-            page_number: item.page_number
-          },
+          pdfContext,
           config.researchIntent,
           config.ratingScale
         );

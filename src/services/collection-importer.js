@@ -21,12 +21,44 @@ class CollectionImporter {
     } = options;
 
     // Read and parse JSON
-    const fileContent = await fs.readFile(importFilePath, 'utf8');
-    const importData = JSON.parse(fileContent);
+    let fileContent;
+    let importData;
 
-    // Validate format
+    try {
+      fileContent = await fs.readFile(importFilePath, 'utf8');
+    } catch (error) {
+      throw new Error(`Failed to read import file: ${error.message}`);
+    }
+
+    // Validate file is not empty
+    if (!fileContent || fileContent.trim().length === 0) {
+      throw new Error('Import file is empty or invalid');
+    }
+
+    // Parse JSON with error handling
+    try {
+      importData = JSON.parse(fileContent);
+    } catch (error) {
+      throw new Error('Import file contains invalid JSON. Please select a valid export file.');
+    }
+
+    // Validate importData is an object
+    if (!importData || typeof importData !== 'object') {
+      throw new Error('Import file contains invalid data structure');
+    }
+
+    // Validate required fields exist
+    if (!importData.format_version) {
+      throw new Error('Import file is missing required format_version field. This may not be a valid Variable Resolution export file.');
+    }
+
+    if (!importData.collection) {
+      throw new Error('Import file is missing collection data. This may not be a valid Variable Resolution export file.');
+    }
+
+    // Validate format version
     if (importData.format_version !== "2.0") {
-      throw new Error(`Unsupported format version: ${importData.format_version}`);
+      throw new Error(`Unsupported format version: ${importData.format_version}. This app supports format version 2.0.`);
     }
 
     // Check for conflicts

@@ -235,10 +235,14 @@ class FolderManager {
     );
 
     // Count total items across all collections in this folder
-    const totalItems = await this.db.get(
-      'SELECT SUM(item_count) as total FROM collections WHERE folder_id = ? AND archived = 0',
-      [folderId]
-    );
+    // Calculate from actual item tables since item_count column doesn't exist
+    const totalItems = await this.db.get(`
+      SELECT
+        COALESCE(SUM(video_count), 0) +
+        COALESCE(SUM(comment_count), 0) as total
+      FROM collections
+      WHERE folder_id = ? AND archived = 0
+    `, [folderId]);
 
     await this.db.run(
       'UPDATE folders SET collection_count = ?, total_items = ? WHERE id = ?',

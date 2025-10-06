@@ -1630,6 +1630,33 @@ ipcMain.handle('pdf:delete', async (event, pdfId) => {
   }
 });
 
+ipcMain.handle('pdf:getFilePath', async (event, pdfId) => {
+  try {
+    const db = require('./src/database/db');
+
+    const pdf = await db.get('SELECT file_path FROM pdfs WHERE id = ?', [pdfId]);
+
+    if (!pdf) {
+      return {
+        success: false,
+        error: 'PDF not found'
+      };
+    }
+
+    return {
+      success: true,
+      filePath: pdf.file_path
+    };
+
+  } catch (error) {
+    console.error('PDF getFilePath error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
 // Helper function for checking commands
 const checkCommand = (command, args = ['-version']) => {
   const { spawn } = require('child_process');

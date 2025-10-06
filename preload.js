@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('api', {
     upload: (params) => ipcRenderer.invoke('pdf:upload', params),
     list: (collectionId) => ipcRenderer.invoke('pdf:list', collectionId),
     getExcerpts: (pdfId) => ipcRenderer.invoke('pdf:getExcerpts', pdfId),
+    getFilePath: (pdfId) => ipcRenderer.invoke('pdf:getFilePath', pdfId),
     delete: (pdfId) => ipcRenderer.invoke('pdf:delete', pdfId)
   },
   

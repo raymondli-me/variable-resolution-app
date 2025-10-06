@@ -108,6 +108,8 @@ class CollectionViewer {
           max-width: 1400px;
           height: 85vh;
           max-height: 900px;
+          display: flex;
+          flex-direction: column;
         }
 
         /* Tabs styling */
@@ -146,15 +148,72 @@ class CollectionViewer {
         .tab-content {
           flex: 1;
           overflow: hidden;
+          display: flex;
+          flex-direction: column;
         }
 
         .tab-pane {
           display: none;
           height: 100%;
+          flex: 1;
         }
 
         .tab-pane.active {
-          display: block;
+          display: flex;
+          flex-direction: column;
+        }
+
+        /* Ensure viewer-layout fills the tab pane */
+        .tab-pane .viewer-layout {
+          flex: 1;
+          display: flex;
+          overflow: hidden;
+        }
+
+        /* Panel headers */
+        .panel-header {
+          padding: 16px;
+          border-bottom: 1px solid var(--border-color, #e0e0e0);
+          background: white;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .panel-header h3 {
+          margin: 0;
+          font-size: 16px;
+          font-weight: 600;
+        }
+
+        /* Videos panel styling */
+        .videos-panel {
+          flex: 0 0 350px;
+          border-right: 1px solid var(--border-color, #e0e0e0);
+          overflow-y: auto;
+          background: var(--bg-secondary, #f9f9f9);
+          display: flex;
+          flex-direction: column;
+        }
+
+        .videos-list {
+          flex: 1;
+          overflow-y: auto;
+          padding: 8px;
+        }
+
+        /* Comments panel styling */
+        .comments-panel {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+
+        .comments-list {
+          flex: 1;
+          overflow-y: auto;
+          padding: 16px;
         }
 
         /* PDF list styling */
@@ -356,28 +415,37 @@ class CollectionViewer {
   async show(collectionId) {
     try {
       const collection = await window.api.database.getCollection(collectionId);
-      if (collection) {
-        this.currentCollection = collection;
-        this.currentCollection.isMerge = false;
-
-        // Load videos and PDFs
-        const videosResult = await window.api.database.getVideos(collectionId);
-        const pdfsResult = await window.api.pdf.list(collectionId);
-
-        this.currentCollection.videos = videosResult.success ? videosResult.data : [];
-        this.currentCollection.pdfs = pdfsResult.success ? pdfsResult.data : [];
-
-        // Reset state
-        this.pdfsLoaded = false;
-        this.currentPdfId = null;
-
-        this.render();
-        document.getElementById('collectionViewerModal').style.display = 'flex';
-      } else {
+      if (!collection) {
         showNotification('Failed to load collection', 'error');
+        return;
       }
+
+      this.currentCollection = collection;
+      this.currentCollection.isMerge = false;
+
+      // Load videos and PDFs
+      const videosResult = await window.api.database.getVideos(collectionId);
+      const pdfsResult = await window.api.pdf.list(collectionId);
+
+      console.log('[CollectionViewer] Videos result:', videosResult);
+      console.log('[CollectionViewer] PDFs result:', pdfsResult);
+
+      this.currentCollection.videos = videosResult?.success ? videosResult.data : [];
+      this.currentCollection.pdfs = pdfsResult?.success ? pdfsResult.data : [];
+
+      console.log('[CollectionViewer] Loaded:', {
+        videos: this.currentCollection.videos?.length || 0,
+        pdfs: this.currentCollection.pdfs?.length || 0
+      });
+
+      // Reset state
+      this.pdfsLoaded = false;
+      this.currentPdfId = null;
+
+      this.render();
+      document.getElementById('collectionViewerModal').style.display = 'flex';
     } catch (error) {
-      console.error('Error loading collection:', error);
+      console.error('[CollectionViewer] Error loading collection:', error);
       showNotification('Error loading collection: ' + error.message, 'error');
     }
   }
@@ -570,6 +638,13 @@ class CollectionViewer {
 
   renderPDFs() {
     const pdfsList = document.getElementById('pdfsList');
+
+    // Guard against null collection
+    if (!this.currentCollection) {
+      pdfsList.innerHTML = '<div class="empty-state">No collection loaded</div>';
+      return;
+    }
+
     const pdfs = this.currentCollection.pdfs || [];
 
     document.getElementById('pdfCount').textContent = `${pdfs.length} PDF${pdfs.length !== 1 ? 's' : ''}`;

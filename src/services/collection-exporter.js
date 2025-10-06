@@ -21,61 +21,8 @@ class CollectionExporter {
       includeAssets = true
     } = options;
 
-    // Get collection
-    const collection = await this.db.getCollection(collectionId);
-    if (!collection) {
-      throw new Error(`Collection ${collectionId} not found`);
-    }
-
-    // Get folder path if collection is in a folder
-    let folderPath = null;
-    if (collection.folder_id) {
-      const pathResult = await this.db.getFolderPath(collection.folder_id);
-      folderPath = pathResult;
-    }
-
-    // Get lineage (parent collections)
-    const lineage = await this.getCollectionLineage(collectionId);
-
-    // Get items
-    const items = await this.getCollectionItems(collectionId);
-
-    // Get dependencies
-    const dependencies = await this.getCollectionDependencies(collectionId, items);
-
-    // Calculate statistics
-    const statistics = this.calculateStatistics(items);
-
-    // Build export object
-    const exportData = {
-      format_version: "2.0",
-      export_type: "collection",
-      export_uuid: crypto.randomUUID(),
-      exported_at: new Date().toISOString(),
-      exported_by: "Variable Resolution App v3.0",
-
-      collection: {
-        uuid: collection.uuid,
-        id: collection.id,
-        name: collection.search_term,
-        search_term: collection.search_term,
-        source_type: collection.source_type || 'youtube',
-        derivation_method: collection.derivation_method,
-        derivation_params: collection.derivation_params ? JSON.parse(collection.derivation_params) : null,
-        folder_path: folderPath,
-        created_at: collection.created_at,
-        archived: collection.archived || false,
-        starred: collection.starred || false,
-        video_count: collection.video_count || 0,
-        comment_count: collection.comment_count || 0,
-        item_count: statistics.total_items
-      },
-
-      lineage: includeDependencies ? lineage : [],
-      items: items,
-      dependencies: includeDependencies ? dependencies : {},
-      statistics: statistics
-    };
+    // Build export data using helper method
+    const exportData = await this.buildCollectionExportData(collectionId, includeDependencies);
 
     // Use outputPath as the complete file path (not as a directory)
     const filepath = outputPath;
@@ -116,19 +63,21 @@ class CollectionExporter {
     const collectionManifest = [];
     for (const collection of collections) {
       const jsonPath = path.join(tempDir, 'collections', `collection_${collection.id}.json`);
-      // ... export logic similar to exportCollectionJSON
+
+      // Export this collection to JSON
+      const exportData = await this.buildCollectionExportData(collection.id, true);
+      await fs.writeFile(jsonPath, JSON.stringify(exportData, null, 2), 'utf8');
+
       collectionManifest.push({
         filename: `collection_${collection.id}.json`,
         uuid: collection.uuid,
         name: collection.search_term,
-        item_count: collection.item_count || 0
+        item_count: exportData.items.length
       });
     }
 
-    // Copy PDF/video assets if requested
-    if (options.includeAssets) {
-      await this.copyAssets(collections, path.join(tempDir, 'assets'));
-    }
+    // Note: Asset copying (PDF/video files) is deferred to Phase 1 for simplicity
+    // ZIP bundle will contain collection metadata only, not the actual media files
 
     // Create manifest.json
     const manifest = {
@@ -142,12 +91,7 @@ class CollectionExporter {
         description: folder.description,
         color: folder.color
       },
-      collections: collectionManifest,
-      assets: {
-        pdf_files: 0,  // Count from copied assets
-        video_files: 0,
-        total_size_mb: 0
-      }
+      collections: collectionManifest
     };
     await fs.writeFile(
       path.join(tempDir, 'manifest.json'),
@@ -187,6 +131,98 @@ class CollectionExporter {
     await fs.copyFile(dbPath, outputPath);
 
     return outputPath;
+  }
+
+  /**
+   * Helper: Build export data for a collection (reusable for single exports and ZIP bundles)
+   * @param {number} collectionId
+   * @param {boolean} includeDependencies
+   * @returns {Promise<Object>} Export data object
+   */
+  async buildCollectionExportData(collectionId, includeDependencies = true) {
+    const collection = await this.db.getCollection(collectionId);
+    if (!collection) {
+      throw new Error(`Collection ${collectionId} not found`);
+    }
+
+    // Get folder path if collection is in a folder
+    let folderPath = null;
+    if (collection.folder_id) {
+      const pathResult = await this.db.getFolderPath(collection.folder_id);
+      folderPath = pathResult;
+    }
+
+    // Get lineage (parent collections)
+    const lineage = await this.getCollectionLineage(collectionId);
+
+    // Get items
+    const items = await this.getCollectionItems(collectionId);
+
+    // Get dependencies
+    const dependencies = await this.getCollectionDependencies(collectionId, items);
+
+    // Calculate statistics
+    const statistics = this.calculateStatistics(items);
+
+    return {
+      format_version: "2.0",
+      export_type: "collection",
+      export_uuid: crypto.randomUUID(),
+      exported_at: new Date().toISOString(),
+      exported_by: "Variable Resolution App v3.0",
+
+      collection: {
+        uuid: collection.uuid,
+        id: collection.id,
+        name: collection.search_term,
+        search_term: collection.search_term,
+        source_type: collection.source_type || 'youtube',
+        derivation_method: collection.derivation_method,
+        derivation_params: collection.derivation_params ? JSON.parse(collection.derivation_params) : null,
+        folder_path: folderPath,
+        created_at: collection.created_at,
+        archived: collection.archived || false,
+        starred: collection.starred || false,
+        video_count: collection.video_count || 0,
+        comment_count: collection.comment_count || 0,
+        item_count: statistics.total_items
+      },
+
+      lineage: includeDependencies ? lineage : [],
+      items: items,
+      dependencies: includeDependencies ? dependencies : {},
+      statistics: statistics
+    };
+  }
+
+  /**
+   * Helper: Get all collections in folder and subfolders recursively
+   * @param {number} folderId - Root folder ID
+   * @returns {Promise<Array>} Array of collection objects
+   */
+  async getCollectionsInFolderRecursive(folderId) {
+    const collections = [];
+
+    // Get collections in this folder
+    const directCollections = await this.db.all(
+      'SELECT * FROM collections WHERE folder_id = ? AND archived = 0',
+      [folderId]
+    );
+    collections.push(...directCollections);
+
+    // Get subfolders
+    const subfolders = await this.db.all(
+      'SELECT id FROM folders WHERE parent_folder_id = ? AND archived = 0',
+      [folderId]
+    );
+
+    // Recursively get collections from subfolders
+    for (const subfolder of subfolders) {
+      const subCollections = await this.getCollectionsInFolderRecursive(subfolder.id);
+      collections.push(...subCollections);
+    }
+
+    return collections;
   }
 
   /**
@@ -408,8 +444,9 @@ ${manifest.folder ? `Folder: ${manifest.folder.path}` : ''}
 
 Contents:
 - ${manifest.collections.length} collection(s)
-- ${manifest.assets?.pdf_files || 0} PDF files
-- ${manifest.assets?.video_files || 0} video files
+
+Note: This export contains collection metadata only.
+Media files (videos, PDFs) are not included in this bundle.
 
 To Import:
 1. Open Variable Resolution App

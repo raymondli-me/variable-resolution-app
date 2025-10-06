@@ -117,8 +117,33 @@ class CollectionImporter {
 
     // Check if folder path exists
     if (importData.collection.folder_path) {
-      // Parse folder path and check if folders exist
-      // Implementation depends on folder structure
+      // Parse folder path (e.g., "/Research/CTE Study/2025")
+      const pathParts = importData.collection.folder_path.split('/').filter(p => p);
+
+      let currentParentId = null;
+      let folderExists = true;
+
+      for (const folderName of pathParts) {
+        // Check if folder exists
+        const existing = await this.db.get(
+          'SELECT id FROM folders WHERE name = ? AND parent_folder_id IS ?',
+          [folderName, currentParentId]
+        );
+
+        if (existing) {
+          currentParentId = existing.id;
+        } else {
+          // Folder doesn't exist - will need to create it during import
+          folderExists = false;
+          break;
+        }
+      }
+
+      conflicts.folder_path = {
+        path: importData.collection.folder_path,
+        exists: folderExists,
+        folderId: folderExists ? currentParentId : null
+      };
     }
 
     return conflicts;
@@ -222,6 +247,35 @@ class CollectionImporter {
       }
     }
 
+    // Determine final folder ID (either targetFolderId or recreate folder structure)
+    let finalFolderId = targetFolderId;
+
+    if (importData.collection.folder_path && !targetFolderId) {
+      // Recreate folder structure
+      const pathParts = importData.collection.folder_path.split('/').filter(p => p);
+      let currentParentId = null;
+
+      for (const folderName of pathParts) {
+        const existing = await this.db.get(
+          'SELECT id FROM folders WHERE name = ? AND parent_folder_id IS ?',
+          [folderName, currentParentId]
+        );
+
+        if (existing) {
+          currentParentId = existing.id;
+        } else {
+          // Create folder
+          const result = await this.db.run(`
+            INSERT INTO folders (name, parent_folder_id, color)
+            VALUES (?, ?, ?)
+          `, [folderName, currentParentId, '#6366f1']);
+          currentParentId = result.lastID;
+        }
+      }
+
+      finalFolderId = currentParentId;
+    }
+
     // Create collection
     const newCollectionUUID = resolution.action === 'duplicate'
       ? crypto.randomUUID()
@@ -236,7 +290,7 @@ class CollectionImporter {
     `, [
       newCollectionUUID,
       importData.collection.name,
-      targetFolderId,
+      finalFolderId,
       importData.collection.archived ? 1 : 0,
       importData.collection.starred ? 1 : 0,
       importData.collection.source_type || 'youtube',
@@ -288,7 +342,96 @@ class CollectionImporter {
       ]);
     }
 
-    // Similar for video_chunks and comments...
+    else if (item.item_type === 'video_chunk') {
+      // First, ensure the video exists
+      let videoId = null;
+
+      // Check if video exists by YouTube video_id
+      const existingVideo = await this.db.get(
+        'SELECT id FROM videos WHERE video_id = ?',
+        [item.source_metadata.video_id]
+      );
+
+      if (existingVideo) {
+        videoId = existingVideo.id;
+      } else {
+        // Create placeholder video entry
+        const result = await this.db.run(`
+          INSERT INTO videos (
+            video_id, title, channel_title, published_at
+          ) VALUES (?, ?, ?, ?)
+        `, [
+          item.source_metadata.video_id || 'imported_' + crypto.randomUUID(),
+          item.source_metadata.video_title || 'Imported Video',
+          item.source_metadata.channel_title || 'Unknown Channel',
+          new Date().toISOString()
+        ]);
+        videoId = result.lastID;
+      }
+
+      // Create video chunk
+      await this.db.run(`
+        INSERT INTO video_chunks (
+          video_id, collection_id, chunk_number,
+          start_time, end_time, transcript_text, file_path
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [
+        videoId,
+        collectionId,
+        item.source_metadata.chunk_number || 0,
+        item.source_metadata.start_time || 0,
+        item.source_metadata.end_time || 0,
+        item.text_content,
+        item.source_metadata.file_path || null
+      ]);
+    }
+
+    else if (item.item_type === 'comment') {
+      // First, ensure the video exists
+      let videoId = null;
+
+      // Check if video exists by YouTube video_id
+      const existingVideo = await this.db.get(
+        'SELECT id FROM videos WHERE video_id = ?',
+        [item.source_metadata.video_id]
+      );
+
+      if (existingVideo) {
+        videoId = existingVideo.id;
+      } else {
+        // Create placeholder video entry
+        const result = await this.db.run(`
+          INSERT INTO videos (
+            video_id, title, channel_title, published_at
+          ) VALUES (?, ?, ?, ?)
+        `, [
+          item.source_metadata.video_id || 'imported_' + crypto.randomUUID(),
+          item.source_metadata.video_title || 'Imported Video',
+          'Unknown Channel',
+          new Date().toISOString()
+        ]);
+        videoId = result.lastID;
+      }
+
+      // Create comment
+      await this.db.run(`
+        INSERT INTO comments (
+          video_id, collection_id, comment_id,
+          text, author_name, like_count
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `, [
+        videoId,
+        collectionId,
+        'imported_' + crypto.randomUUID(),
+        item.text_content,
+        item.source_metadata.author_name || 'Unknown',
+        item.source_metadata.like_count || 0
+      ]);
+    }
+
+    else {
+      console.warn(`Unknown item type: ${item.item_type}`);
+    }
   }
 
   /**

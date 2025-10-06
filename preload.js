@@ -22,7 +22,10 @@ contextBridge.exposeInMainWorld('api', {
     archive: (collectionId, archived) => ipcRenderer.invoke('collections:archive', collectionId, archived),
     star: (collectionId, starred) => ipcRenderer.invoke('collections:star', collectionId, starred),
     exportToJSON: (collectionId, outputPath) => ipcRenderer.invoke('collections:export', collectionId, outputPath, {}),
-    importFromJSON: (filePath, options) => ipcRenderer.invoke('collections:import', filePath, options)
+    importFromJSON: (filePath, options) => ipcRenderer.invoke('collections:import', filePath, options),
+    duplicate: (params) => ipcRenderer.invoke('collections:duplicate', params),
+    subsample: (params) => ipcRenderer.invoke('collections:subsample', params),
+    filter: (params) => ipcRenderer.invoke('collections:filter', params)
   },
 
   // Folder operations
@@ -49,7 +52,9 @@ contextBridge.exposeInMainWorld('api', {
   
   // Dialog operations
   dialog: {
-    selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory')
+    selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory'),
+    openFile: (options) => ipcRenderer.invoke('dialog:openFile', options),
+    saveFile: (options) => ipcRenderer.invoke('dialog:saveFile', options)
   },
   
   // System operations
@@ -136,7 +141,11 @@ contextBridge.exposeInMainWorld('api', {
     // Rating/BWS operations
     getItemsForRating: (collectionId, includeChunks, includeComments, projectId, includePDFs) =>
       ipcRenderer.invoke('database:getItemsForRating', collectionId, includeChunks, includeComments, projectId, includePDFs),
-    
+
+    // Video and comment operations
+    getVideos: (collectionId) => ipcRenderer.invoke('db:getVideos', collectionId),
+    getComments: (videoId) => ipcRenderer.invoke('db:getComments', videoId),
+
     exportToSQLite: (outputPath) => ipcRenderer.invoke('database:export', outputPath)
   },
 

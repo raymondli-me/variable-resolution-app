@@ -507,15 +507,16 @@ class EnhancedCollectionViewer {
 
   async show(collectionId) {
     try {
-      const result = await window.api.db.getCollection(collectionId);
-      if (result.success && result.data) {
-        this.currentCollection = result.data;
+      const collection = await window.api.database.getCollection(collectionId);
+      if (collection) {
+        this.currentCollection = collection;
         this.render();
         document.getElementById('enhancedViewerModal').style.display = 'flex';
       } else {
         this.showNotification('Failed to load collection', 'error');
       }
     } catch (error) {
+      console.error('Error loading collection:', error);
       this.showNotification('Error loading collection: ' + error.message, 'error');
     }
   }
@@ -651,7 +652,7 @@ class EnhancedCollectionViewer {
     const commentsList = document.getElementById('commentsList');
     
     try {
-      const result = await window.api.db.getComments(videoId);
+      const result = await window.api.database.getComments(videoId);
       
       if (result.success && result.data.length > 0) {
         this.allComments = result.data;

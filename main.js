@@ -1528,6 +1528,17 @@ ipcMain.handle('pdf:upload', async (event, { filePath, collectionId, title, chun
       chunkSize
     });
 
+    // CRITICAL FIX: Update collection's video_count to show excerpt count
+    const dbInstance = await require('./src/database/db').getDatabase();
+    const totalExcerpts = await dbInstance.get(
+      'SELECT COUNT(*) as count FROM pdf_excerpts WHERE collection_id = ?',
+      [collectionId]
+    );
+    await dbInstance.run(
+      'UPDATE collections SET video_count = ? WHERE id = ?',
+      [totalExcerpts.count, collectionId]
+    );
+
     return {
       success: true,
       pdfId: result.pdfId,
@@ -3673,6 +3684,260 @@ ipcMain.handle('collections:star', async (event, collectionId, starred) => {
     return { success: true };
   } catch (error) {
     console.error('[IPC] Error starring collection:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Duplicate collection
+ipcMain.handle('collections:duplicate', async (event, params) => {
+  try {
+    const db = await getDatabase();
+
+    // Get source collection
+    const sourceCollection = await db.getCollection(params.sourceId);
+    if (!sourceCollection) {
+      return { success: false, error: 'Source collection not found' };
+    }
+
+    // Get all videos from source
+    const videos = await db.all('SELECT * FROM videos WHERE collection_id = ?', [params.sourceId]);
+
+    // Create new collection
+    const newCollectionId = await db.createCollection(params.newName, sourceCollection.settings || {});
+
+    // Copy videos
+    for (const video of videos) {
+      await db.run(`
+        INSERT INTO videos (
+          collection_id, video_id, title, channel_title, view_count, like_count,
+          comment_count, publish_date, duration, thumbnail_url, video_file_path
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        newCollectionId, video.video_id, video.title, video.channel_title,
+        video.view_count, video.like_count, video.comment_count, video.publish_date,
+        video.duration, video.thumbnail_url, video.video_file_path
+      ]);
+    }
+
+    // Copy comments if requested
+    if (params.includeComments) {
+      const comments = await db.all('SELECT * FROM comments WHERE collection_id = ?', [params.sourceId]);
+      for (const comment of comments) {
+        await db.run(`
+          INSERT INTO comments (
+            collection_id, video_id, comment_id, author, text, like_count, published_at, parent_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          newCollectionId, comment.video_id, comment.comment_id, comment.author,
+          comment.text, comment.like_count, comment.published_at, comment.parent_id
+        ]);
+      }
+    }
+
+    // Update video/comment counts
+    await db.run(`
+      UPDATE collections
+      SET video_count = (SELECT COUNT(*) FROM videos WHERE collection_id = ?),
+          comment_count = (SELECT COUNT(*) FROM comments WHERE collection_id = ?)
+      WHERE id = ?
+    `, [newCollectionId, newCollectionId, newCollectionId]);
+
+    return { success: true, collectionId: newCollectionId };
+  } catch (error) {
+    console.error('[IPC] Error duplicating collection:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Subsample collection
+ipcMain.handle('collections:subsample', async (event, params) => {
+  try {
+    const db = await getDatabase();
+
+    // Get source collection
+    const sourceCollection = await db.getCollection(params.sourceId);
+    if (!sourceCollection) {
+      return { success: false, error: 'Source collection not found' };
+    }
+
+    // Get all videos from source
+    const videos = await db.all('SELECT * FROM videos WHERE collection_id = ?', [params.sourceId]);
+
+    if (videos.length === 0) {
+      return { success: false, error: 'Source collection has no videos' };
+    }
+
+    if (params.sampleSize > videos.length && !params.withReplacement) {
+      return { success: false, error: `Cannot sample ${params.sampleSize} videos from collection of ${videos.length} without replacement` };
+    }
+
+    // Random subsample
+    let sampledVideos = [];
+    if (params.withReplacement) {
+      // Sample with replacement
+      for (let i = 0; i < params.sampleSize; i++) {
+        const randomIndex = Math.floor(Math.random() * videos.length);
+        sampledVideos.push(videos[randomIndex]);
+      }
+    } else {
+      // Sample without replacement (Fisher-Yates shuffle)
+      const shuffled = [...videos];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      sampledVideos = shuffled.slice(0, params.sampleSize);
+    }
+
+    // Create new collection
+    const newCollectionId = await db.createCollection(params.newName, sourceCollection.settings || {});
+
+    // Copy sampled videos
+    for (const video of sampledVideos) {
+      await db.run(`
+        INSERT INTO videos (
+          collection_id, video_id, title, channel_title, view_count, like_count,
+          comment_count, publish_date, duration, thumbnail_url, video_file_path
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        newCollectionId, video.video_id, video.title, video.channel_title,
+        video.view_count, video.like_count, video.comment_count, video.publish_date,
+        video.duration, video.thumbnail_url, video.video_file_path
+      ]);
+
+      // Copy comments for this video
+      const comments = await db.all('SELECT * FROM comments WHERE collection_id = ? AND video_id = ?', [params.sourceId, video.video_id]);
+      for (const comment of comments) {
+        await db.run(`
+          INSERT INTO comments (
+            collection_id, video_id, comment_id, author, text, like_count, published_at, parent_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          newCollectionId, comment.video_id, comment.comment_id, comment.author,
+          comment.text, comment.like_count, comment.published_at, comment.parent_id
+        ]);
+      }
+    }
+
+    // Update counts
+    await db.run(`
+      UPDATE collections
+      SET video_count = (SELECT COUNT(*) FROM videos WHERE collection_id = ?),
+          comment_count = (SELECT COUNT(*) FROM comments WHERE collection_id = ?)
+      WHERE id = ?
+    `, [newCollectionId, newCollectionId, newCollectionId]);
+
+    return { success: true, collectionId: newCollectionId };
+  } catch (error) {
+    console.error('[IPC] Error creating subsample:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Filter collection
+ipcMain.handle('collections:filter', async (event, params) => {
+  try {
+    const db = await getDatabase();
+
+    // Get source collection
+    const sourceCollection = await db.getCollection(params.sourceId);
+    if (!sourceCollection) {
+      return { success: false, error: 'Source collection not found' };
+    }
+
+    // Build filter query
+    let query = 'SELECT * FROM videos WHERE collection_id = ?';
+    let queryParams = [params.sourceId];
+
+    if (params.filters.minViews > 0) {
+      query += ' AND CAST(view_count AS INTEGER) >= ?';
+      queryParams.push(params.filters.minViews);
+    }
+
+    if (params.filters.minComments > 0) {
+      query += ' AND CAST(comment_count AS INTEGER) >= ?';
+      queryParams.push(params.filters.minComments);
+    }
+
+    if (params.filters.titleKeyword) {
+      query += ' AND title LIKE ?';
+      queryParams.push(`%${params.filters.titleKeyword}%`);
+    }
+
+    // Date range filter
+    if (params.filters.dateRange && params.filters.dateRange !== 'all') {
+      const now = new Date();
+      let dateThreshold;
+
+      switch (params.filters.dateRange) {
+        case 'today':
+          dateThreshold = new Date(now.setHours(0, 0, 0, 0));
+          break;
+        case 'week':
+          dateThreshold = new Date(now.setDate(now.getDate() - 7));
+          break;
+        case 'month':
+          dateThreshold = new Date(now.setMonth(now.getMonth() - 1));
+          break;
+        case 'year':
+          dateThreshold = new Date(now.setFullYear(now.getFullYear() - 1));
+          break;
+      }
+
+      if (dateThreshold) {
+        query += ' AND publish_date >= ?';
+        queryParams.push(dateThreshold.toISOString());
+      }
+    }
+
+    // Get filtered videos
+    const filteredVideos = await db.all(query, queryParams);
+
+    if (filteredVideos.length === 0) {
+      return { success: false, error: 'No videos match the filter criteria' };
+    }
+
+    // Create new collection
+    const newCollectionId = await db.createCollection(params.newName, sourceCollection.settings || {});
+
+    // Copy filtered videos
+    for (const video of filteredVideos) {
+      await db.run(`
+        INSERT INTO videos (
+          collection_id, video_id, title, channel_title, view_count, like_count,
+          comment_count, publish_date, duration, thumbnail_url, video_file_path
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        newCollectionId, video.video_id, video.title, video.channel_title,
+        video.view_count, video.like_count, video.comment_count, video.publish_date,
+        video.duration, video.thumbnail_url, video.video_file_path
+      ]);
+
+      // Copy comments for this video
+      const comments = await db.all('SELECT * FROM comments WHERE collection_id = ? AND video_id = ?', [params.sourceId, video.video_id]);
+      for (const comment of comments) {
+        await db.run(`
+          INSERT INTO comments (
+            collection_id, video_id, comment_id, author, text, like_count, published_at, parent_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          newCollectionId, comment.video_id, comment.comment_id, comment.author,
+          comment.text, comment.like_count, comment.published_at, comment.parent_id
+        ]);
+      }
+    }
+
+    // Update counts
+    await db.run(`
+      UPDATE collections
+      SET video_count = (SELECT COUNT(*) FROM videos WHERE collection_id = ?),
+          comment_count = (SELECT COUNT(*) FROM comments WHERE collection_id = ?)
+      WHERE id = ?
+    `, [newCollectionId, newCollectionId, newCollectionId]);
+
+    return { success: true, collectionId: newCollectionId, matchCount: filteredVideos.length };
+  } catch (error) {
+    console.error('[IPC] Error filtering collection:', error);
     return { success: false, error: error.message };
   }
 });

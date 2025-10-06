@@ -5,7 +5,10 @@
  * - Page-based: One chunk per page
  * - Semantic: Paragraph/section-based chunks
  * - Fixed-size: Fixed word count chunks
+ * - Sentence-based: Sentence-level chunks with bounding boxes (NEW!)
  */
+
+const nlp = require('compromise');
 
 class PDFChunker {
   /**
@@ -174,6 +177,150 @@ class PDFChunker {
       y: 0,
       width: 612,
       height: 792
+    };
+  }
+
+  /**
+   * Chunk PDF by sentences with bounding box extraction
+   * This is the GAME-CHANGING feature for visual PDF viewing!
+   *
+   * @param {Object} pdfData - Enhanced PDF data with textItems per page
+   * @param {string} pdfPath - Path to PDF file (for reference)
+   * @returns {Array} Array of sentence-level excerpt objects with accurate bboxes
+   */
+  async chunkBySentence(pdfData, pdfPath) {
+    const excerpts = [];
+    let excerptNumber = 1;
+
+    console.log(`[PDFChunker] Starting sentence-level chunking for ${pdfData.numpages} pages`);
+
+    // Process each page
+    for (let pageNum = 1; pageNum <= pdfData.numpages; pageNum++) {
+      // Get text items for this page (with position information)
+      const textItems = pdfData.pageTextItems && pdfData.pageTextItems[pageNum - 1];
+
+      if (!textItems || textItems.length === 0) {
+        console.log(`[PDFChunker] Page ${pageNum} has no text items, skipping`);
+        continue;
+      }
+
+      // Concatenate all text items to get full page text
+      const pageText = textItems.map(item => item.str).join(' ');
+
+      // Segment into sentences using compromise NLP
+      const sentences = nlp(pageText).sentences().out('array');
+
+      console.log(`[PDFChunker] Page ${pageNum}: Found ${sentences.length} sentences`);
+
+      // For each sentence, find corresponding text items and calculate bbox
+      for (const sentenceText of sentences) {
+        // Skip very short sentences (likely artifacts)
+        if (sentenceText.trim().length < 10) {
+          continue;
+        }
+
+        // Find text items that make up this sentence
+        const bbox = this.findSentenceBbox(sentenceText, textItems, pageText);
+
+        if (bbox) {
+          excerpts.push({
+            excerpt_number: excerptNumber,
+            page_number: pageNum,
+            text_content: sentenceText.trim(),
+            char_start: null, // Not needed for sentence-based
+            char_end: null,
+            bbox: bbox
+          });
+
+          excerptNumber++;
+        }
+      }
+    }
+
+    console.log(`[PDFChunker] Sentence chunking complete: ${excerpts.length} excerpts created`);
+    return excerpts;
+  }
+
+  /**
+   * Find bounding box for a sentence by matching it to text items
+   * @param {string} sentenceText - The sentence to find
+   * @param {Array} textItems - Array of text items with position info from PDF.js
+   * @param {string} pageText - Full page text for reference
+   * @returns {Object} Bounding box {x, y, width, height, page}
+   */
+  findSentenceBbox(sentenceText, textItems, pageText) {
+    // Find where the sentence starts in the page text
+    const sentenceStart = pageText.indexOf(sentenceText);
+
+    if (sentenceStart === -1) {
+      // Sentence not found (might be due to text extraction differences)
+      // Return null to skip this sentence
+      return null;
+    }
+
+    const sentenceEnd = sentenceStart + sentenceText.length;
+
+    // Find which text items correspond to this sentence
+    let currentPos = 0;
+    const matchingItems = [];
+
+    for (const item of textItems) {
+      const itemStart = currentPos;
+      const itemEnd = currentPos + item.str.length + 1; // +1 for space
+
+      // Check if this item overlaps with the sentence
+      if (itemEnd > sentenceStart && itemStart < sentenceEnd) {
+        matchingItems.push(item);
+      }
+
+      currentPos = itemEnd;
+
+      // Stop once we've passed the sentence
+      if (itemStart > sentenceEnd) {
+        break;
+      }
+    }
+
+    if (matchingItems.length === 0) {
+      return null;
+    }
+
+    // Merge bounding boxes of all matching items
+    return this.mergeBboxes(matchingItems);
+  }
+
+  /**
+   * Merge bounding boxes from multiple text items
+   * @param {Array} textItems - Array of text items with transform and dimensions
+   * @returns {Object} Merged bounding box
+   */
+  mergeBboxes(textItems) {
+    if (textItems.length === 0) {
+      return null;
+    }
+
+    // Extract coordinates from each text item
+    // PDF.js format: item.transform = [scaleX, skewY, skewX, scaleY, x, y]
+    const bboxes = textItems.map(item => {
+      const x = item.transform[4];
+      const y = item.transform[5];
+      const width = item.width || 0;
+      const height = item.height || 12; // Default height if not provided
+
+      return { x, y, width, height };
+    });
+
+    // Find the bounding rectangle that contains all items
+    const minX = Math.min(...bboxes.map(b => b.x));
+    const minY = Math.min(...bboxes.map(b => b.y));
+    const maxX = Math.max(...bboxes.map(b => b.x + b.width));
+    const maxY = Math.max(...bboxes.map(b => b.y + b.height));
+
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY
     };
   }
 }

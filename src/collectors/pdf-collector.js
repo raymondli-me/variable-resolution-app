@@ -24,9 +24,10 @@ class PDFCollector extends EventEmitter {
   /**
    * Extract text and metadata from PDF using pdfjs-dist
    * @param {Buffer} dataBuffer - PDF file buffer
-   * @returns {Object} PDF data (text, metadata, page count)
+   * @param {boolean} includeTextItems - If true, include text items with position data (for sentence chunking)
+   * @returns {Object} PDF data (text, metadata, page count, and optionally text items with positions)
    */
-  async extractPDFData(dataBuffer) {
+  async extractPDFData(dataBuffer, includeTextItems = false) {
     const loadingTask = pdfjsLib.getDocument({
       data: new Uint8Array(dataBuffer),
       useSystemFonts: true,
@@ -41,6 +42,7 @@ class PDFCollector extends EventEmitter {
     // Extract text page by page
     let fullText = '';
     const pageTexts = [];
+    const pageTextItems = []; // NEW: Store text items with position data
 
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
       const page = await pdf.getPage(pageNum);
@@ -49,14 +51,20 @@ class PDFCollector extends EventEmitter {
 
       fullText += pageText + '\n\n';
       pageTexts.push(pageText);
+
+      // NEW: If sentence chunking is requested, also store text items with positions
+      if (includeTextItems) {
+        pageTextItems.push(textContent.items);
+      }
     }
 
-    // Return in pdf-parse compatible format
+    // Return in pdf-parse compatible format + enhanced data
     return {
       text: fullText.trim(),
       numpages: pdf.numPages,
       info: metadata.info || {},
-      pageTexts: pageTexts // Extra: individual page texts
+      pageTexts: pageTexts, // Individual page texts
+      pageTextItems: includeTextItems ? pageTextItems : null // NEW: Text items with bbox data
     };
   }
 
@@ -81,8 +89,10 @@ class PDFCollector extends EventEmitter {
       const dataBuffer = await fs.readFile(sourcePath);
 
       // Extract metadata and text using pdfjs-dist
+      // If sentence chunking is requested, we need text items with position data
+      const needsTextItems = (chunkingStrategy === 'sentence');
       this.emit('status', 'Extracting PDF metadata and text...');
-      const pdfData = await this.extractPDFData(dataBuffer);
+      const pdfData = await this.extractPDFData(dataBuffer, needsTextItems);
 
       // Extract metadata
       const metadata = {
@@ -136,6 +146,9 @@ class PDFCollector extends EventEmitter {
         excerpts = await this.chunker.chunkBySemantic(pdfData.text);
       } else if (chunkingStrategy === 'fixed') {
         excerpts = this.chunker.chunkBySize(pdfData.text, chunkSize);
+      } else if (chunkingStrategy === 'sentence') {
+        // NEW: Sentence-level chunking with bounding boxes
+        excerpts = await this.chunker.chunkBySentence(pdfData, sourcePath);
       } else {
         throw new Error(`Unknown chunking strategy: ${chunkingStrategy}`);
       }

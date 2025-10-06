@@ -868,17 +868,17 @@ class GalleryViewer {
   async show(collectionId) {
     try {
       // Get collection details
-      const collResult = await window.api.db.getCollection(collectionId);
-      if (!collResult.success) {
+      const collection = await window.api.database.getCollection(collectionId);
+      if (!collection) {
         console.error('Failed to load collection');
         return;
       }
 
-      this.currentCollection = collResult.data;
+      this.currentCollection = collection;
       this.currentCollection.isMerge = false;
 
       // Get videos
-      const videoResult = await window.api.db.getVideos(collectionId);
+      const videoResult = await window.api.database.getVideos(collectionId);
       if (!videoResult.success) {
         console.error('Failed to load videos');
         return;
@@ -1326,7 +1326,7 @@ class GalleryViewer {
     container.innerHTML = '<div class="loading">Loading comments...</div>';
     
     try {
-      const result = await window.api.db.getComments(videoId);
+      const result = await window.api.database.getComments(videoId);
       
       if (result.success && result.data.length > 0) {
         const allComments = result.data;

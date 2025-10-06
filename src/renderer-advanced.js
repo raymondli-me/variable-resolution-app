@@ -848,7 +848,7 @@ async function exportToCards() {
 
 async function exportToCsv() {
   // Get the most recent collection
-  const collections = await window.api.db.getCollections();
+  const collections = await window.api.database.getCollections();
   if (collections.success && collections.data.length > 0) {
     const mostRecent = collections.data[0];
     
@@ -1011,6 +1011,11 @@ async function uploadPDF() {
 
         // Reload PDF list
         loadPDFDocuments(collectionId);
+
+        // CRITICAL FIX: Refresh folder browser tree to show new collection
+        if (window.folderBrowser && typeof window.folderBrowser.loadFolderTree === 'function') {
+          window.folderBrowser.loadFolderTree();
+        }
       }, 2000);
 
     } else {
@@ -1606,7 +1611,7 @@ class AIAnalysisController {
     try {
       // Load both regular collections and merged collections
       const [collectionsResult, mergesResult] = await Promise.all([
-        window.api.db.getCollections(),
+        window.api.database.getCollections(),
         window.api.database.getAllMerges()
       ]);
 
@@ -2059,7 +2064,7 @@ class AIAnalysisController {
     if (!project) return;
 
     // Load ratings from database
-    const ratingsResult = await window.api.db.getRatingsForProject(projectId);
+    const ratingsResult = await window.api.ai.getRatingsForProject({ projectId });
     if (!ratingsResult.success) {
       showNotification('Failed to load ratings', 'error');
       return;
@@ -2509,7 +2514,7 @@ class AIAnalysisController {
     try {
       // Load both regular and merged collections
       const [collectionsResult, mergesResult] = await Promise.all([
-        window.api.db.getCollections(),
+        window.api.database.getCollections(),
         window.api.database.getAllMerges()
       ]);
 

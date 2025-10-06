@@ -182,7 +182,7 @@ function closeCreateBWSModal() {
 async function loadBWSRatingProjects() {
   try {
     // Get all collections to find their rating projects
-    const collectionsData = await window.api.db.getCollections();
+    const collectionsData = await window.api.database.getCollections();
 
     // Handle different return formats
     let collections = collectionsData;
@@ -348,7 +348,7 @@ async function loadBWSCollections() {
   try {
     // Load both regular collections and merged collections (same as AI Analysis)
     const [collectionsResult, mergesResult] = await Promise.all([
-      window.api.db.getCollections(),
+      window.api.database.getCollections(),
       window.api.database.getAllMerges()
     ]);
 

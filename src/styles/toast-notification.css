@@ -1,0 +1,224 @@
+/**
+ * Toast Notification Styles
+ * Professional toast notification system with smooth animations
+ */
+
+/* ========================================
+   Container
+   ======================================== */
+
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none; /* Allow clicks through container */
+}
+
+/* ========================================
+   Individual Toast
+   ======================================== */
+
+.toast {
+  width: 350px;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  pointer-events: auto; /* But toasts themselves are clickable */
+  opacity: 0;
+  transform: translateX(400px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.toast.dismissing {
+  opacity: 0;
+  transform: translateX(400px);
+}
+
+/* ========================================
+   Toast Types (Colors)
+   ======================================== */
+
+.toast-success {
+  background: rgba(16, 185, 129, 0.95); /* green-500 */
+  color: white;
+}
+
+.toast-error {
+  background: rgba(239, 68, 68, 0.95); /* red-500 */
+  color: white;
+}
+
+.toast-warning {
+  background: rgba(245, 158, 11, 0.95); /* amber-600 */
+  color: white;
+}
+
+.toast-info {
+  background: rgba(59, 130, 246, 0.95); /* blue-500 */
+  color: white;
+}
+
+/* ========================================
+   Toast Elements
+   ======================================== */
+
+.toast-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 400;
+  word-break: break-word;
+}
+
+.toast-action {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.toast-action:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.toast-action:active {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.toast-close {
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.toast-close:hover {
+  opacity: 1;
+}
+
+.toast-close:active {
+  opacity: 0.6;
+}
+
+/* ========================================
+   Responsive Design
+   ======================================== */
+
+@media (max-width: 500px) {
+  .toast-container {
+    right: 10px;
+    left: 10px;
+    top: 10px;
+  }
+
+  .toast {
+    width: auto;
+    max-width: 100%;
+  }
+}
+
+/* ========================================
+   Accessibility: Reduced Motion
+   ======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    transition: opacity 0.1s;
+    transform: none !important;
+  }
+
+  .toast.show {
+    opacity: 1;
+  }
+
+  .toast.dismissing {
+    opacity: 0;
+  }
+}
+
+/* ========================================
+   High Contrast Mode Support
+   ======================================== */
+
+@media (prefers-contrast: high) {
+  .toast {
+    border: 2px solid currentColor;
+  }
+
+  .toast-action {
+    border: 2px solid white;
+  }
+}
+
+/* ========================================
+   Focus Styles (Keyboard Navigation)
+   ======================================== */
+
+.toast-action:focus,
+.toast-close:focus {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+}
+
+/* ========================================
+   Dark Theme Integration
+   ======================================== */
+
+/* Toasts already have dark backgrounds with transparency,
+   so they work well with both light and dark backgrounds */
+
+/* If a light theme is needed in the future, add: */
+/*
+body.light-theme .toast-success {
+  background: rgba(16, 185, 129, 1);
+}
+
+body.light-theme .toast-error {
+  background: rgba(239, 68, 68, 1);
+}
+
+body.light-theme .toast-warning {
+  background: rgba(245, 158, 11, 1);
+}
+
+body.light-theme .toast-info {
+  background: rgba(59, 130, 246, 1);
+}
+*/

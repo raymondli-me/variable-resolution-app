@@ -1,0 +1,362 @@
+/**
+ * Folder Browser Styles
+ * Hierarchical tree view styling
+ */
+
+/* Folder Browser Container */
+.folder-browser-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.folder-browser-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.folder-browser-header h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: var(--text-primary, #ffffff);
+}
+
+/* Folder Tree Container */
+.folder-tree {
+  padding: 1rem;
+  background: var(--bg-secondary, #1a1a1a);
+  border-radius: 8px;
+  overflow-y: auto;
+  flex: 1;
+  max-height: calc(100vh - 200px);
+}
+
+/* Folder Item Wrapper */
+.folder-item-wrapper {
+  margin-bottom: 0.25rem;
+}
+
+/* Folder Item */
+.folder-item {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.2s;
+  user-select: none;
+}
+
+.folder-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.folder-item.selected {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+/* Expand Arrow */
+.expand-arrow {
+  width: 20px;
+  font-size: 0.8rem;
+  transition: transform 0.2s;
+  color: rgba(255, 255, 255, 0.5);
+  display: inline-block;
+}
+
+.expand-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+/* Folder Icon */
+.folder-icon {
+  margin: 0 0.5rem;
+  font-size: 1.2rem;
+}
+
+/* Folder Name */
+.folder-name {
+  flex: 1;
+  color: var(--text-primary, #ffffff);
+  font-weight: 500;
+}
+
+/* Folder Count */
+.folder-count {
+  color: var(--text-secondary, #999999);
+  font-size: 0.85rem;
+  margin-left: 0.5rem;
+}
+
+/* Folder Children (Indented) */
+.folder-children {
+  margin-left: 24px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  padding-left: 4px;
+}
+
+.folder-children .loading {
+  padding: 0.5rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.85rem;
+}
+
+/* Collection Item */
+.collection-item {
+  display: flex;
+  align-items: center;
+  padding: 0.4rem 0.5rem;
+  margin-bottom: 0.25rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.2s;
+  user-select: none;
+}
+
+.collection-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.collection-item.selected {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.collection-icon {
+  margin-right: 0.5rem;
+  font-size: 1rem;
+}
+
+.collection-name {
+  flex: 1;
+  color: var(--text-primary, #ffffff);
+}
+
+.collection-count {
+  color: var(--text-secondary, #999999);
+  font-size: 0.85rem;
+  margin-left: 0.5rem;
+}
+
+/* Starred Collections */
+.collection-item.starred {
+  position: relative;
+}
+
+.collection-item.starred::before {
+  content: '⭐';
+  margin-right: 0.5rem;
+  font-size: 0.9rem;
+}
+
+/* Archived Items */
+.collection-item.archived,
+.folder-item.archived {
+  opacity: 0.6;
+}
+
+/* Drag-and-Drop States */
+.folder-item.drag-over {
+  background: rgba(99, 102, 241, 0.3);
+  border: 2px dashed #6366f1;
+}
+
+.dragging {
+  opacity: 0.5;
+  background: rgba(99, 102, 241, 0.1);
+}
+
+/* Context Menu */
+.context-menu {
+  position: fixed;
+  background: var(--bg-tertiary, #2a2a2a);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  padding: 0.5rem 0;
+  min-width: 150px;
+  z-index: 1000;
+  display: none;
+}
+
+.context-menu-item {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  color: var(--text-primary, #ffffff);
+  font-size: 0.9rem;
+}
+
+.context-menu-item:hover {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.context-menu-item:active {
+  background: rgba(99, 102, 241, 0.3);
+}
+
+/* Special Views */
+.special-view {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.special-view-item {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.2s;
+  margin-bottom: 0.25rem;
+}
+
+.special-view-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.special-icon {
+  margin-right: 0.5rem;
+  font-size: 1.2rem;
+}
+
+.special-name {
+  flex: 1;
+  color: var(--text-primary, #ffffff);
+  font-weight: 500;
+}
+
+.special-count {
+  color: var(--text-secondary, #999999);
+  font-size: 0.85rem;
+  margin-left: 0.5rem;
+}
+
+/* Create Folder Button */
+#create-folder-btn {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+#create-folder-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(99, 102, 241, 0.3);
+}
+
+#create-folder-btn:active {
+  transform: translateY(0);
+}
+
+/* Empty State */
+.folder-tree-empty {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary, #999999);
+}
+
+.folder-tree-empty h4 {
+  margin-bottom: 0.5rem;
+  color: var(--text-primary, #ffffff);
+}
+
+.folder-tree-empty p {
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+/* Loading State */
+.folder-tree-loading {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary, #999999);
+}
+
+/* Error State */
+.folder-tree-error {
+  padding: 1rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  color: #ef4444;
+  margin: 1rem 0;
+}
+
+/* Success State */
+.folder-tree-success {
+  padding: 1rem;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 6px;
+  color: #10b981;
+  margin: 1rem 0;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .folder-tree {
+    max-height: calc(100vh - 150px);
+  }
+
+  .folder-item,
+  .collection-item {
+    padding: 0.6rem 0.5rem;
+  }
+
+  .folder-name,
+  .collection-name {
+    font-size: 0.9rem;
+  }
+
+  .folder-count,
+  .collection-count {
+    font-size: 0.75rem;
+  }
+}
+
+/* Animation for folder expand/collapse */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 1000px;
+  }
+}
+
+.folder-children {
+  animation: slideDown 0.2s ease-out;
+}
+
+/* Scrollbar Styling */
+.folder-tree::-webkit-scrollbar {
+  width: 8px;
+}
+
+.folder-tree::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.folder-tree::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.folder-tree::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}

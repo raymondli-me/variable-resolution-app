@@ -1,22 +1,34 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const { app } = require('electron');
+const FolderManager = require('./folder-methods');
+const CollectionExporter = require('../services/collection-exporter');
+const CollectionImporter = require('../services/collection-importer');
 
 class Database {
   constructor() {
     this.db = null;
+    this.folderManager = null;
+    this.exporter = null;
+    this.importer = null;
   }
 
   async init() {
     const dbPath = path.join(app.getPath('userData'), 'collections.db');
-    
+
     return new Promise((resolve, reject) => {
       this.db = new sqlite3.Database(dbPath, (err) => {
         if (err) {
           reject(err);
         } else {
           console.log('Connected to SQLite database');
-          this.createTables().then(resolve).catch(reject);
+          this.createTables().then(() => {
+            // Initialize folder manager
+            this.folderManager = new FolderManager(this);
+            this.exporter = new CollectionExporter(this);
+            this.importer = new CollectionImporter(this);
+            resolve();
+          }).catch(reject);
         }
       });
     });
@@ -168,7 +180,40 @@ class Database {
 
       // Indexes for merge tables
       `CREATE INDEX IF NOT EXISTS idx_merge_members_merge ON collection_merge_members(merge_id)`,
-      `CREATE INDEX IF NOT EXISTS idx_merge_members_source ON collection_merge_members(source_collection_id)`
+      `CREATE INDEX IF NOT EXISTS idx_merge_members_source ON collection_merge_members(source_collection_id)`,
+
+      // Provenance tables for export/import tracking
+      `CREATE TABLE IF NOT EXISTS collection_exports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        collection_id INTEGER,
+        folder_id INTEGER,
+        export_uuid TEXT NOT NULL UNIQUE,
+        export_format TEXT NOT NULL,
+        export_path TEXT NOT NULL,
+        file_size_mb REAL,
+        included_dependencies INTEGER DEFAULT 1,
+        included_assets INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE SET NULL,
+        FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS collection_imports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_uuid TEXT,
+        source_name TEXT,
+        source_folder_path TEXT,
+        target_collection_id INTEGER NOT NULL,
+        target_folder_id INTEGER,
+        import_strategy TEXT NOT NULL,
+        id_remapping TEXT,
+        items_imported INTEGER,
+        warnings TEXT,
+        import_file_path TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (target_collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+        FOREIGN KEY (target_folder_id) REFERENCES folders(id) ON DELETE SET NULL
+      )`
     ];
 
     for (const query of queries) {
@@ -319,51 +364,26 @@ class Database {
     }
   }
 
-  // Export/Import methods
-  async exportCollection(collectionId, outputPath) {
-    const collection = await this.getCollection(collectionId);
-    const videos = await this.all('SELECT * FROM videos WHERE collection_id = ?', [collectionId]);
-    const comments = await this.all('SELECT * FROM comments WHERE collection_id = ?', [collectionId]);
-    const chunks = await this.all('SELECT * FROM video_chunks WHERE collection_id = ?', [collectionId]);
-    
-    const exportData = {
-      version: '1.0',
-      exported_at: new Date().toISOString(),
-      collection: collection,
-      videos: videos,
-      comments: comments,
-      video_chunks: chunks
-    };
-    
-    const fs = require('fs');
-    fs.writeFileSync(outputPath, JSON.stringify(exportData, null, 2));
-    return outputPath;
+  // Export methods
+  async exportCollection(collectionId, outputPath, options) {
+    return await this.exporter.exportCollectionJSON(collectionId, outputPath, options);
   }
 
-  async importCollection(filePath) {
-    const fs = require('fs');
-    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    
-    // Create new collection
-    const collectionId = await this.createCollection(
-      data.collection.search_term + ' (Imported)',
-      data.collection.settings
-    );
-    
-    // Import videos
-    for (const video of data.videos) {
-      video.collection_id = collectionId;
-      await this.saveVideo(video, collectionId);
-    }
-    
-    // Import comments
-    for (const comment of data.comments) {
-      comment.collection_id = collectionId;
-      await this.saveComments([comment], comment.video_id, collectionId);
-    }
-    
-    await this.updateCollection(collectionId, data.videos.length, data.comments.length);
-    return collectionId;
+  async exportFolder(folderId, outputPath, options) {
+    return await this.exporter.exportFolderZIP(folderId, outputPath, options);
+  }
+
+  async exportDatabase(outputPath) {
+    return await this.exporter.exportFullDatabase(outputPath);
+  }
+
+  // Import methods
+  async importCollection(filePath, options) {
+    return await this.importer.importCollectionJSON(filePath, options);
+  }
+
+  async importFolder(zipPath, options) {
+    return await this.importer.importFolderZIP(zipPath, options);
   }
 
   // Rating project methods
@@ -1889,6 +1909,112 @@ class Database {
         else resolve();
       });
     });
+  }
+
+  // ============================================
+  // FOLDER MANAGEMENT METHODS
+  // ============================================
+
+  /**
+   * Create a new folder
+   */
+  async createFolder(name, parentFolderId, options) {
+    return await this.folderManager.createFolder(name, parentFolderId, options);
+  }
+
+  /**
+   * Get folder by ID
+   */
+  async getFolder(folderId) {
+    return await this.folderManager.getFolder(folderId);
+  }
+
+  /**
+   * Get folder contents (subfolders + collections)
+   */
+  async getFolderContents(folderId) {
+    return await this.folderManager.getFolderContents(folderId);
+  }
+
+  /**
+   * Move folder to new parent
+   */
+  async moveFolder(folderId, newParentId) {
+    return await this.folderManager.moveFolder(folderId, newParentId);
+  }
+
+  /**
+   * Rename folder
+   */
+  async renameFolder(folderId, newName) {
+    return await this.folderManager.renameFolder(folderId, newName);
+  }
+
+  /**
+   * Delete folder
+   */
+  async deleteFolder(folderId, cascade) {
+    return await this.folderManager.deleteFolder(folderId, cascade);
+  }
+
+  /**
+   * Get folder path string
+   */
+  async getFolderPath(folderId) {
+    return await this.folderManager.getFolderPath(folderId);
+  }
+
+  /**
+   * Get folder lineage
+   */
+  async getFolderLineage(folderId) {
+    return await this.folderManager.getFolderLineage(folderId);
+  }
+
+  /**
+   * Archive/unarchive folder
+   */
+  async archiveFolder(folderId, archived) {
+    return await this.folderManager.archiveFolder(folderId, archived);
+  }
+
+  // ============================================
+  // COLLECTION ORGANIZATION METHODS
+  // ============================================
+
+  /**
+   * Move collection to folder
+   */
+  async moveCollectionToFolder(collectionId, folderId) {
+    await this.run(
+      'UPDATE collections SET folder_id = ? WHERE id = ?',
+      [folderId, collectionId]
+    );
+
+    // Update folder metadata
+    if (folderId) {
+      await this.folderManager.updateFolderMetadata(folderId);
+    }
+  }
+
+  /**
+   * Archive/unarchive collection
+   */
+  async archiveCollection(collectionId, archived = true) {
+    await this.run(
+      'UPDATE collections SET archived = ? WHERE id = ?',
+      [archived ? 1 : 0, collectionId]
+    );
+  }
+
+  /**
+   * Star/unstar collection
+   */
+  async starCollection(collectionId, starred = true) {
+    await this.run(
+      'UPDATE collections SET starred = ? WHERE id = ?',
+      [starred ? 1 : 0, collectionId]
+    );
   }
 }
 

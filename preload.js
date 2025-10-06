@@ -11,22 +11,32 @@ contextBridge.exposeInMainWorld('api', {
     downloadSingleVideo: (params) => ipcRenderer.invoke('youtube:downloadSingleVideo', params)
   },
   
-  // Database operations
-  db: {
-    getCollections: () => ipcRenderer.invoke('db:getCollections'),
-    getCollection: (id) => ipcRenderer.invoke('db:getCollection', id),
-    getVideos: (collectionId) => ipcRenderer.invoke('db:getVideos', collectionId),
-    getComments: (videoId) => ipcRenderer.invoke('db:getComments', videoId),
-    getRatingsForProject: (projectId) => ipcRenderer.invoke('db:getRatingsForProject', projectId)
-  },
-  
   // Collections operations
   collections: {
     checkIncomplete: () => ipcRenderer.invoke('collections:checkIncomplete'),
     resume: (params) => ipcRenderer.invoke('collections:resume', params),
     markComplete: (params) => ipcRenderer.invoke('collections:markComplete', params),
     list: () => ipcRenderer.invoke('db:getCollections'),
-    createPDFCollection: (params) => ipcRenderer.invoke('collections:createPDFCollection', params)
+    createPDFCollection: (params) => ipcRenderer.invoke('collections:createPDFCollection', params),
+    moveToFolder: (collectionId, folderId) => ipcRenderer.invoke('collections:moveToFolder', collectionId, folderId),
+    archive: (collectionId, archived) => ipcRenderer.invoke('collections:archive', collectionId, archived),
+    star: (collectionId, starred) => ipcRenderer.invoke('collections:star', collectionId, starred),
+    exportToJSON: (collectionId, outputPath) => ipcRenderer.invoke('collections:export', collectionId, outputPath, {}),
+    importFromJSON: (filePath, options) => ipcRenderer.invoke('collections:import', filePath, options)
+  },
+
+  // Folder operations
+  folders: {
+    create: (name, parentFolderId, options) => ipcRenderer.invoke('folders:create', name, parentFolderId, options),
+    get: (folderId) => ipcRenderer.invoke('folders:get', folderId),
+    getContents: (folderId) => ipcRenderer.invoke('folders:getContents', folderId),
+    move: (folderId, newParentId) => ipcRenderer.invoke('folders:move', folderId, newParentId),
+    rename: (folderId, newName) => ipcRenderer.invoke('folders:rename', folderId, newName),
+    delete: (folderId, cascade) => ipcRenderer.invoke('folders:delete', folderId, cascade),
+    getPath: (folderId) => ipcRenderer.invoke('folders:getPath', folderId),
+    archive: (folderId, archived) => ipcRenderer.invoke('folders:archive', folderId, archived),
+    exportToZIP: (folderId, outputPath, options) => ipcRenderer.invoke('folders:export', folderId, outputPath, options),
+    importFromZIP: (zipPath, options) => ipcRenderer.invoke('folders:import', zipPath, options)
   },
 
   // PDF operations
@@ -35,21 +45,6 @@ contextBridge.exposeInMainWorld('api', {
     list: (collectionId) => ipcRenderer.invoke('pdf:list', collectionId),
     getExcerpts: (pdfId) => ipcRenderer.invoke('pdf:getExcerpts', pdfId),
     delete: (pdfId) => ipcRenderer.invoke('pdf:delete', pdfId)
-  },
-
-  // Export operations
-  export: {
-    collection: (params) => ipcRenderer.invoke('export:collection', params),
-    cards: (params) => ipcRenderer.invoke('export:cards', params),
-    cardsPreview: (params) => ipcRenderer.invoke('export:cards-preview', params),
-    toCSV: (params) => ipcRenderer.invoke('export:toCSV', params),
-    toSupabase: (params) => ipcRenderer.invoke('export:supabase', params),
-    videoComments: (params) => ipcRenderer.invoke('export:videoComments', params)
-  },
-  
-  // Import operations
-  import: {
-    collection: () => ipcRenderer.invoke('import:collection')
   },
   
   // Dialog operations
@@ -140,7 +135,9 @@ contextBridge.exposeInMainWorld('api', {
 
     // Rating/BWS operations
     getItemsForRating: (collectionId, includeChunks, includeComments, projectId, includePDFs) =>
-      ipcRenderer.invoke('database:getItemsForRating', collectionId, includeChunks, includeComments, projectId, includePDFs)
+      ipcRenderer.invoke('database:getItemsForRating', collectionId, includeChunks, includeComments, projectId, includePDFs),
+    
+    exportToSQLite: (outputPath) => ipcRenderer.invoke('database:export', outputPath)
   },
 
   // Platform info

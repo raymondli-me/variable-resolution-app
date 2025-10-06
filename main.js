@@ -891,56 +891,60 @@ ipcMain.handle('getVideoPath', async (event, relativePath) => {
   }
 });
 
-// Export handler
-ipcMain.handle('export:collection', async (event, { collectionId }) => {
+// Export handlers
+ipcMain.handle('collections:export', async (event, collectionId, outputPath, options) => {
   try {
     const db = await getDatabase();
-    const outputPath = path.join(
-      app.getPath('downloads'),
-      `collection_${collectionId}_${Date.now()}.json`
-    );
-    
-    await db.exportCollection(collectionId, outputPath);
-    
-    return {
-      success: true,
-      filePath: outputPath
-    };
+    const filepath = await db.exportCollection(collectionId, outputPath, options);
+    return { success: true, data: filepath };
   } catch (error) {
-    return {
-      success: false,
-      error: error.message
-    };
+    console.error('Error exporting collection:', error);
+    return { success: false, error: error.message };
   }
 });
 
-// Import handler
-ipcMain.handle('import:collection', async () => {
+ipcMain.handle('folders:export', async (event, folderId, outputPath, options) => {
   try {
-    const result = await dialog.showOpenDialog({
-      properties: ['openFile'],
-      filters: [
-        { name: 'Collection Files', extensions: ['json'] },
-        { name: 'All Files', extensions: ['*'] }
-      ]
-    });
-    
-    if (!result.canceled && result.filePaths.length > 0) {
-      const db = await getDatabase();
-      const collectionId = await db.importCollection(result.filePaths[0]);
-      
-      return {
-        success: true,
-        collectionId: collectionId
-      };
-    }
-    
-    return { success: false, error: 'No file selected' };
+    const db = await getDatabase();
+    const filepath = await db.exportFolder(folderId, outputPath, options);
+    return { success: true, data: filepath };
   } catch (error) {
-    return {
-      success: false,
-      error: error.message
-    };
+    console.error('Error exporting folder:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('database:export', async (event, outputPath) => {
+  try {
+    const db = await getDatabase();
+    const filepath = await db.exportDatabase(outputPath);
+    return { success: true, data: filepath };
+  } catch (error) {
+    console.error('Error exporting database:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Import handlers
+ipcMain.handle('collections:import', async (event, filePath, options) => {
+  try {
+    const db = await getDatabase();
+    const result = await db.importCollection(filePath, options);
+    return { success: true, data: result };
+  } catch (error) {
+    console.error('Error importing collection:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('folders:import', async (event, zipPath, options) => {
+  try {
+    const db = await getDatabase();
+    const result = await db.importFolder(zipPath, options);
+    return { success: true, data: result };
+  } catch (error) {
+    console.error('Error importing folder:', error);
+    return { success: false, error: error.message };
   }
 });
 
@@ -3524,6 +3528,135 @@ ipcMain.handle('database:getItemsForRating', async (event, collectionId, include
   } catch (error) {
     console.error('[IPC] Error getting items for rating:', error);
     throw error;
+  }
+});
+
+// ============================================
+// FOLDER MANAGEMENT IPC HANDLERS
+// ============================================
+
+ipcMain.handle('folders:create', async (event, name, parentFolderId, options) => {
+  try {
+    const db = await getDatabase();
+    const folderId = await db.createFolder(name, parentFolderId, options);
+    return { success: true, data: folderId };
+  } catch (error) {
+    console.error('[IPC] Error creating folder:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('folders:get', async (event, folderId) => {
+  try {
+    const db = await getDatabase();
+    const folder = await db.getFolder(folderId);
+    return { success: true, data: folder };
+  } catch (error) {
+    console.error('[IPC] Error getting folder:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('folders:getContents', async (event, folderId) => {
+  try {
+    const db = await getDatabase();
+    const contents = await db.getFolderContents(folderId);
+    return { success: true, data: contents };
+  } catch (error) {
+    console.error('[IPC] Error getting folder contents:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('folders:move', async (event, folderId, newParentId) => {
+  try {
+    const db = await getDatabase();
+    await db.moveFolder(folderId, newParentId);
+    return { success: true };
+  } catch (error) {
+    console.error('[IPC] Error moving folder:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('folders:rename', async (event, folderId, newName) => {
+  try {
+    const db = await getDatabase();
+    await db.renameFolder(folderId, newName);
+    return { success: true };
+  } catch (error) {
+    console.error('[IPC] Error renaming folder:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('folders:delete', async (event, folderId, cascade) => {
+  try {
+    const db = await getDatabase();
+    await db.deleteFolder(folderId, cascade);
+    return { success: true };
+  } catch (error) {
+    console.error('[IPC] Error deleting folder:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('folders:getPath', async (event, folderId) => {
+  try {
+    const db = await getDatabase();
+    const path = await db.getFolderPath(folderId);
+    return { success: true, data: path };
+  } catch (error) {
+    console.error('[IPC] Error getting folder path:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('folders:archive', async (event, folderId, archived) => {
+  try {
+    const db = await getDatabase();
+    await db.archiveFolder(folderId, archived);
+    return { success: true };
+  } catch (error) {
+    console.error('[IPC] Error archiving folder:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ============================================
+// COLLECTION ORGANIZATION IPC HANDLERS
+// ============================================
+
+ipcMain.handle('collections:moveToFolder', async (event, collectionId, folderId) => {
+  try {
+    const db = await getDatabase();
+    await db.moveCollectionToFolder(collectionId, folderId);
+    return { success: true };
+  } catch (error) {
+    console.error('[IPC] Error moving collection to folder:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('collections:archive', async (event, collectionId, archived) => {
+  try {
+    const db = await getDatabase();
+    await db.archiveCollection(collectionId, archived);
+    return { success: true };
+  } catch (error) {
+    console.error('[IPC] Error archiving collection:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('collections:star', async (event, collectionId, starred) => {
+  try {
+    const db = await getDatabase();
+    await db.starCollection(collectionId, starred);
+    return { success: true };
+  } catch (error) {
+    console.error('[IPC] Error starring collection:', error);
+    return { success: false, error: error.message };
   }
 });
 

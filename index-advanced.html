@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="src/styles/collection-viewer.css">
     <link rel="stylesheet" href="src/styles/rating-projects.css">
     <link rel="stylesheet" href="src/styles/merged-collections.css">
+    <link rel="stylesheet" href="src/styles/folder-browser.css">
   </head>
 <body>
   <div id="app">
@@ -583,28 +584,41 @@
 
           <!-- Saved Collections Tab -->
           <div id="savedTab" class="tab-content active">
-            <div class="collections-header">
-              <div class="filter-options">
-                <input type="text" id="collectionSearch" placeholder="Search collections..." />
-                <select id="collectionFilter">
-                  <option value="all">All Collections</option>
-                  <option value="today">Today</option>
-                  <option value="week">This Week</option>
-                  <option value="month">This Month</option>
-                </select>
-                <select id="collectionTypeFilter">
-                  <option value="all">All Types</option>
-                  <option value="regular">Regular Only</option>
-                  <option value="merged">Merged Only</option>
-                </select>
+            <!-- Folder Browser Component -->
+            <div class="folder-browser-container">
+              <div class="folder-browser-header">
+                <h3>Collections</h3>
+                <div style="display: flex; gap: 0.5rem;">
+                  <button id="create-folder-btn" class="btn btn-primary">
+                    <span>📁</span> New Folder
+                  </button>
+                  <button id="import-collection-btn" class="btn btn-secondary">
+                    <span>📥</span> Import
+                  </button>
+                  <button id="export-database-btn" class="btn btn-secondary">
+                    <span>💾</span> Backup DB
+                  </button>
+                </div>
               </div>
-              <div class="collection-stats">
-                <span id="totalCollections">0 collections</span>
-                <span id="totalVideos">0 videos</span>
-                <span id="totalComments">0 comments</span>
+
+              <div id="folder-tree" class="folder-tree">
+                <!-- Tree will be rendered here by folder-browser.js -->
+                <div class="folder-tree-loading">
+                  Loading collections...
+                </div>
               </div>
             </div>
-            <div id="collectionsList" class="collections-list"></div>
+
+            <!-- Context menu (hidden by default) -->
+            <div id="folder-context-menu" class="context-menu" style="display: none;">
+              <div class="context-menu-item" data-action="rename">Rename</div>
+              <div class="context-menu-item" data-action="delete">Delete</div>
+              <div class="context-menu-item" data-action="archive">Archive</div>
+              <div class="context-menu-item" data-action="color">Change Color</div>
+              <div class="context-menu-item" data-action="star">Star</div>
+              <div class="context-menu-item" data-action="move">Move</div>
+              <div class="context-menu-item" data-action="export">📤 Export</div>
+            </div>
           </div>
 
           <!-- Merged Collections Tab -->
@@ -1980,6 +1994,8 @@
   <script src="src/components/gallery-viewer.js"></script>
   <script src="src/components/modern-single-page.js"></script>
   <script src="src/components/merge-manager.js"></script>
+  <script src="src/components/folder-browser-stubs.js"></script>
+  <script src="src/components/folder-browser.js"></script>
   <script src="src/bws-manager.js"></script>
   <script src="src/renderer-advanced.js"></script>
 </body>

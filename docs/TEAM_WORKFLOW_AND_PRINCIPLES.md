@@ -82,6 +82,48 @@ Paste the complete, unedited output of `git diff HEAD` at the end of the documen
 
 ---
 
+## LIVING DOCUMENTATION: QUIRKS & COMMON MISTAKES
+
+**Principle:** To prevent repeating past errors and to accelerate onboarding, we will maintain a living list of technical quirks and common mistakes encountered during development.
+
+Every agent **must** read this section before starting a new work session. When a new, non-obvious bug is discovered and fixed, it is the **Consultant's duty** to add it to this list.
+
+### 1. Electron Environment Quirks
+
+-   **`prompt()`, `alert()`, `confirm()` are forbidden.**
+    -   **Mistake:** Using the browser's native `prompt()` for user input (`BUG-002`).
+    -   **Reason:** Electron's security model disables these functions. They will crash the renderer process.
+    -   **Correct Solution:** Always build a custom HTML/CSS modal for any user input or confirmation. Use the promise-based `showPromptModal()` and `showConfirmModal()` helpers in `folder-browser.js` as a template.
+
+-   **Benign `service_worker_storage.cc` Error.**
+    -   **Quirk:** On startup, the console may log a red `ERROR:service_worker_storage.cc(2016)] Failed to delete the database: Database IO error`.
+    -   **Reason:** This is a non-fatal, internal error from the underlying Chromium engine. It is **not** related to our application's SQLite database.
+    -   **Correct Solution:** This error can be safely **ignored** unless it is directly correlated with a reproducible application bug. Do not waste time trying to "fix" it.
+
+### 2. Application Logic & Data Flow
+
+-   **Race Conditions on UI Load.**
+    -   **Mistake:** Assuming data from the database (`window.api.database.*` calls) is available immediately on UI load (`BUG-003`).
+    -   **Reason:** Database calls are asynchronous. The UI may try to render before the data has returned, leading to `undefined` errors and `NaN` in the display.
+    -   **Correct Solution:**
+        1.  Always use `async/await` when calling database functions.
+        2.  Add **defensive guards** to all rendering functions to check if data exists before trying to access its properties (e.g., `if (!collection) return;`).
+        3.  Use **default fallbacks** in HTML templates to prevent `NaN` (e.g., `<span>${collection.video_count || 0} items</span>`).
+
+-   **Invalid Data in IPC Handlers.**
+    -   **Mistake:** Assuming data passed to an IPC handler (e.g., `collections:import`) is always valid (`BUG-001`).
+    -   **Reason:** The frontend can accidentally send `null`, `undefined`, or malformed data, especially if a file dialog is cancelled or a file is corrupted.
+    -   **Correct Solution:** The **backend service** (e.g., `CollectionImporter`) is responsible for comprehensive validation. Never trust data from the frontend. Always check for `null`, validate data types, and verify required fields before processing.
+
+### 3. File Paths
+
+-   **Absolute Paths are Required for `fs` tools.**
+    -   **Mistake:** Using a relative path like `docs/file.md` in tools like `write_file` or `read_file`.
+    -   **Reason:** The tool's execution context requires absolute paths to avoid ambiguity.
+    -   **Correct Solution:** Always construct the full, absolute path to a file, starting from the project root (e.g., `/Users/raymondli701/workspace_2025_09_29/vr-collector/docs/file.md`).
+
+---
+
 ## OPERATIONAL BEST PRACTICES
 
 ### For Raymond (Project Lead)

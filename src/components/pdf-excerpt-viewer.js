@@ -187,8 +187,10 @@ class PDFExcerptViewer {
 
     } catch (error) {
       console.error('[PDFExcerptViewer] Error loading excerpts:', error);
-      document.getElementById('excerptsList').innerHTML = '<div class="empty-state error">Error loading excerpts</div>';
-      document.getElementById('pdfLoadingState').textContent = 'Error loading PDF';
+      const excerptsList = this.getElement('excerptsList');
+      if (excerptsList) excerptsList.innerHTML = '<div class="empty-state error">Error loading excerpts</div>';
+      const loadingState = this.getElement('pdfLoadingState');
+      if (loadingState) loadingState.textContent = 'Error loading PDF';
     }
   }
 
@@ -197,7 +199,8 @@ class PDFExcerptViewer {
       // Check if PDF.js is loaded
       if (typeof pdfjsLib === 'undefined') {
         console.error('[PDFExcerptViewer] PDF.js library not loaded');
-        document.getElementById('pdfLoadingState').textContent = 'PDF.js library not found';
+        const loadingState = this.getElement('pdfLoadingState');
+        if (loadingState) loadingState.textContent = 'PDF.js library not found';
         return;
       }
 
@@ -205,7 +208,8 @@ class PDFExcerptViewer {
       const filePathResult = await window.api.pdf.getFilePath(pdfId);
       if (!filePathResult || !filePathResult.success) {
         console.error('[PDFExcerptViewer] Failed to get PDF file path:', filePathResult?.error);
-        document.getElementById('pdfLoadingState').textContent = 'Failed to locate PDF file';
+        const loadingState = this.getElement('pdfLoadingState');
+        if (loadingState) loadingState.textContent = 'Failed to locate PDF file';
         return;
       }
 
@@ -213,7 +217,11 @@ class PDFExcerptViewer {
       console.log('[PDFExcerptViewer] Loading PDF from:', filePath);
 
       // Clear container
-      const container = document.getElementById('pdfViewerContainer');
+      const container = this.getElement('pdfViewerContainer');
+      if (!container) {
+        console.error('[PDFExcerptViewer] pdfViewerContainer not found');
+        return;
+      }
       container.innerHTML = '';
 
       // Create renderer
@@ -248,53 +256,70 @@ class PDFExcerptViewer {
 
     } catch (error) {
       console.error('[PDFExcerptViewer] Error initializing PDF viewer:', error);
-      document.getElementById('pdfLoadingState').innerHTML = `
-        <div class="pdf-error">
-          <p>Failed to load PDF</p>
-          <small>${error.message}</small>
-        </div>
-      `;
+      const loadingState = this.getElement('pdfLoadingState');
+      if (loadingState) {
+        loadingState.innerHTML = `
+          <div class="pdf-error">
+            <p>Failed to load PDF</p>
+            <small>${error.message}</small>
+          </div>
+        `;
+      }
     }
   }
 
   setupControls() {
     // Page navigation
-    const prevBtn = document.getElementById('pdfPrevPage');
-    const nextBtn = document.getElementById('pdfNextPage');
+    const prevBtn = this.getElement('pdfPrevPage');
+    const nextBtn = this.getElement('pdfNextPage');
 
-    prevBtn.onclick = () => {
-      if (this.renderer) {
-        this.renderer.prevPage();
-      }
-    };
+    if (prevBtn) {
+      prevBtn.onclick = () => {
+        if (this.renderer) {
+          this.renderer.prevPage();
+        }
+      };
+    }
 
-    nextBtn.onclick = () => {
-      if (this.renderer) {
-        this.renderer.nextPage();
-      }
-    };
+    if (nextBtn) {
+      nextBtn.onclick = () => {
+        if (this.renderer) {
+          this.renderer.nextPage();
+        }
+      };
+    }
 
     // Zoom controls
-    document.getElementById('pdfZoomIn').onclick = () => {
-      if (this.renderer) {
-        const scale = this.renderer.getScale() * 1.25;
-        this.renderer.setZoom(Math.min(scale, 2.0));
-        this.updateZoom();
-      }
-    };
+    const zoomInBtn = this.getElement('pdfZoomIn');
+    const zoomOutBtn = this.getElement('pdfZoomOut');
 
-    document.getElementById('pdfZoomOut').onclick = () => {
-      if (this.renderer) {
-        const scale = this.renderer.getScale() / 1.25;
-        this.renderer.setZoom(Math.max(scale, 0.5));
-        this.updateZoom();
-      }
-    };
+    if (zoomInBtn) {
+      zoomInBtn.onclick = () => {
+        if (this.renderer) {
+          const scale = this.renderer.getScale() * 1.25;
+          this.renderer.setZoom(Math.min(scale, 2.0));
+          this.updateZoom();
+        }
+      };
+    }
+
+    if (zoomOutBtn) {
+      zoomOutBtn.onclick = () => {
+        if (this.renderer) {
+          const scale = this.renderer.getScale() / 1.25;
+          this.renderer.setZoom(Math.max(scale, 0.5));
+          this.updateZoom();
+        }
+      };
+    }
 
     // Listen for page render events
     document.addEventListener('pdfRenderer:pageRendered', (e) => {
-      document.getElementById('pdfCurrentPage').textContent = e.detail.pageNum;
-      document.getElementById('pdfTotalPages').textContent = e.detail.totalPages;
+      const currentPageEl = this.getElement('pdfCurrentPage');
+      const totalPagesEl = this.getElement('pdfTotalPages');
+
+      if (currentPageEl) currentPageEl.textContent = e.detail.pageNum;
+      if (totalPagesEl) totalPagesEl.textContent = this.renderer?.getTotalPages() || '?';
 
       // Update highlights when page changes
       if (this.highlighter) {
@@ -309,12 +334,14 @@ class PDFExcerptViewer {
   updateZoom() {
     if (this.renderer) {
       const scale = this.renderer.getScale();
-      document.getElementById('pdfZoomLevel').textContent = Math.round(scale * 100) + '%';
+      const zoomEl = this.getElement('pdfZoomLevel');
+      if (zoomEl) zoomEl.textContent = Math.round(scale * 100) + '%';
     }
   }
 
   renderExcerpts() {
-    const excerptsList = document.getElementById('excerptsList');
+    const excerptsList = this.getElement('excerptsList');
+    if (!excerptsList) return;
 
     if (this.filteredExcerpts.length === 0) {
       excerptsList.innerHTML = this.searchTerm
@@ -511,6 +538,19 @@ class PDFExcerptViewer {
     const div = document.createElement('div');
     div.textContent = text || '';
     return div.innerHTML;
+  }
+
+  /**
+   * Safely get element by ID with null check
+   * @param {string} id - Element ID
+   * @returns {HTMLElement|null}
+   */
+  getElement(id) {
+    const el = document.getElementById(id);
+    if (!el) {
+      console.warn(`[PDFExcerptViewer] Element not found: ${id}`);
+    }
+    return el;
   }
 
   showNotification(message, type = 'info') {

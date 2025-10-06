@@ -38,10 +38,12 @@
 | Role | Agent | Primary Responsibility |
 |------|-------|------------------------|
 | **Project Lead** | Raymond (Human) | Final decisions, strategic direction |
-| **Consultant & Integrator** | Consultant Agent (Claude) | Coordinates work, integration testing, documentation |
+| **Consultant & Integrator** | Claude OR Gemini* | Coordinates work, integration testing, documentation |
 | **Backend Implementation A** | Claude Agent A | Complete export/import backend |
 | **Frontend Implementation B** | Claude Agent B | UI polish, integration, testing |
 | **Strategic Oversight** | Principal Architect (Gemini) | High-level validation only |
+
+**\*Note:** The Consultant role can be played by **either Claude or Gemini** - they are interchangeable. At any time there is only ONE active Consultant, but the model can be switched between phases or when context limits are reached. See `CONSULTANT_ROLE_ADDENDUM.md` for full details on Consultant interchangeability.
 
 ---
 

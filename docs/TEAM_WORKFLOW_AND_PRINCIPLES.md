@@ -22,10 +22,12 @@ Our team operates as a disciplined, role-specialized quintet with clear separati
 | Role | Agent | Primary Responsibility |
 |------|-------|------------------------|
 | **Project Lead & Vision Holder** | Raymond (Human) | Sets direction, defines the "why," makes final strategic decisions, breaks ties |
-| **Local Strategist** | Consultant Agent (Claude) | Analyzes codebase, proposes architectural solutions, creates detailed implementation plans, coordinates parallel work |
+| **Local Strategist** | Consultant Agent (Claude OR Gemini)* | Analyzes codebase, proposes architectural solutions, creates detailed implementation plans, coordinates parallel work |
 | **Frontend Implementation** | Claude Implementation Agent | Translates plans into UI/frontend code, focuses on user-facing features |
 | **Backend Implementation** | Gemini Implementation Agent | Translates plans into backend/data code, focuses on database and business logic |
 | **External Architect** | Principal Architect (Gemini) | Provides high-level oversight, ensures long-term architectural integrity, validates direction |
+
+**\*Consultant Interchangeability:** The Consultant Agent role can be played by either Claude or Gemini - only one is active at a time, but the model can be switched as needed. See `CONSULTANT_ROLE_ADDENDUM.md` for details.
 
 **Success Formula:** Each member excels in their role + Clear interactions between roles + Parallel execution = Efficiency of a much larger team
 

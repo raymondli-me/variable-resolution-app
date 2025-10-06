@@ -78,6 +78,12 @@
   padding: 16px;
 }
 
+/* Canvas wrapper to stack PDF and highlight canvases */
+.pdf-canvas-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
 .pdf-render-canvas {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
   background: white;
@@ -86,11 +92,10 @@
 
 .pdf-highlight-canvas {
   position: absolute;
+  top: 0;
+  left: 0;
   pointer-events: none;
   z-index: 10;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
 }
 
 /* PDF Controls */

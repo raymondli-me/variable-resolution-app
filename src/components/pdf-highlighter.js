@@ -25,12 +25,17 @@ class PDFHighlighter {
   createHighlightCanvas() {
     this.highlightCanvas = document.createElement('canvas');
     this.highlightCanvas.className = 'pdf-highlight-canvas';
-    this.highlightCanvas.style.position = 'absolute';
-    this.highlightCanvas.style.top = '0';
-    this.highlightCanvas.style.left = '0';
     this.highlightCanvas.style.pointerEvents = 'none'; // Let clicks pass through to PDF
     this.highlightCtx = this.highlightCanvas.getContext('2d');
-    this.container.appendChild(this.highlightCanvas);
+
+    // Append to the canvas wrapper (not container) so it overlays the PDF canvas
+    const wrapper = this.renderer.getCanvasWrapper();
+    if (wrapper) {
+      wrapper.appendChild(this.highlightCanvas);
+    } else {
+      // Fallback to container if wrapper not available
+      this.container.appendChild(this.highlightCanvas);
+    }
   }
 
   /**

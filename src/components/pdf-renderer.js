@@ -14,6 +14,7 @@ class PDFRenderer {
     this.canvas = null;
     this.ctx = null;
     this.renderTask = null; // Track ongoing render task for cancellation
+    this.canvasWrapper = null; // Wrapper for stacking canvases
 
     this.createCanvas();
   }
@@ -22,10 +23,24 @@ class PDFRenderer {
    * Create canvas element for PDF rendering
    */
   createCanvas() {
+    // Create wrapper for stacking PDF and highlight canvases
+    this.canvasWrapper = document.createElement('div');
+    this.canvasWrapper.className = 'pdf-canvas-wrapper';
+
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'pdf-render-canvas';
     this.ctx = this.canvas.getContext('2d');
-    this.container.appendChild(this.canvas);
+
+    this.canvasWrapper.appendChild(this.canvas);
+    this.container.appendChild(this.canvasWrapper);
+  }
+
+  /**
+   * Get the canvas wrapper element (for highlight canvas positioning)
+   * @returns {HTMLElement}
+   */
+  getCanvasWrapper() {
+    return this.canvasWrapper;
   }
 
   /**

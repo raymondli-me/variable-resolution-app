@@ -109,24 +109,28 @@ class PDFExcerptViewer {
       this.currentCollection.pdfs = pdfs;
 
       // Update header
-      document.getElementById('pdfCollectionTitle').textContent = collection.search_term;
+      const titleEl = this.getElement('pdfCollectionTitle');
+      if (titleEl) titleEl.textContent = collection.search_term;
 
       const totalExcerpts = pdfs.reduce((sum, pdf) => sum + (pdf.excerpts_count || 0), 0);
       const metaText = `${pdfs.length} PDF${pdfs.length > 1 ? 's' : ''} • ${totalExcerpts} excerpts • Created ${new Date(collection.created_at).toLocaleDateString()}`;
-      document.getElementById('pdfCollectionMeta').textContent = metaText;
+      const metaEl = this.getElement('pdfCollectionMeta');
+      if (metaEl) metaEl.textContent = metaText;
 
       // Setup PDF selector if multiple PDFs
       if (pdfs.length > 1) {
         this.setupPDFSelector(pdfs);
       } else {
-        document.getElementById('pdfSelectorSection').style.display = 'none';
+        const selectorSection = this.getElement('pdfSelectorSection');
+        if (selectorSection) selectorSection.style.display = 'none';
       }
 
       // Load first PDF with visual viewer
       await this.switchPDF(pdfs[0].id);
 
       // Show modal
-      document.getElementById('pdfExcerptViewerModal').style.display = 'flex';
+      const modal = this.getElement('pdfExcerptViewerModal');
+      if (modal) modal.style.display = 'flex';
 
       // Close on Escape key
       this.escapeHandler = (e) => {
@@ -143,14 +147,17 @@ class PDFExcerptViewer {
   }
 
   setupPDFSelector(pdfs) {
-    const selector = document.getElementById('pdfSelector');
-    selector.innerHTML = pdfs.map(pdf => `
-      <option value="${pdf.id}">
-        ${this.escapeHtml(pdf.title)} (${pdf.num_pages || 0} pages, ${pdf.excerpts_count || 0} excerpts)
-      </option>
-    `).join('');
+    const selector = this.getElement('pdfSelector');
+    if (selector) {
+      selector.innerHTML = pdfs.map(pdf => `
+        <option value="${pdf.id}">
+          ${this.escapeHtml(pdf.title)} (${pdf.num_pages || 0} pages, ${pdf.excerpts_count || 0} excerpts)
+        </option>
+      `).join('');
+    }
 
-    document.getElementById('pdfSelectorSection').style.display = 'block';
+    const selectorSection = this.getElement('pdfSelectorSection');
+    if (selectorSection) selectorSection.style.display = 'block';
   }
 
   async switchPDF(pdfId) {
@@ -162,14 +169,17 @@ class PDFExcerptViewer {
       }
 
       // Show loading state
-      document.getElementById('excerptsList').innerHTML = '<div class="loading">Loading excerpts...</div>';
-      document.getElementById('pdfLoadingState').style.display = 'flex';
+      const excerptsList = this.getElement('excerptsList');
+      const loadingState = this.getElement('pdfLoadingState');
+
+      if (excerptsList) excerptsList.innerHTML = '<div class="loading">Loading excerpts...</div>';
+      if (loadingState) loadingState.style.display = 'flex';
 
       // Load excerpts
       const result = await window.api.pdf.getExcerpts(pdfId);
       if (!result.success || !result.data) {
-        document.getElementById('excerptsList').innerHTML = '<div class="empty-state">No excerpts found</div>';
-        document.getElementById('pdfLoadingState').textContent = 'No excerpts available';
+        if (excerptsList) excerptsList.innerHTML = '<div class="empty-state">No excerpts found</div>';
+        if (loadingState) loadingState.textContent = 'No excerpts available';
         return;
       }
 
@@ -177,7 +187,9 @@ class PDFExcerptViewer {
       this.filteredExcerpts = [...this.allExcerpts];
       this.currentPage = 1;
       this.searchTerm = '';
-      document.getElementById('excerptSearch').value = '';
+
+      const searchInput = this.getElement('excerptSearch');
+      if (searchInput) searchInput.value = '';
 
       // Initialize visual PDF viewer
       await this.initializePDFViewer(pdfId);
@@ -405,28 +417,32 @@ class PDFExcerptViewer {
     const totalPages = Math.ceil(this.filteredExcerpts.length / this.excerptsPerPage);
 
     // Update page info
-    const pageInfo = document.getElementById('excerptPageInfo');
-    if (this.filteredExcerpts.length === 0) {
-      pageInfo.textContent = 'No results';
-    } else {
-      const startIdx = (this.currentPage - 1) * this.excerptsPerPage + 1;
-      const endIdx = Math.min(this.currentPage * this.excerptsPerPage, this.filteredExcerpts.length);
-      pageInfo.textContent = `Showing ${startIdx}-${endIdx} of ${this.filteredExcerpts.length} (Page ${this.currentPage}/${totalPages})`;
+    const pageInfo = this.getElement('excerptPageInfo');
+    if (pageInfo) {
+      if (this.filteredExcerpts.length === 0) {
+        pageInfo.textContent = 'No results';
+      } else {
+        const startIdx = (this.currentPage - 1) * this.excerptsPerPage + 1;
+        const endIdx = Math.min(this.currentPage * this.excerptsPerPage, this.filteredExcerpts.length);
+        pageInfo.textContent = `Showing ${startIdx}-${endIdx} of ${this.filteredExcerpts.length} (Page ${this.currentPage}/${totalPages})`;
+      }
     }
 
     // Update button states
-    const prevBtn = document.getElementById('excerptPrevBtn');
-    const nextBtn = document.getElementById('excerptNextBtn');
+    const prevBtn = this.getElement('excerptPrevBtn');
+    const nextBtn = this.getElement('excerptNextBtn');
 
     if (prevBtn) prevBtn.disabled = this.currentPage <= 1;
     if (nextBtn) nextBtn.disabled = this.currentPage >= totalPages || totalPages === 0;
 
     // Update search result count
-    if (this.searchTerm) {
-      document.getElementById('searchResultCount').textContent =
-        `${this.filteredExcerpts.length} results`;
-    } else {
-      document.getElementById('searchResultCount').textContent = '';
+    const searchResultCount = this.getElement('searchResultCount');
+    if (searchResultCount) {
+      if (this.searchTerm) {
+        searchResultCount.textContent = `${this.filteredExcerpts.length} results`;
+      } else {
+        searchResultCount.textContent = '';
+      }
     }
   }
 
@@ -504,7 +520,8 @@ class PDFExcerptViewer {
   }
 
   close() {
-    document.getElementById('pdfExcerptViewerModal').style.display = 'none';
+    const modal = this.getElement('pdfExcerptViewerModal');
+    if (modal) modal.style.display = 'none';
 
     // Remove escape key handler
     if (this.escapeHandler) {

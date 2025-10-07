@@ -288,11 +288,11 @@ class FolderBrowser {
   }
 
   async createFolder() {
-    const name = prompt('Enter folder name:');
-    if (!name || !name.trim()) return;
+    const name = await this.showInputDialog('Enter folder name:');
+    if (!name) return;
 
     try {
-      const result = await window.api.folders.create(name.trim(), this.currentFolderId, {
+      const result = await window.api.folders.create(name, this.currentFolderId, {
         color: '#6366f1'
       });
 
@@ -312,11 +312,11 @@ class FolderBrowser {
     const folder = await this.getFolder(folderId);
     if (!folder) return;
 
-    const newName = prompt('Enter new folder name:', folder.name);
-    if (!newName || !newName.trim() || newName === folder.name) return;
+    const newName = await this.showInputDialog('Enter new folder name:', folder.name);
+    if (!newName || newName === folder.name) return;
 
     try {
-      const result = await window.api.folders.rename(folderId, newName.trim());
+      const result = await window.api.folders.rename(folderId, newName);
       if (result.success) {
         await this.loadFolderTree(this.currentFolderId);
         this.showSuccess('Folder renamed successfully');
@@ -1466,6 +1466,84 @@ class FolderBrowser {
       console.error('[FolderBrowser] Filter failed:', error);
       this.showError('Error filtering collection: ' + error.message);
     }
+  }
+
+  /**
+   * Show an input dialog (replaces prompt())
+   * @param {string} title - Dialog title
+   * @param {string} defaultValue - Default input value
+   * @returns {Promise<string|null>} - User input or null if canceled
+   */
+  showInputDialog(title, defaultValue = '') {
+    return new Promise((resolve) => {
+      // Create modal
+      const modal = document.createElement('div');
+      modal.className = 'modal';
+      modal.style.display = 'flex';
+      modal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px;">
+          <div class="modal-header">
+            <h3>${title}</h3>
+            <button class="close-btn">&times;</button>
+          </div>
+          <div class="modal-body">
+            <input type="text" class="input-field" value="${defaultValue}" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+          <div class="modal-actions" style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;">
+            <button class="btn btn-cancel">Cancel</button>
+            <button class="btn btn-primary btn-ok">OK</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+      const input = modal.querySelector('.input-field');
+      input.focus();
+      input.select();
+
+      const cleanup = () => {
+        modal.remove();
+      };
+
+      // Close button
+      modal.querySelector('.close-btn').onclick = () => {
+        cleanup();
+        resolve(null);
+      };
+
+      // Cancel button
+      modal.querySelector('.btn-cancel').onclick = () => {
+        cleanup();
+        resolve(null);
+      };
+
+      // OK button
+      modal.querySelector('.btn-ok').onclick = () => {
+        const value = input.value.trim();
+        cleanup();
+        resolve(value || null);
+      };
+
+      // Enter key
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const value = input.value.trim();
+          cleanup();
+          resolve(value || null);
+        } else if (e.key === 'Escape') {
+          cleanup();
+          resolve(null);
+        }
+      });
+
+      // Click outside to cancel
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          cleanup();
+          resolve(null);
+        }
+      });
+    });
   }
 }
 

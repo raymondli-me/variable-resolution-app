@@ -46,13 +46,15 @@ The full E2E test requires actions like `Subsample` and `Filter` to be functiona
 
 -   **Task for Next Agent:** Your first task is to implement the `Duplicate`, `Subsample`, and `Filter` actions. The logic for these already exists in the backend; you simply need to wire them up in the `collections-hub.js` component, including any necessary modals for user input.
 
-### Step 1: Create the Test Fixture
+### Step 1: Create the Test Fixtures
 
--   **Task:** Create the small, static JSON data file that will be used as the input for our E2E test (e.g., `tests/fixtures/sample-youtube-collection.json`).
+-   **Task:** Create the small, static data files that will be used as the input for our E2E tests. We will need one for each major data genre:
+    -   **YouTube:** A JSON file containing data for 2-3 sample videos (e.g., `tests/fixtures/sample-youtube-data.json`).
+    -   **PDF:** A small, simple, multi-page PDF document (e.g., `tests/fixtures/sample-document.pdf`).
 
 ### Step 2: Build the E2E Test Script
 
--   **Task:** Create the new Playwright script (`tests/e2e/full-pipeline.spec.js`) that executes the full user story described above.
+-   **Task:** Create the new Playwright script (`tests/e2e/full-pipeline.spec.js`). This script will contain two major, independent tests: one for the YouTube data pipeline and one for the PDF data pipeline, both following the Ingest -> Verify -> Analyze -> Verify workflow.
 
 ### Step 3: Integrate into Team Workflow
 

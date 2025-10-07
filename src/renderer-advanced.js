@@ -36,10 +36,17 @@ function setupEventListeners() {
   });
 
   // Settings
-  document.getElementById('settingsBtn').addEventListener('click', showSettings);
-  document.getElementById('closeSettingsBtn').addEventListener('click', hideSettings);
-  document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
-  document.getElementById('selectDirBtn').addEventListener('click', selectDirectory);
+  const settingsBtn = document.getElementById('settingsBtn');
+  if (settingsBtn) settingsBtn.addEventListener('click', showSettings);
+
+  const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+  if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', hideSettings);
+
+  const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+  if (saveSettingsBtn) saveSettingsBtn.addEventListener('click', saveSettings);
+
+  const selectDirBtn = document.getElementById('selectDirBtn');
+  if (selectDirBtn) selectDirBtn.addEventListener('click', selectDirectory);
   
   // Test API buttons
   const testGeminiBtn = document.getElementById('testGeminiBtn');
@@ -130,7 +137,8 @@ function setupEventListeners() {
   const pdfFileBrowseBtn = document.getElementById('pdfFileBrowseBtn');
   if (pdfFileBrowseBtn) {
     pdfFileBrowseBtn.addEventListener('click', () => {
-      document.getElementById('pdfFileInput').click();
+      const pdfFileInput = document.getElementById('pdfFileInput');
+      if (pdfFileInput) pdfFileInput.click();
     });
   }
 
@@ -144,13 +152,21 @@ function setupEventListeners() {
   const pdfExistingCollection = document.getElementById('pdfExistingCollection');
   if (pdfNewCollection && pdfExistingCollection) {
     pdfNewCollection.addEventListener('change', () => {
-      document.getElementById('pdfNewCollectionSection').style.display = 'block';
-      document.getElementById('pdfExistingCollectionSection').style.display = 'none';
+      const pdfNewCollectionSection = document.getElementById('pdfNewCollectionSection');
+      if (pdfNewCollectionSection) pdfNewCollectionSection.style.display = 'block';
+
+      const pdfExistingCollectionSection = document.getElementById('pdfExistingCollectionSection');
+      if (pdfExistingCollectionSection) pdfExistingCollectionSection.style.display = 'none';
+
       updatePDFUploadButton();
     });
     pdfExistingCollection.addEventListener('change', () => {
-      document.getElementById('pdfNewCollectionSection').style.display = 'none';
-      document.getElementById('pdfExistingCollectionSection').style.display = 'block';
+      const pdfNewCollectionSection = document.getElementById('pdfNewCollectionSection');
+      if (pdfNewCollectionSection) pdfNewCollectionSection.style.display = 'none';
+
+      const pdfExistingCollectionSection = document.getElementById('pdfExistingCollectionSection');
+      if (pdfExistingCollectionSection) pdfExistingCollectionSection.style.display = 'block';
+
       updatePDFUploadButton();
     });
   }
@@ -237,14 +253,16 @@ function showView(viewName) {
 async function loadSettings() {
   const apiKeyResult = await window.api.settings.getApiKey('youtube');
   if (apiKeyResult?.success && apiKeyResult.apiKey) {
-    document.getElementById('youtubeApiKey').value = apiKeyResult.apiKey;
+    const youtubeApiKey = document.getElementById('youtubeApiKey');
+    if (youtubeApiKey) youtubeApiKey.value = apiKeyResult.apiKey;
     updateApiKeyStatus(true);
   }
-  
+
   // Load Gemini API key
   const geminiKeyResult = await window.api.settings.getApiKey('gemini');
   if (geminiKeyResult?.success && geminiKeyResult.apiKey) {
-    document.getElementById('geminiApiKey').value = geminiKeyResult.apiKey;
+    const geminiApiKey = document.getElementById('geminiApiKey');
+    if (geminiApiKey) geminiApiKey.value = geminiKeyResult.apiKey;
     updateGeminiApiKeyStatus(true);
   }
 }
@@ -274,17 +292,23 @@ function updateGeminiApiKeyStatus(isSet) {
 }
 
 function showSettings() {
-  document.getElementById('settingsModal').style.display = 'flex';
+  const settingsModal = document.getElementById('settingsModal');
+  if (settingsModal) settingsModal.style.display = 'flex';
 }
 
 function hideSettings() {
-  document.getElementById('settingsModal').style.display = 'none';
+  const settingsModal = document.getElementById('settingsModal');
+  if (settingsModal) settingsModal.style.display = 'none';
 }
 
 async function saveSettings() {
-  const apiKey = document.getElementById('youtubeApiKey').value.trim();
-  const geminiApiKey = document.getElementById('geminiApiKey').value.trim();
-  const outputDir = document.getElementById('outputDir').value;
+  const youtubeApiKeyEl = document.getElementById('youtubeApiKey');
+  const geminiApiKeyEl = document.getElementById('geminiApiKey');
+  const outputDirEl = document.getElementById('outputDir');
+
+  const apiKey = youtubeApiKeyEl ? youtubeApiKeyEl.value.trim() : '';
+  const geminiApiKey = geminiApiKeyEl ? geminiApiKeyEl.value.trim() : '';
+  const outputDir = outputDirEl ? outputDirEl.value : '';
   
   if (apiKey) {
     const result = await window.api.settings.saveApiKey({ service: 'youtube', apiKey });
@@ -307,19 +331,23 @@ async function saveSettings() {
 async function selectDirectory() {
   const result = await window.api.dialog.selectDirectory();
   if (result.success) {
-    document.getElementById('outputDir').value = result.path;
+    const outputDir = document.getElementById('outputDir');
+    if (outputDir) outputDir.value = result.path;
   }
 }
 
 async function testGeminiConnection() {
-  const geminiApiKey = document.getElementById('geminiApiKey').value.trim();
-  
+  const geminiApiKeyEl = document.getElementById('geminiApiKey');
+  const geminiApiKey = geminiApiKeyEl ? geminiApiKeyEl.value.trim() : '';
+
   if (!geminiApiKey) {
     showNotification('Please enter a Gemini API key first', 'error');
     return;
   }
-  
+
   const testBtn = document.getElementById('testGeminiBtn');
+  if (!testBtn) return;
+
   const originalText = testBtn.textContent;
   testBtn.disabled = true;
   testBtn.textContent = 'Testing...';
@@ -349,82 +377,99 @@ async function testGeminiConnection() {
 
 // Collect extraction settings
 function collectExtractionSettings() {
+  // Helper to safely get element value
+  const getValue = (id, defaultValue = '') => {
+    const el = document.getElementById(id);
+    return el ? el.value : defaultValue;
+  };
+
+  const getChecked = (id, defaultValue = false) => {
+    const el = document.getElementById(id);
+    return el ? el.checked : defaultValue;
+  };
+
+  const getIntValue = (id, defaultValue = 0) => {
+    const el = document.getElementById(id);
+    return el ? parseInt(el.value) : defaultValue;
+  };
+
   const settings = {
     // Basic settings
-    searchTerm: document.getElementById('searchTerm').value,
-    maxResults: parseInt(document.getElementById('maxResults').value),
-    dateRange: document.getElementById('dateRange').value,
-    orderBy: document.getElementById('orderBy').value,
-    
+    searchTerm: getValue('searchTerm'),
+    maxResults: getIntValue('maxResults'),
+    dateRange: getValue('dateRange'),
+    orderBy: getValue('orderBy'),
+
     // Advanced settings
     advanced: {
-      videoDuration: document.getElementById('videoDuration').value,
-      videoDefinition: document.getElementById('videoDefinition').value,
-      minViews: document.getElementById('minViews').value ? parseInt(document.getElementById('minViews').value) : null,
-      maxViews: document.getElementById('maxViews').value ? parseInt(document.getElementById('maxViews').value) : null,
-      videoLanguage: document.getElementById('videoLanguage').value,
-      channelType: document.getElementById('channelType').value,
-      embeddable: document.getElementById('embeddable').checked,
-      syndicated: document.getElementById('syndicated').checked,
-      apiQuotaLimit: parseInt(document.getElementById('apiQuotaLimit').value),
-      rateLimitDelay: parseInt(document.getElementById('rateLimitDelay').value)
+      videoDuration: getValue('videoDuration'),
+      videoDefinition: getValue('videoDefinition'),
+      minViews: getValue('minViews') ? getIntValue('minViews') : null,
+      maxViews: getValue('maxViews') ? getIntValue('maxViews') : null,
+      videoLanguage: getValue('videoLanguage'),
+      channelType: getValue('channelType'),
+      embeddable: getChecked('embeddable'),
+      syndicated: getChecked('syndicated'),
+      apiQuotaLimit: getIntValue('apiQuotaLimit'),
+      rateLimitDelay: getIntValue('rateLimitDelay')
     },
-    
+
     // Extraction settings
     extraction: {
       // Metadata
-      extractTitle: document.getElementById('extractTitle').checked,
-      extractDescription: document.getElementById('extractDescription').checked,
-      extractTags: document.getElementById('extractTags').checked,
-      extractThumbnails: document.getElementById('extractThumbnails').checked,
-      extractCaptions: document.getElementById('extractCaptions').checked,
-      extractStatistics: document.getElementById('extractStatistics').checked,
-      extractPublishDate: document.getElementById('extractPublishDate').checked,
-      
+      extractTitle: getChecked('extractTitle'),
+      extractDescription: getChecked('extractDescription'),
+      extractTags: getChecked('extractTags'),
+      extractThumbnails: getChecked('extractThumbnails'),
+      extractCaptions: getChecked('extractCaptions'),
+      extractStatistics: getChecked('extractStatistics'),
+      extractPublishDate: getChecked('extractPublishDate'),
+
       // Channel
-      extractChannelTitle: document.getElementById('extractChannelTitle').checked,
-      extractChannelId: document.getElementById('extractChannelId').checked,
-      extractChannelStats: document.getElementById('extractChannelStats').checked,
-      extractChannelDescription: document.getElementById('extractChannelDescription').checked,
-      
+      extractChannelTitle: getChecked('extractChannelTitle'),
+      extractChannelId: getChecked('extractChannelId'),
+      extractChannelStats: getChecked('extractChannelStats'),
+      extractChannelDescription: getChecked('extractChannelDescription'),
+
       // Comments
-      includeComments: document.getElementById('includeComments').checked,
-      maxComments: parseInt(document.getElementById('maxComments').value),
-      commentSort: document.getElementById('commentSort').value,
-      minCommentLikes: parseInt(document.getElementById('minCommentLikes').value) || 0,
-      includeReplies: document.getElementById('includeReplies').checked,
-      commentAuthorChannelId: document.getElementById('commentAuthorChannelId').checked,
-      commentTimestamps: document.getElementById('commentTimestamps').checked,
-      
+      includeComments: getChecked('includeComments'),
+      maxComments: getIntValue('maxComments'),
+      commentSort: getValue('commentSort'),
+      minCommentLikes: getIntValue('minCommentLikes', 0),
+      includeReplies: getChecked('includeReplies'),
+      commentAuthorChannelId: getChecked('commentAuthorChannelId'),
+      commentTimestamps: getChecked('commentTimestamps'),
+
       // Download
-      downloadVideo: document.getElementById('downloadVideo').checked,
-      videoQuality: document.getElementById('videoQuality').value,
-      videoFormat: document.getElementById('videoFormat').value,
-      maxFileSize: parseInt(document.getElementById('maxFileSize').value),
-      extractAudioOnly: document.getElementById('extractAudioOnly').checked,
-      downloadThumbnail: document.getElementById('downloadThumbnail').checked,
-      
+      downloadVideo: getChecked('downloadVideo'),
+      videoQuality: getValue('videoQuality'),
+      videoFormat: getValue('videoFormat'),
+      maxFileSize: getIntValue('maxFileSize'),
+      extractAudioOnly: getChecked('extractAudioOnly'),
+      downloadThumbnail: getChecked('downloadThumbnail'),
+
       // Transcription
-      enableTranscription: document.getElementById('enableTranscription').checked,
-      whisperModel: document.getElementById('whisperModel').value,
-      whisperDevice: document.getElementById('whisperDevice').value,
-      whisperLanguage: document.getElementById('whisperLanguage').value,
-      whisperTimestamps: document.getElementById('whisperTimestamps').checked,
-      enableVideoChunking: document.getElementById('enableVideoChunking')?.checked || false,
-      
+      enableTranscription: getChecked('enableTranscription'),
+      whisperModel: getValue('whisperModel'),
+      whisperDevice: getValue('whisperDevice'),
+      whisperLanguage: getValue('whisperLanguage'),
+      whisperTimestamps: getChecked('whisperTimestamps'),
+      enableVideoChunking: getChecked('enableVideoChunking', false),
+
       // Processing
-      textProcessing: document.getElementById('textProcessing').value,
-      skipDuplicates: document.getElementById('skipDuplicates').checked,
-      continueOnError: document.getElementById('continueOnError').checked
+      textProcessing: getValue('textProcessing'),
+      skipDuplicates: getChecked('skipDuplicates'),
+      continueOnError: getChecked('continueOnError')
     }
   };
-  
+
   return settings;
 }
 
 // YouTube search
 async function searchYouTube() {
-  const searchTerm = document.getElementById('searchTerm').value.trim();
+  const searchTermEl = document.getElementById('searchTerm');
+  const searchTerm = searchTermEl ? searchTermEl.value.trim() : '';
   if (!searchTerm) {
     showNotification('Please enter a search term', 'error');
     return;
@@ -438,6 +483,8 @@ async function searchYouTube() {
   }
 
   const searchBtn = document.getElementById('searchBtn');
+  if (!searchBtn) return;
+
   searchBtn.disabled = true;
   searchBtn.textContent = 'Searching...';
 
@@ -452,11 +499,15 @@ async function searchYouTube() {
     };
 
     const result = await window.api.youtube.search({ searchTerm, options });
-    
+
     if (result.success) {
       displaySearchResults(result.data);
-      document.getElementById('searchResults').style.display = 'block';
-      document.getElementById('resultsCount').textContent = `${result.data.length} videos found`;
+
+      const searchResults = document.getElementById('searchResults');
+      if (searchResults) searchResults.style.display = 'block';
+
+      const resultsCount = document.getElementById('resultsCount');
+      if (resultsCount) resultsCount.textContent = `${result.data.length} videos found`;
     } else {
       showNotification(`Search failed: ${result.error}`, 'error');
     }
@@ -471,6 +522,8 @@ async function searchYouTube() {
 // Display search results
 function displaySearchResults(videos) {
   const resultsList = document.getElementById('resultsList');
+  if (!resultsList) return;
+
   resultsList.innerHTML = '';
   selectedVideos.clear();
 
@@ -533,8 +586,12 @@ function deselectAllVideos() {
 
 function updateSelectedCount() {
   const count = selectedVideos.size;
-  document.getElementById('selectedCount').textContent = count;
-  document.getElementById('startCollectionBtn').disabled = count === 0;
+
+  const selectedCount = document.getElementById('selectedCount');
+  if (selectedCount) selectedCount.textContent = count;
+
+  const startCollectionBtn = document.getElementById('startCollectionBtn');
+  if (startCollectionBtn) startCollectionBtn.disabled = count === 0;
 }
 
 // Collection
@@ -557,14 +614,24 @@ async function startCollection() {
   const videos = Array.from(selectedVideos);
 
   // Show progress section
-  document.getElementById('searchResults').style.display = 'none';
-  document.getElementById('collectionProgress').style.display = 'block';
-  document.getElementById('collectionStatus').textContent = 'Starting collection...';
-  
+  const searchResults = document.getElementById('searchResults');
+  if (searchResults) searchResults.style.display = 'none';
+
+  const collectionProgress = document.getElementById('collectionProgress');
+  if (collectionProgress) collectionProgress.style.display = 'block';
+
+  const collectionStatus = document.getElementById('collectionStatus');
+  if (collectionStatus) collectionStatus.textContent = 'Starting collection...';
+
   // Reset progress
-  document.getElementById('progressFill').style.width = '0%';
-  document.getElementById('progressText').textContent = '0 / ' + videos.length;
-  document.getElementById('collectionLog').innerHTML = '';
+  const progressFill = document.getElementById('progressFill');
+  if (progressFill) progressFill.style.width = '0%';
+
+  const progressText = document.getElementById('progressText');
+  if (progressText) progressText.textContent = '0 / ' + videos.length;
+
+  const collectionLog = document.getElementById('collectionLog');
+  if (collectionLog) collectionLog.innerHTML = '';
 
   // Start collection
   collectionJob = { jobId, startTime: Date.now(), total: videos.length };
@@ -581,21 +648,31 @@ async function startCollection() {
       }
       
       // Update status to show completion
-      document.getElementById('collectionStatus').textContent = 'Collection Complete!';
-      document.getElementById('progressFill').style.width = '100%';
-      
+      const collectionStatus = document.getElementById('collectionStatus');
+      if (collectionStatus) collectionStatus.textContent = 'Collection Complete!';
+
+      const progressFill = document.getElementById('progressFill');
+      if (progressFill) progressFill.style.width = '100%';
+
       // Change buttons
-      document.getElementById('pauseBtn').style.display = 'none';
-      document.getElementById('cancelBtn').textContent = 'Done';
+      const pauseBtn = document.getElementById('pauseBtn');
+      if (pauseBtn) pauseBtn.style.display = 'none';
+
+      const cancelBtn = document.getElementById('cancelBtn');
+      if (cancelBtn) cancelBtn.textContent = 'Done';
     } else {
       showNotification(`Collection failed: ${result.error}`, 'error');
       addLogEntry(`Collection failed: ${result.error}`, 'error');
-      document.getElementById('collectionStatus').textContent = 'Collection Failed';
+
+      const collectionStatus = document.getElementById('collectionStatus');
+      if (collectionStatus) collectionStatus.textContent = 'Collection Failed';
     }
   } catch (error) {
     showNotification(`Collection error: ${error.message}`, 'error');
     addLogEntry(`Collection error: ${error.message}`, 'error');
-    document.getElementById('collectionStatus').textContent = 'Collection Error';
+
+    const collectionStatus = document.getElementById('collectionStatus');
+    if (collectionStatus) collectionStatus.textContent = 'Collection Error';
   } finally {
     collectionJob = null;
   }
@@ -604,13 +681,19 @@ async function startCollection() {
 // Progress updates
 window.api.on('collection:video-complete', ({ jobId, video }) => {
   if (collectionJob?.jobId !== jobId) return;
-  
-  const completed = parseInt(document.getElementById('progressText').textContent.split(' / ')[0]) + 1;
+
+  const progressText = document.getElementById('progressText');
+  const progressFill = document.getElementById('progressFill');
+  const collectionStatus = document.getElementById('collectionStatus');
+
+  if (!progressText) return;
+
+  const completed = parseInt(progressText.textContent.split(' / ')[0]) + 1;
   const percentage = (completed / collectionJob.total) * 100;
-  
-  document.getElementById('progressFill').style.width = `${percentage}%`;
-  document.getElementById('progressText').textContent = `${completed} / ${collectionJob.total}`;
-  document.getElementById('collectionStatus').textContent = `Collecting video ${completed} of ${collectionJob.total}...`;
+
+  if (progressFill) progressFill.style.width = `${percentage}%`;
+  if (progressText) progressText.textContent = `${completed} / ${collectionJob.total}`;
+  if (collectionStatus) collectionStatus.textContent = `Collecting video ${completed} of ${collectionJob.total}...`;
   
   addLogEntry(`✓ Collected: ${video.title}`, 'success');
   if (video.comments) {
@@ -631,10 +714,12 @@ function updateTimer() {
   const elapsed = Date.now() - collectionJob.startTime;
   const minutes = Math.floor(elapsed / 60000);
   const seconds = Math.floor((elapsed % 60000) / 1000);
-  
-  document.getElementById('timeElapsed').textContent = 
-    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  
+
+  const timeElapsed = document.getElementById('timeElapsed');
+  if (timeElapsed) {
+    timeElapsed.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
+
   requestAnimationFrame(updateTimer);
 }
 
@@ -650,10 +735,13 @@ async function cancelCollection() {
   if (confirm('Are you sure you want to cancel the collection?')) {
     await window.api.youtube.cancel(collectionJob.jobId);
     collectionJob = null;
-    
-    document.getElementById('collectionProgress').style.display = 'none';
-    document.getElementById('searchResults').style.display = 'block';
-    
+
+    const collectionProgress = document.getElementById('collectionProgress');
+    if (collectionProgress) collectionProgress.style.display = 'none';
+
+    const searchResults = document.getElementById('searchResults');
+    if (searchResults) searchResults.style.display = 'block';
+
     showNotification('Collection cancelled', 'warning');
   }
 }
@@ -879,11 +967,15 @@ function handlePDFFileSelection(e) {
   const file = e.target.files[0];
   if (file && file.type === 'application/pdf') {
     selectedPDFFile = file;
-    document.getElementById('pdfFileName').textContent = `Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+
+    const pdfFileName = document.getElementById('pdfFileName');
+    if (pdfFileName) {
+      pdfFileName.textContent = `Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+    }
 
     // Auto-fill title from filename if empty
     const titleInput = document.getElementById('pdfTitle');
-    if (!titleInput.value) {
+    if (titleInput && !titleInput.value) {
       titleInput.value = file.name.replace(/\.pdf$/i, '');
     }
 
@@ -895,14 +987,17 @@ function handlePDFFileSelection(e) {
 
 function updatePDFUploadButton() {
   const uploadBtn = document.getElementById('uploadPDFBtn');
-  const isNewCollection = document.getElementById('pdfNewCollection').checked;
+  const pdfNewCollection = document.getElementById('pdfNewCollection');
+  const isNewCollection = pdfNewCollection ? pdfNewCollection.checked : false;
 
   let hasValidCollection = false;
   if (isNewCollection) {
-    const collectionName = document.getElementById('pdfCollectionName').value.trim();
+    const collectionNameEl = document.getElementById('pdfCollectionName');
+    const collectionName = collectionNameEl ? collectionNameEl.value.trim() : '';
     hasValidCollection = collectionName.length > 0;
   } else {
-    const collectionId = document.getElementById('pdfCollectionSelect').value;
+    const collectionSelectEl = document.getElementById('pdfCollectionSelect');
+    const collectionId = collectionSelectEl ? collectionSelectEl.value : '';
     hasValidCollection = collectionId !== '';
   }
 
@@ -919,12 +1014,16 @@ async function uploadPDF() {
     return;
   }
 
-  const isNewCollection = document.getElementById('pdfNewCollection').checked;
+  const pdfNewCollection = document.getElementById('pdfNewCollection');
+  const isNewCollection = pdfNewCollection ? pdfNewCollection.checked : false;
   let collectionId;
 
   // Show progress UI
-  document.getElementById('pdfUploadProgress').style.display = 'block';
-  document.getElementById('uploadPDFBtn').disabled = true;
+  const pdfUploadProgress = document.getElementById('pdfUploadProgress');
+  if (pdfUploadProgress) pdfUploadProgress.style.display = 'block';
+
+  const uploadPDFBtn = document.getElementById('uploadPDFBtn');
+  if (uploadPDFBtn) uploadPDFBtn.disabled = true;
 
   const statusEl = document.getElementById('pdfUploadStatus');
   const percentageEl = document.getElementById('pdfUploadPercentage');
@@ -932,6 +1031,7 @@ async function uploadPDF() {
   const logEl = document.getElementById('pdfUploadLog');
 
   function addPDFLog(message, type = 'info') {
+    if (!logEl) return;
     const entry = document.createElement('div');
     entry.className = `log-entry ${type}`;
     entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
@@ -942,17 +1042,19 @@ async function uploadPDF() {
   try {
     // Create new collection if needed
     if (isNewCollection) {
-      const collectionName = document.getElementById('pdfCollectionName').value.trim();
+      const collectionNameEl = document.getElementById('pdfCollectionName');
+      const collectionName = collectionNameEl ? collectionNameEl.value.trim() : '';
       if (!collectionName) {
         showNotification('Please enter a collection name', 'error');
-        document.getElementById('uploadPDFBtn').disabled = false;
+        const uploadPDFBtn = document.getElementById('uploadPDFBtn');
+        if (uploadPDFBtn) uploadPDFBtn.disabled = false;
         return;
       }
 
       addPDFLog('Creating new collection...');
-      statusEl.textContent = 'Creating collection...';
-      percentageEl.textContent = '5%';
-      progressBar.style.width = '5%';
+      if (statusEl) statusEl.textContent = 'Creating collection...';
+      if (percentageEl) percentageEl.textContent = '5%';
+      if (progressBar) progressBar.style.width = '5%';
 
       const createResult = await window.api.collections.createPDFCollection({ name: collectionName });
       if (!createResult.success) {
@@ -962,22 +1064,29 @@ async function uploadPDF() {
       collectionId = createResult.collectionId;
       addPDFLog(`✓ Collection created: ${collectionName}`, 'success');
     } else {
-      collectionId = parseInt(document.getElementById('pdfCollectionSelect').value);
+      const collectionSelectEl = document.getElementById('pdfCollectionSelect');
+      collectionId = collectionSelectEl ? parseInt(collectionSelectEl.value) : 0;
       if (!collectionId) {
         showNotification('Please select a collection', 'error');
-        document.getElementById('uploadPDFBtn').disabled = false;
+        const uploadPDFBtn = document.getElementById('uploadPDFBtn');
+        if (uploadPDFBtn) uploadPDFBtn.disabled = false;
         return;
       }
     }
 
-    const title = document.getElementById('pdfTitle').value || selectedPDFFile.name.replace(/\.pdf$/i, '');
-    const chunkingStrategy = document.getElementById('pdfChunkingStrategy').value;
-    const chunkSize = parseInt(document.getElementById('pdfChunkSize').value) || 500;
+    const titleEl = document.getElementById('pdfTitle');
+    const title = (titleEl ? titleEl.value : '') || selectedPDFFile.name.replace(/\.pdf$/i, '');
+
+    const chunkingStrategyEl = document.getElementById('pdfChunkingStrategy');
+    const chunkingStrategy = chunkingStrategyEl ? chunkingStrategyEl.value : 'fixed';
+
+    const chunkSizeEl = document.getElementById('pdfChunkSize');
+    const chunkSize = chunkSizeEl ? parseInt(chunkSizeEl.value) || 500 : 500;
 
     addPDFLog('Starting PDF upload...');
-    statusEl.textContent = 'Uploading PDF file...';
-    percentageEl.textContent = '10%';
-    progressBar.style.width = '10%';
+    if (statusEl) statusEl.textContent = 'Uploading PDF file...';
+    if (percentageEl) percentageEl.textContent = '10%';
+    if (progressBar) progressBar.style.width = '10%';
 
     // Call IPC to upload PDF
     const result = await window.api.pdf.upload({
@@ -989,9 +1098,9 @@ async function uploadPDF() {
     });
 
     if (result.success) {
-      statusEl.textContent = 'PDF processed successfully!';
-      percentageEl.textContent = '100%';
-      progressBar.style.width = '100%';
+      if (statusEl) statusEl.textContent = 'PDF processed successfully!';
+      if (percentageEl) percentageEl.textContent = '100%';
+      if (progressBar) progressBar.style.width = '100%';
 
       addPDFLog(`✓ PDF uploaded: ${result.metadata.title}`, 'success');
       addPDFLog(`✓ Created ${result.excerpts} excerpts`, 'success');
@@ -1002,12 +1111,23 @@ async function uploadPDF() {
       // Reset form
       setTimeout(() => {
         selectedPDFFile = null;
-        document.getElementById('pdfFileInput').value = '';
-        document.getElementById('pdfFileName').textContent = '';
-        document.getElementById('pdfTitle').value = '';
-        document.getElementById('pdfUploadProgress').style.display = 'none';
-        document.getElementById('uploadPDFBtn').disabled = false;
-        logEl.innerHTML = '';
+
+        const pdfFileInput = document.getElementById('pdfFileInput');
+        if (pdfFileInput) pdfFileInput.value = '';
+
+        const pdfFileName = document.getElementById('pdfFileName');
+        if (pdfFileName) pdfFileName.textContent = '';
+
+        const pdfTitle = document.getElementById('pdfTitle');
+        if (pdfTitle) pdfTitle.value = '';
+
+        const pdfUploadProgress = document.getElementById('pdfUploadProgress');
+        if (pdfUploadProgress) pdfUploadProgress.style.display = 'none';
+
+        const uploadPDFBtn = document.getElementById('uploadPDFBtn');
+        if (uploadPDFBtn) uploadPDFBtn.disabled = false;
+
+        if (logEl) logEl.innerHTML = '';
 
         // Reload PDF list
         loadPDFDocuments(collectionId);
@@ -1025,9 +1145,11 @@ async function uploadPDF() {
   } catch (error) {
     console.error('PDF upload error:', error);
     addPDFLog(`✗ Error: ${error.message}`, 'error');
-    statusEl.textContent = 'Upload failed';
+    if (statusEl) statusEl.textContent = 'Upload failed';
     showNotification(`PDF upload failed: ${error.message}`, 'error');
-    document.getElementById('uploadPDFBtn').disabled = false;
+
+    const uploadPDFBtn = document.getElementById('uploadPDFBtn');
+    if (uploadPDFBtn) uploadPDFBtn.disabled = false;
   }
 }
 
@@ -1590,7 +1712,8 @@ class AIAnalysisController {
       const elem = document.getElementById(id);
       if (elem) {
         elem.addEventListener('change', () => {
-          const parentId = document.getElementById('parent-project-id').value;
+          const parentProjectId = document.getElementById('parent-project-id');
+          const parentId = parentProjectId ? parentProjectId.value : '';
           if (parentId) {
             this.updateFilteredItemCount(parseInt(parentId));
           }
@@ -1714,24 +1837,40 @@ class AIAnalysisController {
     console.log('[Hierarchical] Opening child project modal for project:', currentProject.id);
 
     // Show parent project info
-    document.getElementById('parent-project-info').style.display = 'block';
-    document.getElementById('parent-project-name-display').textContent = currentProject.project_name;
-    document.getElementById('parent-project-id').value = currentProject.id;
+    const parentProjectInfo = document.getElementById('parent-project-info');
+    if (parentProjectInfo) parentProjectInfo.style.display = 'block';
+
+    const parentProjectNameDisplay = document.getElementById('parent-project-name-display');
+    if (parentProjectNameDisplay) parentProjectNameDisplay.textContent = currentProject.project_name;
+
+    const parentProjectId = document.getElementById('parent-project-id');
+    if (parentProjectId) parentProjectId.value = currentProject.id;
 
     // Show filter criteria section
-    document.getElementById('filter-criteria-section').style.display = 'block';
+    const filterCriteriaSection = document.getElementById('filter-criteria-section');
+    if (filterCriteriaSection) filterCriteriaSection.style.display = 'block';
 
     // Pre-fill collection (same as parent)
-    document.getElementById('ai-collection-select').value = currentProject.collection_id;
-    document.getElementById('ai-collection-select').disabled = true;
+    const aiCollectionSelect = document.getElementById('ai-collection-select');
+    if (aiCollectionSelect) {
+      aiCollectionSelect.value = currentProject.collection_id;
+      aiCollectionSelect.disabled = true;
+    }
     // FIX: Set currentCollection so startRating() doesn't fail
     this.currentCollection = currentProject.collection_id;
 
     // Set default filters
-    document.getElementById('filter-min-score').value = 0.7;
-    document.getElementById('filter-max-score').value = 1.0;
-    document.getElementById('filter-video-chunks').checked = true;
-    document.getElementById('filter-comments').checked = true;
+    const filterMinScore = document.getElementById('filter-min-score');
+    if (filterMinScore) filterMinScore.value = 0.7;
+
+    const filterMaxScore = document.getElementById('filter-max-score');
+    if (filterMaxScore) filterMaxScore.value = 1.0;
+
+    const filterVideoChunks = document.getElementById('filter-video-chunks');
+    if (filterVideoChunks) filterVideoChunks.checked = true;
+
+    const filterComments = document.getElementById('filter-comments');
+    if (filterComments) filterComments.checked = true;
 
     // Hide redundant content type checkboxes (filter controls them)
     const rateChunksCheckbox = document.getElementById('rate-chunks');
@@ -1744,24 +1883,31 @@ class AIAnalysisController {
     await this.updateFilteredItemCount(currentProject.id);
 
     // Open modal
-    document.getElementById('create-project-modal').style.display = 'flex';
+    const createProjectModal = document.getElementById('create-project-modal');
+    if (createProjectModal) createProjectModal.style.display = 'flex';
   }
 
   async updateFilteredItemCount(parentProjectId) {
     try {
-      const minScore = parseFloat(document.getElementById('filter-min-score').value) || 0.0;
-      const maxScore = parseFloat(document.getElementById('filter-max-score').value) || 1.0;
+      const filterMinScoreEl = document.getElementById('filter-min-score');
+      const filterMaxScoreEl = document.getElementById('filter-max-score');
+      const minScore = filterMinScoreEl ? parseFloat(filterMinScoreEl.value) || 0.0 : 0.0;
+      const maxScore = filterMaxScoreEl ? parseFloat(filterMaxScoreEl.value) || 1.0 : 1.0;
       const contentTypes = [];
 
-      if (document.getElementById('filter-video-chunks').checked) {
+      const filterVideoChunks = document.getElementById('filter-video-chunks');
+      if (filterVideoChunks && filterVideoChunks.checked) {
         contentTypes.push('video_chunk');
       }
-      if (document.getElementById('filter-comments').checked) {
+
+      const filterComments = document.getElementById('filter-comments');
+      if (filterComments && filterComments.checked) {
         contentTypes.push('comment');
       }
 
       if (contentTypes.length === 0) {
-        document.getElementById('filtered-items-count').textContent = '0 items (select at least one content type)';
+        const filteredItemsCount = document.getElementById('filtered-items-count');
+        if (filteredItemsCount) filteredItemsCount.textContent = '0 items (select at least one content type)';
         return;
       }
 
@@ -1777,14 +1923,17 @@ class AIAnalysisController {
 
       if (result.success) {
         const count = result.data.count;
-        document.getElementById('filtered-items-count').textContent = `${count} item${count !== 1 ? 's' : ''}`;
+        const filteredItemsCount = document.getElementById('filtered-items-count');
+        if (filteredItemsCount) filteredItemsCount.textContent = `${count} item${count !== 1 ? 's' : ''}`;
         console.log('[Hierarchical] Filtered count:', count);
       } else {
-        document.getElementById('filtered-items-count').textContent = 'error';
+        const filteredItemsCount = document.getElementById('filtered-items-count');
+        if (filteredItemsCount) filteredItemsCount.textContent = 'error';
         console.error('[Hierarchical] Error getting filtered count:', result.error);
       }
     } catch (error) {
-      document.getElementById('filtered-items-count').textContent = 'error';
+      const filteredItemsCount = document.getElementById('filtered-items-count');
+      if (filteredItemsCount) filteredItemsCount.textContent = 'error';
       console.error('[Hierarchical] Error updating filtered count:', error);
     }
   }
@@ -1794,7 +1943,8 @@ class AIAnalysisController {
       const result = await window.api.ai.getProjectLineage({ projectId });
 
       if (!result.success || !result.data || result.data.length === 0) {
-        document.getElementById('project-lineage').style.display = 'none';
+        const projectLineage = document.getElementById('project-lineage');
+        if (projectLineage) projectLineage.style.display = 'none';
         return;
       }
 
@@ -1802,7 +1952,8 @@ class AIAnalysisController {
 
       if (lineage.length <= 1) {
         // Root project, no lineage to show
-        document.getElementById('project-lineage').style.display = 'none';
+        const projectLineage = document.getElementById('project-lineage');
+        if (projectLineage) projectLineage.style.display = 'none';
         return;
       }
 
@@ -1834,18 +1985,25 @@ class AIAnalysisController {
       });
     } catch (error) {
       console.error('[Hierarchical] Error displaying lineage:', error);
-      document.getElementById('project-lineage').style.display = 'none';
+      const projectLineage = document.getElementById('project-lineage');
+      if (projectLineage) projectLineage.style.display = 'none';
     }
   }
 
   resetCreateModalHierarchical() {
     // Hide parent project sections
-    document.getElementById('parent-project-info').style.display = 'none';
-    document.getElementById('filter-criteria-section').style.display = 'none';
-    document.getElementById('parent-project-id').value = '';
+    const parentProjectInfo = document.getElementById('parent-project-info');
+    if (parentProjectInfo) parentProjectInfo.style.display = 'none';
+
+    const filterCriteriaSection = document.getElementById('filter-criteria-section');
+    if (filterCriteriaSection) filterCriteriaSection.style.display = 'none';
+
+    const parentProjectId = document.getElementById('parent-project-id');
+    if (parentProjectId) parentProjectId.value = '';
 
     // Re-enable collection select
-    document.getElementById('ai-collection-select').disabled = false;
+    const aiCollectionSelect = document.getElementById('ai-collection-select');
+    if (aiCollectionSelect) aiCollectionSelect.disabled = false;
 
     // Show content type checkboxes again (for root projects)
     const rateChunksCheckbox = document.getElementById('rate-chunks');
@@ -1855,10 +2013,17 @@ class AIAnalysisController {
     }
 
     // Reset filters to defaults
-    document.getElementById('filter-min-score').value = 0.7;
-    document.getElementById('filter-max-score').value = 1.0;
-    document.getElementById('filter-video-chunks').checked = true;
-    document.getElementById('filter-comments').checked = true;
+    const filterMinScore = document.getElementById('filter-min-score');
+    if (filterMinScore) filterMinScore.value = 0.7;
+
+    const filterMaxScore = document.getElementById('filter-max-score');
+    if (filterMaxScore) filterMaxScore.value = 1.0;
+
+    const filterVideoChunks = document.getElementById('filter-video-chunks');
+    if (filterVideoChunks) filterVideoChunks.checked = true;
+
+    const filterComments = document.getElementById('filter-comments');
+    if (filterComments) filterComments.checked = true;
   }
 
   updateStatsBar() {
@@ -2091,22 +2256,30 @@ class AIAnalysisController {
     this.displayProjectLineage(project.id);
 
     // Header
-    document.getElementById('rating-viewer-title').textContent = project.project_name;
+    const ratingViewerTitle = document.getElementById('rating-viewer-title');
+    if (ratingViewerTitle) ratingViewerTitle.textContent = project.project_name;
 
     // Stats
     const successfulRatings = project.ratings.filter(r => r.status === 'success');
     const failedRatings = project.ratings.filter(r => r.status === 'failed');
-    const avgScore = successfulRatings.length > 0 
-      ? successfulRatings.reduce((sum, r) => sum + (r.relevance_score || 0), 0) / successfulRatings.length 
+    const avgScore = successfulRatings.length > 0
+      ? successfulRatings.reduce((sum, r) => sum + (r.relevance_score || 0), 0) / successfulRatings.length
       : 0;
-    const successRate = project.total_items > 0 
-      ? ((successfulRatings.length / project.total_items) * 100) 
+    const successRate = project.total_items > 0
+      ? ((successfulRatings.length / project.total_items) * 100)
       : 0;
 
-    document.getElementById('viewer-total').textContent = project.rated_items || 0;
-    document.getElementById('viewer-success-rate').textContent = successRate.toFixed(0) + '%';
-    document.getElementById('viewer-avg-score').textContent = avgScore.toFixed(2);
-    document.getElementById('viewer-failed').textContent = failedRatings.length;
+    const viewerTotal = document.getElementById('viewer-total');
+    if (viewerTotal) viewerTotal.textContent = project.rated_items || 0;
+
+    const viewerSuccessRate = document.getElementById('viewer-success-rate');
+    if (viewerSuccessRate) viewerSuccessRate.textContent = successRate.toFixed(0) + '%';
+
+    const viewerAvgScore = document.getElementById('viewer-avg-score');
+    if (viewerAvgScore) viewerAvgScore.textContent = avgScore.toFixed(2);
+
+    const viewerFailed = document.getElementById('viewer-failed');
+    if (viewerFailed) viewerFailed.textContent = failedRatings.length;
 
     // Show/hide retry button
     const retryBtn = document.getElementById('retry-failed-btn');
@@ -2124,7 +2297,8 @@ class AIAnalysisController {
     const project = this.currentViewerProject;
 
     // Research intent
-    document.getElementById('viewer-research-intent').textContent = project.research_intent;
+    const viewerResearchIntent = document.getElementById('viewer-research-intent');
+    if (viewerResearchIntent) viewerResearchIntent.textContent = project.research_intent;
 
     // Score distribution
     const successfulRatings = project.ratings.filter(r => r.status === 'success' && r.relevance_score != null);
@@ -2147,24 +2321,28 @@ class AIAnalysisController {
       `;
     }).join('');
 
-    document.getElementById('viewer-distribution').innerHTML = distributionHtml;
+    const viewerDistribution = document.getElementById('viewer-distribution');
+    if (viewerDistribution) viewerDistribution.innerHTML = distributionHtml;
 
     // Content type breakdown
     const chunkCount = project.ratings.filter(r => r.item_type === 'video_chunk').length;
     const commentCount = project.ratings.filter(r => r.item_type === 'comment').length;
 
-    document.getElementById('viewer-type-breakdown').innerHTML = `
-      <div class="type-card">
-        <div class="type-card-icon">🎬</div>
-        <div class="type-card-count">${chunkCount}</div>
-        <div class="type-card-label">Video Chunks</div>
-      </div>
-      <div class="type-card">
-        <div class="type-card-icon">💬</div>
-        <div class="type-card-count">${commentCount}</div>
-        <div class="type-card-label">Comments</div>
-      </div>
-    `;
+    const viewerTypeBreakdown = document.getElementById('viewer-type-breakdown');
+    if (viewerTypeBreakdown) {
+      viewerTypeBreakdown.innerHTML = `
+        <div class="type-card">
+          <div class="type-card-icon">🎬</div>
+          <div class="type-card-count">${chunkCount}</div>
+          <div class="type-card-label">Video Chunks</div>
+        </div>
+        <div class="type-card">
+          <div class="type-card-icon">💬</div>
+          <div class="type-card-count">${commentCount}</div>
+          <div class="type-card-label">Comments</div>
+        </div>
+      `;
+    }
   }
 
   populateRatingsTab() {
@@ -2279,8 +2457,11 @@ class AIAnalysisController {
     const project = this.currentViewerProject;
     const failedRatings = project.ratings.filter(r => r.status === 'failed');
 
+    const failedItemsList = document.getElementById('failed-items-list');
+    if (!failedItemsList) return;
+
     if (failedRatings.length === 0) {
-      document.getElementById('failed-items-list').innerHTML = '<div class="empty-state"><p>🎉 No failed items!</p></div>';
+      failedItemsList.innerHTML = '<div class="empty-state"><p>🎉 No failed items!</p></div>';
       return;
     }
 
@@ -2317,7 +2498,7 @@ class AIAnalysisController {
       `;
     }).join('');
 
-    document.getElementById('failed-items-list').innerHTML = failedHtml;
+    failedItemsList.innerHTML = failedHtml;
   }
 
   switchViewerTab(tabName) {
@@ -2490,7 +2671,8 @@ class AIAnalysisController {
         showNotification(`Resumed: ${proj.project_name}`, 'success');
 
         // Close modal and refresh projects list
-        document.getElementById('create-project-modal').style.display = 'none';
+        const createProjectModal = document.getElementById('create-project-modal');
+        if (createProjectModal) createProjectModal.style.display = 'none';
         this.loadRatingProjects();
       } else {
         showNotification(`Error: ${result.error}`, 'error');

@@ -120,28 +120,46 @@ async function openCreateBWSModal() {
   if (!modal) return;
 
   // Reset form
-  document.getElementById('bws-experiment-name').value = '';
-  document.getElementById('bws-research-intent').value = '';
-  document.getElementById('bws-min-score').value = '0.7';
-  document.getElementById('bws-tuple-size').value = '3';
-  document.getElementById('bws-target-appearances').value = '4';
-  document.getElementById('bws-design-method').value = 'balanced';
-  document.getElementById('bws-rater-type').value = 'ai';
-  document.getElementById('bws-scoring-method').value = 'counting';
-  document.getElementById('bws-include-comments').checked = true;
-  document.getElementById('bws-include-chunks').checked = false;
-  document.getElementById('bws-include-pdfs').checked = false;
+  const experimentName = document.getElementById('bws-experiment-name');
+  if (experimentName) experimentName.value = '';
+  const researchIntent = document.getElementById('bws-research-intent');
+  if (researchIntent) researchIntent.value = '';
+  const minScore = document.getElementById('bws-min-score');
+  if (minScore) minScore.value = '0.7';
+  const tupleSize = document.getElementById('bws-tuple-size');
+  if (tupleSize) tupleSize.value = '3';
+  const targetAppearances = document.getElementById('bws-target-appearances');
+  if (targetAppearances) targetAppearances.value = '4';
+  const designMethod = document.getElementById('bws-design-method');
+  if (designMethod) designMethod.value = 'balanced';
+  const raterType = document.getElementById('bws-rater-type');
+  if (raterType) raterType.value = 'ai';
+  const scoringMethod = document.getElementById('bws-scoring-method');
+  if (scoringMethod) scoringMethod.value = 'counting';
+  const includeComments = document.getElementById('bws-include-comments');
+  if (includeComments) includeComments.checked = true;
+  const includeChunks = document.getElementById('bws-include-chunks');
+  if (includeChunks) includeChunks.checked = false;
+  const includePDFs = document.getElementById('bws-include-pdfs');
+  if (includePDFs) includePDFs.checked = false;
 
   // Reset source type to rating-project
-  document.querySelector('input[name="bws-source-type"][value="rating-project"]').checked = true;
+  const sourceTypeRadio = document.querySelector('input[name="bws-source-type"][value="rating-project"]');
+  if (sourceTypeRadio) sourceTypeRadio.checked = true;
 
   // Hide sections initially
-  document.getElementById('bws-source-info').style.display = 'none';
-  document.getElementById('bws-filter-section').style.display = 'none';
-  document.getElementById('bws-config-section').style.display = 'none';
-  document.getElementById('bws-rating-project-section').style.display = 'block';
-  document.getElementById('bws-collection-section').style.display = 'none';
-  document.getElementById('bws-collection-content-section').style.display = 'none';
+  const sourceInfo = document.getElementById('bws-source-info');
+  if (sourceInfo) sourceInfo.style.display = 'none';
+  const filterSection = document.getElementById('bws-filter-section');
+  if (filterSection) filterSection.style.display = 'none';
+  const configSection = document.getElementById('bws-config-section');
+  if (configSection) configSection.style.display = 'none';
+  const ratingProjectSection = document.getElementById('bws-rating-project-section');
+  if (ratingProjectSection) ratingProjectSection.style.display = 'block';
+  const collectionSection = document.getElementById('bws-collection-section');
+  if (collectionSection) collectionSection.style.display = 'none';
+  const collectionContentSection = document.getElementById('bws-collection-content-section');
+  if (collectionContentSection) collectionContentSection.style.display = 'none';
 
   // Reset state
   bwsState = {
@@ -268,9 +286,12 @@ async function onBWSProjectSelect(event) {
 
   if (!select.value) {
     // Hide sections if no project selected
-    document.getElementById('bws-source-info').style.display = 'none';
-    document.getElementById('bws-filter-section').style.display = 'none';
-    document.getElementById('bws-config-section').style.display = 'none';
+    const sourceInfo = document.getElementById('bws-source-info');
+    if (sourceInfo) sourceInfo.style.display = 'none';
+    const filterSection = document.getElementById('bws-filter-section');
+    if (filterSection) filterSection.style.display = 'none';
+    const configSection = document.getElementById('bws-config-section');
+    if (configSection) configSection.style.display = 'none';
     bwsState.selectedProjectId = null;
     bwsState.selectedProjectData = null;
     validateBWSForm();
@@ -283,15 +304,26 @@ async function onBWSProjectSelect(event) {
   bwsState.selectedProjectData = projectData;
 
   // Display project info (using shared source-info elements)
-  document.getElementById('bws-selected-source-name').textContent = projectData.project_name;
-  document.getElementById('bws-total-items').textContent = projectData.total_items;
+  const selectedSourceName = document.getElementById('bws-selected-source-name');
+  if (selectedSourceName) {
+    selectedSourceName.textContent = projectData.project_name;
+  }
+  const totalItems = document.getElementById('bws-total-items');
+  if (totalItems) {
+    totalItems.textContent = projectData.total_items;
+  }
 
   // Determine item type from project (assume it's in the name or we need to query)
-  document.getElementById('bws-item-type').textContent = 'Mixed (comments + video chunks)';
+  const itemType = document.getElementById('bws-item-type');
+  if (itemType) {
+    itemType.textContent = 'Mixed (comments + video chunks)';
+  }
 
   // Show source info and filter section
-  document.getElementById('bws-source-info').style.display = 'block';
-  document.getElementById('bws-filter-section').style.display = 'block';
+  const sourceInfo = document.getElementById('bws-source-info');
+  if (sourceInfo) sourceInfo.style.display = 'block';
+  const filterSection = document.getElementById('bws-filter-section');
+  if (filterSection) filterSection.style.display = 'block';
 
   // Calculate filtered count
   await updateBWSFilteredCount();
@@ -308,28 +340,40 @@ function onBWSSourceTypeChange(event) {
 
   // Update hint text
   const hint = document.getElementById('bws-source-type-hint');
-  if (sourceType === 'rating-project') {
-    hint.textContent = 'Use rated items filtered by relevance score';
-  } else {
-    hint.textContent = 'Compare raw items from a collection without needing ratings first';
+  if (hint) {
+    if (sourceType === 'rating-project') {
+      hint.textContent = 'Use rated items filtered by relevance score';
+    } else {
+      hint.textContent = 'Compare raw items from a collection without needing ratings first';
+    }
   }
 
   // Show/hide appropriate sections
   if (sourceType === 'rating-project') {
-    document.getElementById('bws-rating-project-section').style.display = 'block';
-    document.getElementById('bws-collection-section').style.display = 'none';
-    document.getElementById('bws-collection-content-section').style.display = 'none';
-    document.getElementById('bws-filter-section').style.display = 'none';
+    const ratingProjectSection = document.getElementById('bws-rating-project-section');
+    if (ratingProjectSection) ratingProjectSection.style.display = 'block';
+    const collectionSection = document.getElementById('bws-collection-section');
+    if (collectionSection) collectionSection.style.display = 'none';
+    const collectionContentSection = document.getElementById('bws-collection-content-section');
+    if (collectionContentSection) collectionContentSection.style.display = 'none';
+    const filterSection = document.getElementById('bws-filter-section');
+    if (filterSection) filterSection.style.display = 'none';
   } else {
-    document.getElementById('bws-rating-project-section').style.display = 'none';
-    document.getElementById('bws-collection-section').style.display = 'block';
-    document.getElementById('bws-collection-content-section').style.display = 'none';
-    document.getElementById('bws-filter-section').style.display = 'none';
+    const ratingProjectSection = document.getElementById('bws-rating-project-section');
+    if (ratingProjectSection) ratingProjectSection.style.display = 'none';
+    const collectionSection = document.getElementById('bws-collection-section');
+    if (collectionSection) collectionSection.style.display = 'block';
+    const collectionContentSection = document.getElementById('bws-collection-content-section');
+    if (collectionContentSection) collectionContentSection.style.display = 'none';
+    const filterSection = document.getElementById('bws-filter-section');
+    if (filterSection) filterSection.style.display = 'none';
   }
 
   // Hide info and config sections
-  document.getElementById('bws-source-info').style.display = 'none';
-  document.getElementById('bws-config-section').style.display = 'none';
+  const sourceInfo = document.getElementById('bws-source-info');
+  if (sourceInfo) sourceInfo.style.display = 'none';
+  const configSection = document.getElementById('bws-config-section');
+  if (configSection) configSection.style.display = 'none';
 
   // Reset selections
   bwsState.selectedProjectId = null;
@@ -424,9 +468,12 @@ async function onBWSCollectionSelect(event) {
 
   if (!select.value) {
     // Hide sections if no collection selected
-    document.getElementById('bws-source-info').style.display = 'none';
-    document.getElementById('bws-collection-content-section').style.display = 'none';
-    document.getElementById('bws-config-section').style.display = 'none';
+    const sourceInfo = document.getElementById('bws-source-info');
+    if (sourceInfo) sourceInfo.style.display = 'none';
+    const collectionContentSection = document.getElementById('bws-collection-content-section');
+    if (collectionContentSection) collectionContentSection.style.display = 'none';
+    const configSection = document.getElementById('bws-config-section');
+    if (configSection) configSection.style.display = 'none';
     bwsState.selectedCollectionId = null;
     bwsState.selectedCollectionData = null;
     validateBWSForm();
@@ -439,7 +486,10 @@ async function onBWSCollectionSelect(event) {
   bwsState.selectedCollectionData = collectionData;
 
   // Show content type selection
-  document.getElementById('bws-collection-content-section').style.display = 'block';
+  const collectionContentSection = document.getElementById('bws-collection-content-section');
+  if (collectionContentSection) {
+    collectionContentSection.style.display = 'block';
+  }
 
   // Calculate item count
   await updateBWSCollectionCount();
@@ -453,17 +503,23 @@ async function onBWSCollectionSelect(event) {
 async function updateBWSCollectionCount() {
   if (!bwsState.selectedCollectionId) return;
 
-  const includeComments = document.getElementById('bws-include-comments').checked;
-  const includeChunks = document.getElementById('bws-include-chunks').checked;
-  const includePDFs = document.getElementById('bws-include-pdfs').checked;
+  const includeCommentsEl = document.getElementById('bws-include-comments');
+  const includeChunksEl = document.getElementById('bws-include-chunks');
+  const includePDFsEl = document.getElementById('bws-include-pdfs');
+
+  const includeComments = includeCommentsEl ? includeCommentsEl.checked : false;
+  const includeChunks = includeChunksEl ? includeChunksEl.checked : false;
+  const includePDFs = includePDFsEl ? includePDFsEl.checked : false;
 
   bwsState.includeComments = includeComments;
   bwsState.includeChunks = includeChunks;
   bwsState.includePDFs = includePDFs;
 
   if (!includeComments && !includeChunks && !includePDFs) {
-    document.getElementById('bws-source-info').style.display = 'none';
-    document.getElementById('bws-config-section').style.display = 'none';
+    const sourceInfo = document.getElementById('bws-source-info');
+    if (sourceInfo) sourceInfo.style.display = 'none';
+    const configSection = document.getElementById('bws-config-section');
+    if (configSection) configSection.style.display = 'none';
     bwsState.filteredItemCount = 0;
     validateBWSForm();
     return;
@@ -483,24 +539,40 @@ async function updateBWSCollectionCount() {
 
     // Display collection info
     const collectionData = bwsState.selectedCollectionData;
-    document.getElementById('bws-selected-source-name').textContent =
-      collectionData.search_term || collectionData.name;
-    document.getElementById('bws-total-items').textContent = items.length;
+    const selectedSourceName = document.getElementById('bws-selected-source-name');
+    if (selectedSourceName) {
+      selectedSourceName.textContent = collectionData.search_term || collectionData.name;
+    }
+    const totalItems = document.getElementById('bws-total-items');
+    if (totalItems) {
+      totalItems.textContent = items.length;
+    }
 
     const itemTypes = [];
     if (includeComments) itemTypes.push('Comments');
     if (includeChunks) itemTypes.push('Video Chunks');
-    document.getElementById('bws-item-type').textContent = itemTypes.join(' + ');
+    const itemType = document.getElementById('bws-item-type');
+    if (itemType) {
+      itemType.textContent = itemTypes.join(' + ');
+    }
 
     // Show info section
-    document.getElementById('bws-source-info').style.display = 'block';
+    const sourceInfo = document.getElementById('bws-source-info');
+    if (sourceInfo) {
+      sourceInfo.style.display = 'block';
+    }
 
     // Show config section if we have enough items
+    const configSection = document.getElementById('bws-config-section');
     if (items.length >= 2) {
-      document.getElementById('bws-config-section').style.display = 'block';
+      if (configSection) {
+        configSection.style.display = 'block';
+      }
       updateBWSEstimates();
     } else {
-      document.getElementById('bws-config-section').style.display = 'none';
+      if (configSection) {
+        configSection.style.display = 'none';
+      }
       showNotification('Need at least 2 items for BWS experiment', 'warning');
     }
 
@@ -518,7 +590,8 @@ async function updateBWSCollectionCount() {
 async function updateBWSFilteredCount() {
   if (!bwsState.selectedProjectId) return;
 
-  const minScore = parseFloat(document.getElementById('bws-min-score').value);
+  const minScoreEl = document.getElementById('bws-min-score');
+  const minScore = minScoreEl ? parseFloat(minScoreEl.value) : 0.7;
 
   try {
     const result = await window.api.ai.getRatingsForProject({ projectId: bwsState.selectedProjectId });
@@ -530,20 +603,34 @@ async function updateBWSFilteredCount() {
 
       bwsState.filteredItemCount = filteredItems.length;
 
-      document.getElementById('bws-filtered-count').textContent = `${filteredItems.length} items`;
+      const filteredCount = document.getElementById('bws-filtered-count');
+      if (filteredCount) {
+        filteredCount.textContent = `${filteredItems.length} items`;
+      }
 
       // Display project info (already set in onBWSProjectSelect, but update total)
-      document.getElementById('bws-total-items').textContent = bwsState.selectedProjectData.total_items;
+      const totalItems = document.getElementById('bws-total-items');
+      if (totalItems) {
+        totalItems.textContent = bwsState.selectedProjectData.total_items;
+      }
 
       // Show info section (should already be visible from onBWSProjectSelect)
-      document.getElementById('bws-source-info').style.display = 'block';
+      const sourceInfo = document.getElementById('bws-source-info');
+      if (sourceInfo) {
+        sourceInfo.style.display = 'block';
+      }
 
       // Show config section if we have enough items
+      const configSection = document.getElementById('bws-config-section');
       if (filteredItems.length >= 2) {
-        document.getElementById('bws-config-section').style.display = 'block';
+        if (configSection) {
+          configSection.style.display = 'block';
+        }
         updateBWSEstimates();
       } else {
-        document.getElementById('bws-config-section').style.display = 'none';
+        if (configSection) {
+          configSection.style.display = 'none';
+        }
         showNotification('Need at least 2 items for BWS experiment', 'warning');
       }
     }
@@ -559,27 +646,42 @@ async function updateBWSFilteredCount() {
  */
 function updateBWSEstimates() {
   const itemCount = bwsState.filteredItemCount;
-  const tupleSize = parseInt(document.getElementById('bws-tuple-size').value);
-  const targetAppearances = parseInt(document.getElementById('bws-target-appearances').value);
-  const raterType = document.getElementById('bws-rater-type').value;
+  const tupleSizeEl = document.getElementById('bws-tuple-size');
+  const targetAppearancesEl = document.getElementById('bws-target-appearances');
+  const raterTypeEl = document.getElementById('bws-rater-type');
+
+  const tupleSize = tupleSizeEl ? parseInt(tupleSizeEl.value) : 3;
+  const targetAppearances = targetAppearancesEl ? parseInt(targetAppearancesEl.value) : 4;
+  const raterType = raterTypeEl ? raterTypeEl.value : 'ai';
 
   if (itemCount === 0) return;
 
   // Calculate estimated tuple count
   const estimatedTuples = Math.ceil((itemCount * targetAppearances) / tupleSize);
 
-  document.getElementById('bws-estimate-tuples').textContent = estimatedTuples;
-  document.getElementById('bws-estimate-items').textContent = itemCount;
+  const estimateTuples = document.getElementById('bws-estimate-tuples');
+  if (estimateTuples) {
+    estimateTuples.textContent = estimatedTuples;
+  }
+  const estimateItems = document.getElementById('bws-estimate-items');
+  if (estimateItems) {
+    estimateItems.textContent = itemCount;
+  }
 
   // Show/hide AI cost estimate
   const aiCostRow = document.getElementById('bws-ai-cost-row');
-  if (raterType === 'ai' || raterType === 'hybrid') {
-    // Rough estimate: $0.00015 per comparison (Gemini Flash pricing)
-    const estimatedCost = estimatedTuples * 0.00015;
-    document.getElementById('bws-estimate-cost').textContent = `$${estimatedCost.toFixed(4)}`;
-    aiCostRow.style.display = 'flex';
-  } else {
-    aiCostRow.style.display = 'none';
+  if (aiCostRow) {
+    if (raterType === 'ai' || raterType === 'hybrid') {
+      // Rough estimate: $0.00015 per comparison (Gemini Flash pricing)
+      const estimatedCost = estimatedTuples * 0.00015;
+      const estimateCost = document.getElementById('bws-estimate-cost');
+      if (estimateCost) {
+        estimateCost.textContent = `$${estimatedCost.toFixed(4)}`;
+      }
+      aiCostRow.style.display = 'flex';
+    } else {
+      aiCostRow.style.display = 'none';
+    }
   }
 }
 
@@ -588,8 +690,13 @@ function updateBWSEstimates() {
  */
 function validateBWSForm() {
   const createBtn = document.getElementById('bws-create-btn');
-  const name = document.getElementById('bws-experiment-name').value.trim();
-  const intent = document.getElementById('bws-research-intent').value.trim();
+  if (!createBtn) return;
+
+  const nameEl = document.getElementById('bws-experiment-name');
+  const intentEl = document.getElementById('bws-research-intent');
+
+  const name = nameEl ? nameEl.value.trim() : '';
+  const intent = intentEl ? intentEl.value.trim() : '';
 
   let hasSource = false;
   if (bwsState.sourceType === 'rating-project') {
@@ -610,25 +717,36 @@ function validateBWSForm() {
  */
 async function createBWSExperiment() {
   const createBtn = document.getElementById('bws-create-btn');
+  if (!createBtn) return;
+
   createBtn.disabled = true;
   createBtn.textContent = 'Creating...';
 
   try {
+    const nameEl = document.getElementById('bws-experiment-name');
+    const tupleSizeEl = document.getElementById('bws-tuple-size');
+    const targetAppearancesEl = document.getElementById('bws-target-appearances');
+    const designMethodEl = document.getElementById('bws-design-method');
+    const scoringMethodEl = document.getElementById('bws-scoring-method');
+    const raterTypeEl = document.getElementById('bws-rater-type');
+    const researchIntentEl = document.getElementById('bws-research-intent');
+
     const config = {
-      name: document.getElementById('bws-experiment-name').value.trim(),
+      name: nameEl ? nameEl.value.trim() : '',
       source_type: bwsState.sourceType,
-      tuple_size: parseInt(document.getElementById('bws-tuple-size').value),
-      target_appearances: parseInt(document.getElementById('bws-target-appearances').value),
-      design_method: document.getElementById('bws-design-method').value,
-      scoring_method: document.getElementById('bws-scoring-method').value,
-      rater_type: document.getElementById('bws-rater-type').value,
-      research_intent: document.getElementById('bws-research-intent').value.trim()
+      tuple_size: tupleSizeEl ? parseInt(tupleSizeEl.value) : 3,
+      target_appearances: targetAppearancesEl ? parseInt(targetAppearancesEl.value) : 4,
+      design_method: designMethodEl ? designMethodEl.value : 'balanced',
+      scoring_method: scoringMethodEl ? scoringMethodEl.value : 'counting',
+      rater_type: raterTypeEl ? raterTypeEl.value : 'ai',
+      research_intent: researchIntentEl ? researchIntentEl.value.trim() : ''
     };
 
     // Add source-specific parameters
     if (bwsState.sourceType === 'rating-project') {
       config.rating_project_id = bwsState.selectedProjectId;
-      config.min_score = parseFloat(document.getElementById('bws-min-score').value);
+      const minScoreEl = document.getElementById('bws-min-score');
+      config.min_score = minScoreEl ? parseFloat(minScoreEl.value) : 0.7;
     } else {
       config.collection_id = bwsState.selectedCollectionId;
       config.include_comments = bwsState.includeComments;
@@ -672,6 +790,11 @@ async function loadBWSExperiments() {
     }
 
     const gallery = document.getElementById('bws-experiments-gallery');
+    if (!gallery) {
+      console.error('BWS experiments gallery element not found');
+      return;
+    }
+
     const experiments = result.experiments;
 
     // Update stats
@@ -860,11 +983,20 @@ async function startAIBWSRating(experimentId, experiment) {
     bwsRatingState.aiRaterId = 'gemini-2.5-flash';
 
     // ✅ Show rating interface
-    document.getElementById('bws-rating-interface').style.display = 'flex';
+    const ratingInterface = document.getElementById('bws-rating-interface');
+    if (ratingInterface) {
+      ratingInterface.style.display = 'flex';
+    }
 
     // Update header
-    document.getElementById('bws-rating-exp-name').textContent = experiment.name;
-    document.getElementById('bws-rating-exp-desc').textContent = experiment.research_intent;
+    const expName = document.getElementById('bws-rating-exp-name');
+    if (expName) {
+      expName.textContent = experiment.name;
+    }
+    const expDesc = document.getElementById('bws-rating-exp-desc');
+    if (expDesc) {
+      expDesc.textContent = experiment.research_intent;
+    }
 
     // ✅ Setup interface event listeners (Close, Pause, Submit buttons)
     setupRatingInterfaceListeners();
@@ -916,10 +1048,22 @@ function showInlineAIProgress(experimentId, experiment) {
   const percentage = totalTuples > 0 ? Math.round((alreadyCompleted / totalTuples) * 100) : 0;
 
   // Update banner content
-  document.getElementById('bws-ai-progress-title').textContent = 'AI Rating in Progress';
-  document.getElementById('bws-ai-progress-count-inline').textContent = `${alreadyCompleted} / ${totalTuples}`;
-  document.getElementById('bws-ai-progress-percentage-inline').textContent = `${percentage}%`;
-  document.getElementById('bws-ai-progress-bar-fill').style.width = `${percentage}%`;
+  const progressTitle = document.getElementById('bws-ai-progress-title');
+  if (progressTitle) {
+    progressTitle.textContent = 'AI Rating in Progress';
+  }
+  const progressCount = document.getElementById('bws-ai-progress-count-inline');
+  if (progressCount) {
+    progressCount.textContent = `${alreadyCompleted} / ${totalTuples}`;
+  }
+  const progressPercentage = document.getElementById('bws-ai-progress-percentage-inline');
+  if (progressPercentage) {
+    progressPercentage.textContent = `${percentage}%`;
+  }
+  const progressBarFill = document.getElementById('bws-ai-progress-bar-fill');
+  if (progressBarFill) {
+    progressBarFill.style.width = `${percentage}%`;
+  }
 
   // Remove any previous state classes
   banner.classList.remove('completed', 'error');
@@ -976,10 +1120,22 @@ function markInlineAIProgressComplete(total) {
 
   // Update to completed state
   banner.classList.add('completed');
-  document.getElementById('bws-ai-progress-title').textContent = '✅ AI Rating Complete';
-  document.getElementById('bws-ai-progress-count-inline').textContent = `${total} / ${total}`;
-  document.getElementById('bws-ai-progress-percentage-inline').textContent = '100%';
-  document.getElementById('bws-ai-progress-bar-fill').style.width = '100%';
+  const progressTitle = document.getElementById('bws-ai-progress-title');
+  if (progressTitle) {
+    progressTitle.textContent = '✅ AI Rating Complete';
+  }
+  const progressCount = document.getElementById('bws-ai-progress-count-inline');
+  if (progressCount) {
+    progressCount.textContent = `${total} / ${total}`;
+  }
+  const progressPercentage = document.getElementById('bws-ai-progress-percentage-inline');
+  if (progressPercentage) {
+    progressPercentage.textContent = '100%';
+  }
+  const progressBarFill = document.getElementById('bws-ai-progress-bar-fill');
+  if (progressBarFill) {
+    progressBarFill.style.width = '100%';
+  }
 
   // Hide latest result
   const latestElement = document.getElementById('bws-ai-latest-inline');
@@ -1006,7 +1162,10 @@ function markInlineAIProgressError(errorMessage) {
 
   // Update to error state
   banner.classList.add('error');
-  document.getElementById('bws-ai-progress-title').textContent = '❌ AI Rating Error';
+  const progressTitle = document.getElementById('bws-ai-progress-title');
+  if (progressTitle) {
+    progressTitle.textContent = '❌ AI Rating Error';
+  }
 
   // Show error in latest section
   const latestElement = document.getElementById('bws-ai-latest-inline');
@@ -1190,11 +1349,20 @@ async function startHumanBWSRating(experimentId, experiment, raterId = 'human-us
     setupRatingInterfaceListeners();
 
     // Show interface
-    document.getElementById('bws-rating-interface').style.display = 'flex';
+    const ratingInterface = document.getElementById('bws-rating-interface');
+    if (ratingInterface) {
+      ratingInterface.style.display = 'flex';
+    }
 
     // Update header
-    document.getElementById('bws-rating-exp-name').textContent = experiment.name;
-    document.getElementById('bws-rating-exp-desc').textContent = experiment.research_intent;
+    const expName = document.getElementById('bws-rating-exp-name');
+    if (expName) {
+      expName.textContent = experiment.name;
+    }
+    const expDesc = document.getElementById('bws-rating-exp-desc');
+    if (expDesc) {
+      expDesc.textContent = experiment.research_intent;
+    }
 
     // Add rater info to header
     const raterInfo = document.getElementById('bws-rating-rater-info');
@@ -1389,7 +1557,10 @@ async function loadNextBWSTuple(isSkip = false) {
     }
 
     // Show loading
-    document.getElementById('bws-rating-loading').style.display = 'flex';
+    const loadingEl = document.getElementById('bws-rating-loading');
+    if (loadingEl) {
+      loadingEl.style.display = 'flex';
+    }
 
     // Get next tuple
     const result = await window.api.bws.getNextTuple({
@@ -1399,7 +1570,9 @@ async function loadNextBWSTuple(isSkip = false) {
     });
 
     // Hide loading
-    document.getElementById('bws-rating-loading').style.display = 'none';
+    if (loadingEl) {
+      loadingEl.style.display = 'none';
+    }
 
     if (!result.success) {
       showNotification(`Error loading tuple: ${result.error}`, 'error');
@@ -1426,11 +1599,17 @@ async function loadNextBWSTuple(isSkip = false) {
     updateBWSRatingProgress();
 
     // Disable submit button
-    document.getElementById('bws-rating-submit-btn').disabled = true;
+    const submitBtn = document.getElementById('bws-rating-submit-btn');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+    }
 
   } catch (error) {
     console.error('Error loading next tuple:', error);
-    document.getElementById('bws-rating-loading').style.display = 'none';
+    const loadingEl = document.getElementById('bws-rating-loading');
+    if (loadingEl) {
+      loadingEl.style.display = 'none';
+    }
     showNotification('Failed to load next comparison', 'error');
   }
 }
@@ -1467,14 +1646,19 @@ async function loadBWSTuple(options = {}) {
     }
 
     // Show loading
-    document.getElementById('bws-rating-loading').style.display = 'flex';
+    const loadingEl = document.getElementById('bws-rating-loading');
+    if (loadingEl) {
+      loadingEl.style.display = 'flex';
+    }
 
     // Fetch all tuples for this experiment
     const allTuples = await window.api.bws.getAllTuples({ experimentId });
 
     if (!allTuples || allTuples.length === 0) {
       showNotification('No tuples found for this experiment', 'info');
-      document.getElementById('bws-rating-loading').style.display = 'none';
+      if (loadingEl) {
+        loadingEl.style.display = 'none';
+      }
       return;
     }
 
@@ -1572,13 +1756,19 @@ async function loadBWSTuple(options = {}) {
     updateBWSRatingProgress();
 
     // Hide loading
-    document.getElementById('bws-rating-loading').style.display = 'none';
+    const loadingEl2 = document.getElementById('bws-rating-loading');
+    if (loadingEl2) {
+      loadingEl2.style.display = 'none';
+    }
 
     console.log(`[loadBWSTuple] Loaded tuple ${tupleToLoad.id} (index ${targetTupleIndex + 1}/${filteredTuples.length}, filter: ${filter})`);
 
   } catch (error) {
     console.error('[loadBWSTuple] Error:', error);
-    document.getElementById('bws-rating-loading').style.display = 'none';
+    const loadingEl3 = document.getElementById('bws-rating-loading');
+    if (loadingEl3) {
+      loadingEl3.style.display = 'none';
+    }
     showNotification('Failed to load tuple', 'error');
   }
 }
@@ -2573,7 +2763,10 @@ async function submitBWSJudgment() {
 
   try {
     // Show loading
-    document.getElementById('bws-rating-loading').style.display = 'flex';
+    const loadingEl = document.getElementById('bws-rating-loading');
+    if (loadingEl) {
+      loadingEl.style.display = 'flex';
+    }
 
     // Convert indices to actual item IDs
     const items = bwsRatingState.currentTupleData.items || [];
@@ -2581,7 +2774,9 @@ async function submitBWSJudgment() {
     const worstItemId = items[bwsRatingState.selectedWorst]?.id;
 
     if (!bestItemId || !worstItemId) {
-      document.getElementById('bws-rating-loading').style.display = 'none';
+      if (loadingEl) {
+        loadingEl.style.display = 'none';
+      }
       showNotification('Error: Could not find item IDs', 'error');
       return;
     }
@@ -2597,7 +2792,9 @@ async function submitBWSJudgment() {
     });
 
     if (!result.success) {
-      document.getElementById('bws-rating-loading').style.display = 'none';
+      if (loadingEl) {
+        loadingEl.style.display = 'none';
+      }
       showNotification(`Failed to save judgment: ${result.error}`, 'error');
       return;
     }
@@ -2631,13 +2828,19 @@ async function submitBWSJudgment() {
     updateBWSRatingProgress();
 
     // Hide loading
-    document.getElementById('bws-rating-loading').style.display = 'none';
+    const loadingEl2 = document.getElementById('bws-rating-loading');
+    if (loadingEl2) {
+      loadingEl2.style.display = 'none';
+    }
 
     showNotification('✅ Saved! Dashed = your pick, solid = AI rating (if exists)', 'success');
 
   } catch (error) {
     console.error('Error submitting judgment:', error);
-    document.getElementById('bws-rating-loading').style.display = 'none';
+    const loadingEl = document.getElementById('bws-rating-loading');
+    if (loadingEl) {
+      loadingEl.style.display = 'none';
+    }
     showNotification('Failed to submit judgment', 'error');
   }
 }
@@ -2736,7 +2939,10 @@ function pauseBWSRating() {
   pauseAllBWSVideos();
 
   // Hide interface
-  document.getElementById('bws-rating-interface').style.display = 'none';
+  const ratingInterface = document.getElementById('bws-rating-interface');
+  if (ratingInterface) {
+    ratingInterface.style.display = 'none';
+  }
 
   // Remove keyboard listener temporarily
   document.removeEventListener('keydown', handleRatingKeyboard);
@@ -2768,7 +2974,10 @@ function closeBWSRating() {
     document.removeEventListener('keydown', handleRatingKeyboard);
 
     // Hide interface
-    document.getElementById('bws-rating-interface').style.display = 'none';
+    const ratingInterface = document.getElementById('bws-rating-interface');
+    if (ratingInterface) {
+      ratingInterface.style.display = 'none';
+    }
 
     // Reset state
     bwsRatingState = {
@@ -2835,19 +3044,37 @@ async function viewBWSResults(experimentId, raterId = 'combined') {
     bwsResultsState.currentRaterId = raterId;
 
     // Show results overlay
-    document.getElementById('bws-results-overlay').style.display = 'flex';
+    const resultsOverlay = document.getElementById('bws-results-overlay');
+    if (resultsOverlay) {
+      resultsOverlay.style.display = 'flex';
+    }
 
     // Update header
-    document.getElementById('bws-results-title').textContent = `Results: ${experiment.name}`;
-    document.getElementById('bws-results-subtitle').textContent = experiment.research_intent;
+    const resultsTitle = document.getElementById('bws-results-title');
+    if (resultsTitle) {
+      resultsTitle.textContent = `Results: ${experiment.name}`;
+    }
+    const resultsSubtitle = document.getElementById('bws-results-subtitle');
+    if (resultsSubtitle) {
+      resultsSubtitle.textContent = experiment.research_intent;
+    }
 
     // Setup rater selector dropdown
     setupRaterSelector(experimentId);
 
     // Update stats
-    document.getElementById('bws-results-total').textContent = scores.length;
-    document.getElementById('bws-results-comparisons').textContent = experiment.tuples_generated || 0;
-    document.getElementById('bws-results-method').textContent = experiment.scoring_method || 'Counting';
+    const resultsTotal = document.getElementById('bws-results-total');
+    if (resultsTotal) {
+      resultsTotal.textContent = scores.length;
+    }
+    const resultsComparisons = document.getElementById('bws-results-comparisons');
+    if (resultsComparisons) {
+      resultsComparisons.textContent = experiment.tuples_generated || 0;
+    }
+    const resultsMethod = document.getElementById('bws-results-method');
+    if (resultsMethod) {
+      resultsMethod.textContent = experiment.scoring_method || 'Counting';
+    }
 
     // Render results table
     renderBWSResultsTable(scores);
@@ -2856,9 +3083,15 @@ async function viewBWSResults(experimentId, raterId = 'combined') {
     setupSortableHeaders();
 
     // Setup close button
-    document.getElementById('bws-results-close').onclick = () => {
-      document.getElementById('bws-results-overlay').style.display = 'none';
-    };
+    const resultsClose = document.getElementById('bws-results-close');
+    if (resultsClose) {
+      resultsClose.onclick = () => {
+        const overlay = document.getElementById('bws-results-overlay');
+        if (overlay) {
+          overlay.style.display = 'none';
+        }
+      };
+    }
 
     // Setup export buttons
     setupBWSExportButtons(experimentId, experiment, scores);
@@ -2945,7 +3178,10 @@ async function switchRaterView(raterId) {
     renderBWSResultsTable(result.scores);
 
     // Update stats
-    document.getElementById('bws-results-total').textContent = result.scores.length;
+    const resultsTotal = document.getElementById('bws-results-total');
+    if (resultsTotal) {
+      resultsTotal.textContent = result.scores.length;
+    }
 
     console.log(`[switchRaterView] Switched to ${raterId} view (${result.scores.length} items)`);
 
@@ -3115,17 +3351,36 @@ async function openBWSVideoModal(score) {
     console.log('[BWS Video Modal] Using video path:', videoPath);
 
     // Update modal content
-    document.getElementById('bws-video-modal-title').textContent = `Rank #${score.rank} - Video Chunk`;
-    document.getElementById('bws-video-transcript').textContent = score.chunk_text || 'No transcript available';
-    document.getElementById('bws-video-time').textContent = `⏱️ ${formatTimestamp(score.start_time)} - ${formatTimestamp(score.end_time)}`;
-    document.getElementById('bws-video-score').textContent = `📊 Score: ${score.score_counting > 0 ? '+' : ''}${score.score_counting} (Best: ${score.num_best}, Worst: ${score.num_worst})`;
+    const modalTitle = document.getElementById('bws-video-modal-title');
+    if (modalTitle) {
+      modalTitle.textContent = `Rank #${score.rank} - Video Chunk`;
+    }
+    const videoTranscript = document.getElementById('bws-video-transcript');
+    if (videoTranscript) {
+      videoTranscript.textContent = score.chunk_text || 'No transcript available';
+    }
+    const videoTime = document.getElementById('bws-video-time');
+    if (videoTime) {
+      videoTime.textContent = `⏱️ ${formatTimestamp(score.start_time)} - ${formatTimestamp(score.end_time)}`;
+    }
+    const videoScore = document.getElementById('bws-video-score');
+    if (videoScore) {
+      videoScore.textContent = `📊 Score: ${score.score_counting > 0 ? '+' : ''}${score.score_counting} (Best: ${score.num_best}, Worst: ${score.num_worst})`;
+    }
 
     // Set video source directly on video element
     const videoPlayer = document.getElementById('bws-video-player');
+    if (!videoPlayer) {
+      showNotification('Video player element not found', 'error');
+      return;
+    }
     videoPlayer.src = videoPath;
 
     // Show modal
-    document.getElementById('bws-video-modal').style.display = 'flex';
+    const videoModal = document.getElementById('bws-video-modal');
+    if (videoModal) {
+      videoModal.style.display = 'flex';
+    }
 
     // Auto-play with muted trick to avoid browser restrictions
     videoPlayer.muted = true;
@@ -3155,8 +3410,13 @@ async function openBWSVideoModal(score) {
  */
 function closeBWSVideoModal() {
   const videoPlayer = document.getElementById('bws-video-player');
-  videoPlayer.pause();
-  document.getElementById('bws-video-modal').style.display = 'none';
+  if (videoPlayer) {
+    videoPlayer.pause();
+  }
+  const videoModal = document.getElementById('bws-video-modal');
+  if (videoModal) {
+    videoModal.style.display = 'none';
+  }
 }
 
 // Make globally accessible for onclick
@@ -3167,14 +3427,20 @@ window.closeBWSVideoModal = closeBWSVideoModal;
  */
 function setupBWSExportButtons(experimentId, experiment, scores) {
   // CSV Export
-  document.getElementById('bws-export-csv').onclick = () => {
-    exportBWSToCSV(experiment, scores);
-  };
+  const exportCsv = document.getElementById('bws-export-csv');
+  if (exportCsv) {
+    exportCsv.onclick = () => {
+      exportBWSToCSV(experiment, scores);
+    };
+  }
 
   // JSON Export
-  document.getElementById('bws-export-json').onclick = () => {
-    exportBWSToJSON(experiment, scores);
-  };
+  const exportJson = document.getElementById('bws-export-json');
+  if (exportJson) {
+    exportJson.onclick = () => {
+      exportBWSToJSON(experiment, scores);
+    };
+  }
 }
 
 /**
@@ -3613,8 +3879,14 @@ function setupTupleCardListeners() {
  */
 async function rateTupleFromList(tupleId) {
   // Hide list view, show single rating view
-  document.getElementById('bws-list-view').style.display = 'none';
-  document.getElementById('bws-single-rating-view').style.display = 'block';
+  const listView = document.getElementById('bws-list-view');
+  if (listView) {
+    listView.style.display = 'none';
+  }
+  const singleRatingView = document.getElementById('bws-single-rating-view');
+  if (singleRatingView) {
+    singleRatingView.style.display = 'block';
+  }
   
   // Load the tuple for rating
   const tupleWithItems = await window.api.bws.getTupleWithItems({ tupleId });
@@ -3636,8 +3908,14 @@ async function rateTupleFromList(tupleId) {
  * Return to list view after rating
  */
 function returnToListView() {
-  document.getElementById('bws-single-rating-view').style.display = 'none';
-  document.getElementById('bws-list-view').style.display = 'block';
+  const singleRatingView = document.getElementById('bws-single-rating-view');
+  if (singleRatingView) {
+    singleRatingView.style.display = 'none';
+  }
+  const listView = document.getElementById('bws-list-view');
+  if (listView) {
+    listView.style.display = 'block';
+  }
   
   // Reload list to show new rating
   loadBWSList();

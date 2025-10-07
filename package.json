@@ -9,6 +9,7 @@
     "dev": "electron . --dev",
     "test:ui": "playwright test",
     "test:discover": "playwright test tests/ui/discover-state.spec.js",
+    "migrate:fix-missing": "node scripts/add-missing-tables.js",
     "build": "electron-builder",
     "build-linux": "electron-builder --linux",
     "build-mac": "electron-builder --mac",

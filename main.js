@@ -115,7 +115,7 @@ registerAIHandlers(
   () => ratingEngine,
   (value) => { ratingEngine = value; }
 );
-registerBWSHandlers(getDatabase, () => settings, decrypt);
+registerBWSHandlers(getDatabase, () => mainWindow, () => settings, decrypt);
 registerSettingsHandlers(() => settings, saveSettings);
 registerDatabaseHandlers(getDatabase);
 registerUtilityHandlers(getDatabase, () => mainWindow);

@@ -1,522 +1,80 @@
-const { ipcMain, app } = require('electron');
-const path = require('path');
-const BwsTupleGenerator = require('../services/bws-tuple-generator');
-const GeminiRater = require('../services/gemini-rater');
+const { ipcMain } = require('electron');
+const { BwsService } = require('../services/bws-service');
 
-function registerBWSHandlers(getDatabase, getSettings, decrypt) {
-  // ========================================
-  // BWS (Best-Worst Scaling) IPC Handlers
-  // ========================================
+/**
+ * Register BWS (Best-Worst Scaling) IPC Handlers
+ *
+ * This is a thin wrapper that creates a BwsService instance
+ * and delegates all IPC calls to the service methods.
+ */
+function registerBWSHandlers(getDatabase, getMainWindow, getSettings, decrypt) {
+  // Create the BWS Service
+  const bwsService = new BwsService(
+    getDatabase,
+    getMainWindow,
+    getSettings,
+    decrypt
+  );
 
-  // Get all BWS experiments
+  // BWS experiment management handlers
   ipcMain.handle('bws:getAllExperiments', async () => {
-    try {
-      const dbPath = path.join(app.getPath('userData'), 'collections.db');
-      const db = require('../database/db');
-      await db.initialize(dbPath);
-
-      const experiments = await db.getAllBWSExperiments();
-      return { success: true, experiments };
-    } catch (error) {
-      console.error('Error getting BWS experiments:', error);
-      return { success: false, error: error.message };
-    }
+    return await bwsService.getAllExperiments();
   });
 
-  // Get single BWS experiment with stats
   ipcMain.handle('bws:getExperiment', async (event, { experimentId }) => {
-    try {
-      const dbPath = path.join(app.getPath('userData'), 'collections.db');
-      const db = require('../database/db');
-      await db.initialize(dbPath);
-
-      const stats = await db.getBWSExperimentStats(experimentId);
-      return { success: true, experiment: stats };
-    } catch (error) {
-      console.error('Error getting BWS experiment:', error);
-      return { success: false, error: error.message };
-    }
+    return await bwsService.getExperiment(experimentId);
   });
 
-  // Create BWS experiment with tuple generation
   ipcMain.handle('bws:createExperiment', async (event, config) => {
-    try {
-      const dbPath = path.join(app.getPath('userData'), 'collections.db');
-      const db = require('../database/db');
-      await db.initialize(dbPath);
-
-      const {
-        name,
-        source_type,
-        rating_project_id,
-        collection_id,
-        include_comments,
-        include_chunks,
-        include_pdfs,
-        tuple_size,
-        target_appearances,
-        design_method,
-        scoring_method,
-        rater_type,
-        research_intent,
-        min_score = 0.7
-      } = config;
-
-      let items = [];
-      let item_type = 'mixed';
-      let sourceId = null;
-
-      // Fetch items based on source type
-      if (source_type === 'rating-project') {
-        sourceId = rating_project_id;
-
-        // Fetch items from rating project with score filter
-        const ratings = await db.getRatingsForProject(rating_project_id);
-        const filteredRatings = ratings.filter(r =>
-          r.status === 'success' &&
-          r.relevance_score >= min_score
-        );
-
-        if (filteredRatings.length === 0) {
-          return { success: false, error: 'No items meet the score criteria' };
-        }
-
-        // Determine item type (check if all same type)
-        const itemTypes = new Set(filteredRatings.map(r => r.item_type));
-        if (itemTypes.size > 1) {
-          return { success: false, error: 'Cannot mix different content types in BWS experiment' };
-        }
-        item_type = filteredRatings[0].item_type;
-
-        items = filteredRatings.map(r => ({ id: r.item_id, ...r }));
-
-      } else if (source_type === 'collection') {
-        sourceId = collection_id;
-
-        // Fetch items from collection
-        const rawItems = await db.getItemsForRating(
-          collection_id,
-          include_chunks,
-          include_comments,
-          null, // No projectId
-          include_pdfs
-        );
-
-        if (rawItems.length === 0) {
-          return { success: false, error: 'No items found in collection' };
-        }
-
-        // Determine item type
-        const itemTypes = new Set(rawItems.map(item => item.type));
-        if (itemTypes.size > 1) {
-          return { success: false, error: 'Cannot mix different content types in BWS experiment. Uncheck one type.' };
-        }
-        item_type = rawItems[0].type || 'video_chunk';
-
-        items = rawItems.map(item => ({ id: item.id, ...item }));
-      } else {
-        return { success: false, error: 'Invalid source_type' };
-      }
-
-      if (items.length < tuple_size) {
-        return { success: false, error: `Need at least ${tuple_size} items for tuple size ${tuple_size}` };
-      }
-
-      // Generate tuples with video diversity constraint
-      const itemIds = items.map(item => item.id);
-
-      // For video chunks, build a map of item_id -> video_id to enforce diversity
-      const itemVideoMap = {};
-      if (item_type === 'video_chunk') {
-        items.forEach(item => {
-          itemVideoMap[item.id] = item.video_id;
-        });
-      }
-
-      const tuples = BwsTupleGenerator.generateTuples(itemIds, {
-        tupleSize: tuple_size,
-        targetAppearances: target_appearances || 4,
-        method: design_method || 'balanced',
-        itemVideoMap: Object.keys(itemVideoMap).length > 0 ? itemVideoMap : null
-      });
-
-      // Validate tuples
-      const validation = BwsTupleGenerator.validateTuples(tuples, itemIds, tuple_size);
-      if (!validation.valid) {
-        console.warn('Tuple validation issues:', validation.issues);
-      }
-
-      // Create experiment in database
-      const experimentData = {
-        name,
-        item_type,
-        tuple_size,
-        tuple_count: tuples.length,
-        design_method: design_method || 'balanced',
-        scoring_method: scoring_method || 'counting',
-        rater_type: rater_type || 'ai',
-        research_intent,
-        status: 'draft'
-      };
-
-      // Add source-specific fields
-      if (source_type === 'rating-project') {
-        experimentData.rating_project_id = rating_project_id;
-      } else {
-        experimentData.collection_id = collection_id;
-      }
-
-      const experimentId = await db.createBWSExperiment(experimentData);
-
-      // Save tuples
-      await db.saveBWSTuples(experimentId, tuples);
-
-      return {
-        success: true,
-        experiment_id: experimentId,
-        tuple_count: tuples.length,
-        item_count: itemIds.length,
-        validation: validation.statistics
-      };
-    } catch (error) {
-      console.error('Error creating BWS experiment:', error);
-      return { success: false, error: error.message };
-    }
+    return await bwsService.createExperiment(config);
   });
 
-  // Update BWS experiment
   ipcMain.handle('bws:updateExperiment', async (event, { experimentId, updates }) => {
-    try {
-      const dbPath = path.join(app.getPath('userData'), 'collections.db');
-      const db = require('../database/db');
-      await db.initialize(dbPath);
-
-      await db.updateBWSExperiment(experimentId, updates);
-
-      return { success: true };
-    } catch (error) {
-      console.error('Error updating BWS experiment:', error);
-      return { success: false, error: error.message };
-    }
+    return await bwsService.updateExperiment(experimentId, updates);
   });
 
-  // Get next tuple for rating
-  ipcMain.handle('bws:getNextTuple', async (event, { experimentId, raterType, raterId }) => {
-    try {
-      const dbPath = path.join(app.getPath('userData'), 'collections.db');
-      const db = require('../database/db');
-      await db.initialize(dbPath);
-
-      const tuple = await db.getNextBWSTuple(experimentId, raterType, raterId);
-
-      if (!tuple) {
-        return { success: true, tuple: null, items: null, complete: true };
-      }
-
-      // Extract items from tuple object (getBWSTupleWithItems adds items to tuple)
-      const items = tuple.items || [];
-
-      return { success: true, tuple, items, complete: false };
-    } catch (error) {
-      console.error('Error getting next tuple:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  // Save BWS judgment
-  ipcMain.handle('bws:saveJudgment', async (event, judgmentData) => {
-    try {
-      const dbPath = path.join(app.getPath('userData'), 'collections.db');
-      const db = require('../database/db');
-      await db.initialize(dbPath);
-
-      const judgmentId = await db.saveBWSJudgment(judgmentData);
-
-      return { success: true, judgment_id: judgmentId };
-    } catch (error) {
-      console.error('Error saving BWS judgment:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  // Calculate scores for experiment
-  ipcMain.handle('bws:calculateScores', async (event, { experimentId, raterId = null }) => {
-    try {
-      const dbPath = path.join(app.getPath('userData'), 'collections.db');
-      const db = require('../database/db');
-      await db.initialize(dbPath);
-
-      const scores = await db.calculateBWSScores(experimentId, raterId);
-
-      // Only update experiment status to completed when calculating combined scores
-      if (!raterId) {
-        await db.updateBWSExperiment(experimentId, {
-          status: 'completed',
-          completed_at: new Date().toISOString()
-        });
-      }
-
-      return { success: true, scores };
-    } catch (error) {
-      console.error('Error calculating BWS scores:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  // Get scores for experiment
-  ipcMain.handle('bws:getScores', async (event, { experimentId, raterId = 'combined' }) => {
-    try {
-      const dbPath = path.join(app.getPath('userData'), 'collections.db');
-      const db = require('../database/db');
-      await db.initialize(dbPath);
-
-      const scores = await db.getBWSScores(experimentId, raterId);
-
-      return { success: true, scores };
-    } catch (error) {
-      console.error('Error getting BWS scores:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  // Delete BWS experiment
   ipcMain.handle('bws:deleteExperiment', async (event, { experimentId }) => {
-    try {
-      const dbPath = path.join(app.getPath('userData'), 'collections.db');
-      const db = require('../database/db');
-      await db.initialize(dbPath);
-
-      await db.deleteBWSExperiment(experimentId);
-
-      return { success: true };
-    } catch (error) {
-      console.error('Error deleting BWS experiment:', error);
-      return { success: false, error: error.message };
-    }
+    return await bwsService.deleteExperiment(experimentId);
   });
 
-  // Get rater judgment count (for multi-rater support)
+  // BWS rating handlers
+  ipcMain.handle('bws:getNextTuple', async (event, { experimentId, raterType, raterId }) => {
+    return await bwsService.getNextTuple(experimentId, raterType, raterId);
+  });
+
+  ipcMain.handle('bws:saveJudgment', async (event, judgmentData) => {
+    return await bwsService.saveJudgment(judgmentData);
+  });
+
   ipcMain.handle('bws:getRaterJudgmentCount', async (event, { experimentId, raterId }) => {
-    try {
-      const dbPath = path.join(app.getPath('userData'), 'collections.db');
-      const db = require('../database/db');
-      await db.initialize(dbPath);
-
-      const count = await db.getRaterJudgmentCount(experimentId, raterId);
-
-      return { success: true, count };
-    } catch (error) {
-      console.error('Error getting rater judgment count:', error);
-      return { success: false, error: error.message, count: 0 };
-    }
+    return await bwsService.getRaterJudgmentCount(experimentId, raterId);
   });
 
-  // Start AI BWS Rating
+  // BWS scoring handlers
+  ipcMain.handle('bws:calculateScores', async (event, { experimentId, raterId = null }) => {
+    return await bwsService.calculateScores(experimentId, raterId);
+  });
+
+  ipcMain.handle('bws:getScores', async (event, { experimentId, raterId = 'combined' }) => {
+    return await bwsService.getScores(experimentId, raterId);
+  });
+
+  // AI rating handler
   ipcMain.handle('bws:startAIRating', async (event, { experimentId }) => {
-    try {
-      const dbPath = path.join(app.getPath('userData'), 'collections.db');
-      const db = require('../database/db');
-      await db.initialize(dbPath);
-
-      // Get experiment details
-      const stats = await db.getBWSExperimentStats(experimentId);
-      const experiment = stats;
-
-      // Get API key from encrypted settings
-      const settings = getSettings();
-      const geminiKey = settings.apiKeys?.gemini ? decrypt(settings.apiKeys.gemini) : null;
-      if (!geminiKey) {
-        return { success: false, error: 'Gemini API key not set. Please configure it in Settings.' };
-      }
-
-      const rater = new GeminiRater(geminiKey);
-
-      // Update experiment status
-      await db.updateBWSExperiment(experimentId, { status: 'in_progress' });
-
-      // Get all tuples
-      const allTuples = await db.getBWSTuples(experimentId);
-
-      // Get already rated tuples
-      const judgments = await db.getBWSJudgments(experimentId);
-      const ratedTupleIds = new Set(judgments.map(j => j.tuple_id));
-
-      // Filter to unrated tuples
-      const unratedTuples = allTuples.filter(t => !ratedTupleIds.has(t.id));
-
-      let completedCount = ratedTupleIds.size;
-      const totalCount = allTuples.length;
-
-      // Process each tuple
-      for (const tuple of unratedTuples) {
-        try {
-          // Get tuple with items
-          const tupleWithItems = await db.getBWSTupleWithItems(tuple.id);
-
-          // Send progress event
-          event.sender.send('bws:ai-progress', {
-            experimentId,
-            current: completedCount,
-            total: totalCount,
-            percentage: Math.round((completedCount / totalCount) * 100)
-          });
-
-          // Rate with Gemini
-          const result = await rater.compareBWSItems(tupleWithItems.items, experiment.research_intent);
-
-          // Convert 1-based indices to 0-based and get item IDs
-          const bestIndex = result.best - 1;
-          const worstIndex = result.worst - 1;
-          const bestItemId = tupleWithItems.items[bestIndex]?.id;
-          const worstItemId = tupleWithItems.items[worstIndex]?.id;
-
-          if (!bestItemId || !worstItemId) {
-            throw new Error('Invalid item indices from Gemini');
-          }
-
-          // Save judgment
-          await db.saveBWSJudgment({
-            tuple_id: tuple.id,
-            rater_type: 'ai',
-            rater_id: 'gemini-2.5-flash',
-            best_item_id: bestItemId,
-            worst_item_id: worstItemId,
-            reasoning: result.reasoning,
-            response_time_ms: 0
-          });
-
-          completedCount++;
-
-          // Send item rated event
-          event.sender.send('bws:ai-item-rated', {
-            tupleId: tuple.id,
-            best: bestIndex,
-            worst: worstIndex,
-            reasoning: result.reasoning
-          });
-
-          // Rate limiting - wait 1 second between requests
-          await new Promise(resolve => setTimeout(resolve, 1000));
-
-        } catch (error) {
-          console.error(`Error rating tuple ${tuple.id}:`, error);
-          event.sender.send('bws:ai-error', {
-            tupleId: tuple.id,
-            error: error.message
-          });
-          // Continue with next tuple
-        }
-      }
-
-      // Calculate scores
-      const scores = await db.calculateBWSCountingScores(experimentId);
-
-      // Update experiment to completed
-      await db.updateBWSExperiment(experimentId, {
-        status: 'completed',
-        completed_at: new Date().toISOString()
-      });
-
-      // Send completion event
-      event.sender.send('bws:ai-complete', {
-        experimentId,
-        scoresCount: scores.length
-      });
-
-      return { success: true, completed: completedCount, total: totalCount };
-
-    } catch (error) {
-      console.error('Error in AI BWS rating:', error);
-      return { success: false, error: error.message };
-    }
+    return await bwsService.startAIRating(experimentId);
   });
 
-  // BWS List View Handlers (for live viewer)
+  // BWS live viewer handlers
   ipcMain.handle('bws:getAllTuples', async (event, { experimentId }) => {
-    try {
-      const dbPath = path.join(app.getPath('userData'), 'collections.db');
-      const db = require('../database/db');
-      await db.initialize(dbPath);
-
-      // Get all tuples with their items
-      const tuples = await db.all(`
-        SELECT id, experiment_id, item_ids, tuple_index, created_at
-        FROM bws_tuples
-        WHERE experiment_id = ?
-        ORDER BY tuple_index
-      `, [experimentId]);
-
-      // Parse item_ids JSON and fetch items for each tuple
-      const tuplesWithItems = await Promise.all(tuples.map(async (tuple) => {
-        tuple.item_ids = JSON.parse(tuple.item_ids);
-
-        // Fetch items
-        const items = [];
-        for (const itemId of tuple.item_ids) {
-          let item = await db.get('SELECT *, "comment" as item_type FROM comments WHERE id = ?', [itemId]);
-          if (!item) {
-            item = await db.get('SELECT *, "video_chunk" as item_type FROM video_chunks WHERE id = ?', [itemId]);
-          }
-          if (item) items.push(item);
-        }
-
-        return { ...tuple, items };
-      }));
-
-      return tuplesWithItems;
-    } catch (error) {
-      console.error('Error getting all tuples:', error);
-      return [];
-    }
+    return await bwsService.getAllTuples(experimentId);
   });
 
   ipcMain.handle('bws:getJudgments', async (event, { experimentId, raterType = null, raterId = null }) => {
-    try {
-      const dbPath = path.join(app.getPath('userData'), 'collections.db');
-      const db = require('../database/db');
-      await db.initialize(dbPath);
-
-      let query = `
-        SELECT j.*, t.experiment_id
-        FROM bws_judgments j
-        JOIN bws_tuples t ON j.tuple_id = t.id
-        WHERE t.experiment_id = ?
-      `;
-
-      const params = [experimentId];
-
-      if (raterType) {
-        query += ` AND j.rater_type = ?`;
-        params.push(raterType);
-      }
-
-      if (raterId) {
-        query += ` AND j.rater_id = ?`;
-        params.push(raterId);
-      }
-
-      query += ` ORDER BY j.created_at DESC`;
-
-      const judgments = await db.all(query, params);
-      return judgments;
-    } catch (error) {
-      console.error('Error getting judgments:', error);
-      return [];
-    }
+    return await bwsService.getJudgments(experimentId, raterType, raterId);
   });
 
   ipcMain.handle('bws:getTupleWithItems', async (event, { tupleId }) => {
-    try {
-      const dbPath = path.join(app.getPath('userData'), 'collections.db');
-      const db = require('../database/db');
-      await db.initialize(dbPath);
-
-      const tupleWithItems = await db.getBWSTupleWithItems(tupleId);
-      return tupleWithItems;
-    } catch (error) {
-      console.error('Error getting tuple with items:', error);
-      return null;
-    }
+    return await bwsService.getTupleWithItems(tupleId);
   });
 }
 

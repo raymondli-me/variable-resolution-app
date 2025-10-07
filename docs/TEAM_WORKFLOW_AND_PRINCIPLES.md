@@ -59,6 +59,18 @@ The team no longer works in parallel. We now use a sequential "relay race" model
 
 This protocol is the **most critical process** for our team. Its purpose is to transfer the *entire working context* from one agent to the next, ensuring no momentum is lost. Each handoff must be a new document titled `docs/HANDOFF_AGENT_[A/B]_YYYY-MM-DD.md`.
 
+### The Agentic Onboarding Protocol (Automated State Discovery)
+
+**Principle:** Before beginning any task, an agent must first gain a comprehensive, up-to-the-minute understanding of the application's current state. This process is automated.
+
+**Protocol:**
+1.  The first action for any agent starting a new task is to run the **State Discovery script**: `npm run test:discover`.
+2.  This script uses Playwright to launch the application and systematically navigate through all major views, menus, and modals.
+3.  It captures screenshots of each state and saves them to the `test-results/` directory.
+4.  It simultaneously records all console output (logs, warnings, errors) into `test-results/console-log.txt`.
+5.  The agent will then use the `read_many_files` tool on the `test-results/` directory to get a complete visual and functional snapshot of the application before proceeding.
+6.  This script is a living document; as new UI is added, a task will be created to add a corresponding step to the discovery script.
+
 A handoff document **MUST** contain the following sections:
 
 #### 1. Executive Summary of Work Completed

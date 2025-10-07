@@ -7,6 +7,8 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "test:ui": "playwright test",
+    "test:discover": "playwright test tests/ui/discover-state.spec.js",
     "build": "electron-builder",
     "build-linux": "electron-builder --linux",
     "build-mac": "electron-builder --mac",
@@ -21,6 +23,7 @@
   "author": "Variable Resolution Team",
   "license": "MIT",
   "devDependencies": {
+    "@playwright/test": "^1.56.0",
     "electron": "^28.3.3",
     "electron-builder": "^24.9.1"
   },

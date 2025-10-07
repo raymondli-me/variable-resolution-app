@@ -131,9 +131,197 @@ class CollectionsHub {
     }
   }
 
-  handleMenuClick(collectionId) {
-    console.log('Open menu for collection:', collectionId);
-    // TODO: This will be wired up to the context menu in a future task
+  handleMenuClick(collectionId, event) {
+    // Close any existing context menu
+    this.closeContextMenu();
+
+    // Create context menu
+    const menu = document.createElement('div');
+    menu.className = 'collection-context-menu';
+    menu.dataset.collectionId = collectionId;
+
+    // Menu items
+    const menuItems = [
+      { label: 'Rate Collection', action: 'rate', icon: '⭐' },
+      { label: 'BWS Experiment', action: 'bws', icon: '📊' },
+      { label: 'Export', action: 'export', icon: '📤' },
+      { label: 'Duplicate', action: 'duplicate', icon: '📋' },
+      { label: 'Delete', action: 'delete', icon: '🗑️', danger: true }
+    ];
+
+    menuItems.forEach(item => {
+      const menuItem = document.createElement('button');
+      menuItem.className = `context-menu-item${item.danger ? ' danger' : ''}`;
+      menuItem.innerHTML = `<span class="menu-icon">${item.icon}</span><span>${item.label}</span>`;
+      menuItem.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.handleContextMenuAction(item.action, collectionId);
+      });
+      menu.appendChild(menuItem);
+    });
+
+    // Position menu near the button that was clicked
+    document.body.appendChild(menu);
+    const buttonRect = event.target.getBoundingClientRect();
+    menu.style.top = `${buttonRect.bottom + 5}px`;
+    menu.style.left = `${buttonRect.right - menu.offsetWidth}px`;
+
+    // Close menu when clicking outside
+    setTimeout(() => {
+      document.addEventListener('click', this.closeContextMenuHandler, { once: true });
+    }, 0);
+  }
+
+  closeContextMenu() {
+    const existingMenu = document.querySelector('.collection-context-menu');
+    if (existingMenu) {
+      existingMenu.remove();
+    }
+  }
+
+  closeContextMenuHandler = () => {
+    this.closeContextMenu();
+  }
+
+  async handleContextMenuAction(action, collectionId) {
+    this.closeContextMenu();
+
+    switch (action) {
+      case 'rate':
+        await this.showCreateRatingProjectModal(collectionId);
+        break;
+      case 'bws':
+        await this.showCreateBwsModal(collectionId);
+        break;
+      case 'export':
+        console.log('Export collection:', collectionId);
+        // TODO: Implement export functionality
+        break;
+      case 'duplicate':
+        console.log('Duplicate collection:', collectionId);
+        // TODO: Implement duplicate functionality
+        break;
+      case 'delete':
+        console.log('Delete collection:', collectionId);
+        // TODO: Implement delete functionality
+        break;
+    }
+  }
+
+  async showCreateRatingProjectModal(collectionId) {
+    try {
+      // Get modal element
+      const modal = document.getElementById('create-project-modal');
+      if (!modal) {
+        console.error('Rating project modal not found');
+        return;
+      }
+
+      // Populate collection dropdown
+      const select = document.getElementById('ai-collection-select');
+      if (!select) {
+        console.error('Collection selector not found');
+        return;
+      }
+
+      // Load all collections
+      const collections = await window.api.database.getCollections(1000, 0);
+      select.innerHTML = '<option value="">Choose a collection...</option>';
+
+      collections.forEach(collection => {
+        const option = document.createElement('option');
+        option.value = collection.id;
+        option.textContent = `${collection.search_term} (${collection.video_count || 0} videos)`;
+        select.appendChild(option);
+      });
+
+      // Pre-select the collection
+      select.value = collectionId;
+
+      // Trigger change event to update item counts
+      const event = new Event('change', { bubbles: true });
+      select.dispatchEvent(event);
+
+      // Show the modal
+      modal.style.display = 'flex';
+
+      // Setup close button handler if not already set
+      const closeBtn = document.getElementById('close-create-modal');
+      if (closeBtn && !closeBtn.hasAttribute('data-listener-attached')) {
+        closeBtn.addEventListener('click', () => {
+          modal.style.display = 'none';
+        });
+        closeBtn.setAttribute('data-listener-attached', 'true');
+      }
+
+      // Close modal on background click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.style.display = 'none';
+        }
+      });
+
+    } catch (error) {
+      console.error('Error showing rating project modal:', error);
+    }
+  }
+
+  async showCreateBwsModal(collectionId) {
+    try {
+      // Get modal element
+      const modal = document.getElementById('create-bws-modal');
+      if (!modal) {
+        console.error('BWS modal not found');
+        return;
+      }
+
+      // Populate collection dropdown
+      const select = document.getElementById('bws-collection-select');
+      if (!select) {
+        console.error('BWS collection selector not found');
+        return;
+      }
+
+      // Load all collections
+      const collections = await window.api.database.getCollections(1000, 0);
+      select.innerHTML = '<option value="">Choose a collection...</option>';
+
+      collections.forEach(collection => {
+        const option = document.createElement('option');
+        option.value = collection.id;
+        option.textContent = `${collection.search_term} (${collection.video_count || 0} videos)`;
+        select.appendChild(option);
+      });
+
+      // Set source type to 'collection' and show collection section
+      const collectionRadio = document.querySelector('input[name="bws-source-type"][value="collection"]');
+      if (collectionRadio) {
+        collectionRadio.checked = true;
+        // Trigger change to show collection section
+        const event = new Event('change', { bubbles: true });
+        collectionRadio.dispatchEvent(event);
+      }
+
+      // Pre-select the collection
+      select.value = collectionId;
+
+      // Trigger change event to update item counts
+      const changeEvent = new Event('change', { bubbles: true });
+      select.dispatchEvent(changeEvent);
+
+      // Show the modal
+      modal.style.display = 'flex';
+
+      // Close modal on background click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.style.display = 'none';
+        }
+      });
+
+    } catch (error) {
+      console.error('Error showing BWS modal:', error);
+    }
   }
 
   render() {
@@ -199,7 +387,7 @@ class CollectionsHub {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const collectionId = btn.dataset.id;
-        this.handleMenuClick(collectionId);
+        this.handleMenuClick(collectionId, e);
       });
     });
   }

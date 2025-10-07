@@ -258,13 +258,13 @@ function registerCollectionHandlers(getDatabase) {
       for (const video of videos) {
         await db.run(`
           INSERT INTO videos (
-            collection_id, video_id, title, channel_title, view_count, like_count,
-            comment_count, publish_date, duration, thumbnail_url, video_file_path
+            collection_id, id, title, channel_title, view_count, like_count,
+            comment_count, published_at, duration, thumbnails, local_path
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
-          newCollectionId, video.video_id, video.title, video.channel_title,
-          video.view_count, video.like_count, video.comment_count, video.publish_date,
-          video.duration, video.thumbnail_url, video.video_file_path
+          newCollectionId, video.id, video.title, video.channel_title,
+          video.view_count, video.like_count, video.comment_count, video.published_at,
+          video.duration, video.thumbnails, video.local_path
         ]);
       }
 
@@ -345,17 +345,17 @@ function registerCollectionHandlers(getDatabase) {
       for (const video of sampledVideos) {
         await db.run(`
           INSERT INTO videos (
-            collection_id, video_id, title, channel_title, view_count, like_count,
-            comment_count, publish_date, duration, thumbnail_url, video_file_path
+            collection_id, id, title, channel_title, view_count, like_count,
+            comment_count, published_at, duration, thumbnails, local_path
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
-          newCollectionId, video.video_id, video.title, video.channel_title,
-          video.view_count, video.like_count, video.comment_count, video.publish_date,
-          video.duration, video.thumbnail_url, video.video_file_path
+          newCollectionId, video.id, video.title, video.channel_title,
+          video.view_count, video.like_count, video.comment_count, video.published_at,
+          video.duration, video.thumbnails, video.local_path
         ]);
 
         // Copy comments for this video
-        const comments = await db.all('SELECT * FROM comments WHERE collection_id = ? AND video_id = ?', [params.sourceId, video.video_id]);
+        const comments = await db.all('SELECT * FROM comments WHERE collection_id = ? AND video_id = ?', [params.sourceId, video.id]);
         for (const comment of comments) {
           await db.run(`
             INSERT INTO comments (
@@ -463,17 +463,17 @@ function registerCollectionHandlers(getDatabase) {
       for (const video of filteredVideos) {
         await db.run(`
           INSERT INTO videos (
-            collection_id, video_id, title, channel_title, view_count, like_count,
-            comment_count, publish_date, duration, thumbnail_url, video_file_path
+            collection_id, id, title, channel_title, view_count, like_count,
+            comment_count, published_at, duration, thumbnails, local_path
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
-          newCollectionId, video.video_id, video.title, video.channel_title,
-          video.view_count, video.like_count, video.comment_count, video.publish_date,
-          video.duration, video.thumbnail_url, video.video_file_path
+          newCollectionId, video.id, video.title, video.channel_title,
+          video.view_count, video.like_count, video.comment_count, video.published_at,
+          video.duration, video.thumbnails, video.local_path
         ]);
 
         // Copy comments for this video
-        const comments = await db.all('SELECT * FROM comments WHERE collection_id = ? AND video_id = ?', [params.sourceId, video.video_id]);
+        const comments = await db.all('SELECT * FROM comments WHERE collection_id = ? AND video_id = ?', [params.sourceId, video.id]);
         for (const comment of comments) {
           await db.run(`
             INSERT INTO comments (

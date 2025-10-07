@@ -25,7 +25,8 @@ contextBridge.exposeInMainWorld('api', {
     importFromJSON: (filePath, options) => ipcRenderer.invoke('collections:import', filePath, options),
     duplicate: (params) => ipcRenderer.invoke('collections:duplicate', params),
     subsample: (params) => ipcRenderer.invoke('collections:subsample', params),
-    filter: (params) => ipcRenderer.invoke('collections:filter', params)
+    filter: (params) => ipcRenderer.invoke('collections:filter', params),
+    delete: (collectionId) => ipcRenderer.invoke('collections:delete', collectionId)
   },
 
   // Folder operations

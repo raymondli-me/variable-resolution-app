@@ -446,8 +446,18 @@ function registerCollectionHandlers(getDatabase) {
         return { success: false, error: 'No videos match the filter criteria' };
       }
 
-      // Create new collection
-      const newCollectionId = await db.createCollection(params.newName, sourceCollection.settings || {});
+      // Create new collection with lineage tracking
+      const derivationInfo = {
+        method: 'filter',
+        parameters: params.filters
+      };
+      const newCollectionId = await db.createCollection(
+        params.newName,
+        sourceCollection.settings || {},
+        null, // report
+        params.sourceId, // parentCollectionId
+        derivationInfo
+      );
 
       // Copy filtered videos
       for (const video of filteredVideos) {
@@ -487,6 +497,49 @@ function registerCollectionHandlers(getDatabase) {
       return { success: true, collectionId: newCollectionId, matchCount: filteredVideos.length };
     } catch (error) {
       console.error('[IPC] Error filtering collection:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Delete collection
+  ipcMain.handle('collections:delete', async (event, collectionId) => {
+    try {
+      const db = await getDatabase();
+
+      // Check if collection exists
+      const collection = await db.getCollection(collectionId);
+      if (!collection) {
+        return { success: false, error: 'Collection not found' };
+      }
+
+      // Delete all related data
+      // 1. Delete videos
+      await db.run('DELETE FROM videos WHERE collection_id = ?', [collectionId]);
+
+      // 2. Delete comments
+      await db.run('DELETE FROM comments WHERE collection_id = ?', [collectionId]);
+
+      // 3. Delete video chunks (if exists)
+      await db.run('DELETE FROM video_chunks WHERE collection_id = ?', [collectionId]).catch(() => {});
+
+      // 4. Delete AI ratings (if exists)
+      await db.run('DELETE FROM ai_ratings WHERE collection_id = ?', [collectionId]).catch(() => {});
+
+      // 5. Delete BWS tuples and judgments (if exists)
+      await db.run('DELETE FROM bws_judgments WHERE experiment_id IN (SELECT id FROM bws_experiments WHERE collection_id = ?)', [collectionId]).catch(() => {});
+      await db.run('DELETE FROM bws_tuples WHERE experiment_id IN (SELECT id FROM bws_experiments WHERE collection_id = ?)', [collectionId]).catch(() => {});
+      await db.run('DELETE FROM bws_experiments WHERE collection_id = ?', [collectionId]).catch(() => {});
+
+      // 6. Delete PDFs and excerpts (if exists)
+      await db.run('DELETE FROM pdf_excerpts WHERE pdf_id IN (SELECT id FROM pdfs WHERE collection_id = ?)', [collectionId]).catch(() => {});
+      await db.run('DELETE FROM pdfs WHERE collection_id = ?', [collectionId]).catch(() => {});
+
+      // 7. Finally, delete the collection itself
+      await db.run('DELETE FROM collections WHERE id = ?', [collectionId]);
+
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC] Error deleting collection:', error);
       return { success: false, error: error.message };
     }
   });

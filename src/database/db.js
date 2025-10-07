@@ -250,11 +250,21 @@ class Database {
   }
 
   // Collection methods
-  async createCollection(searchTerm, settings, report = null) {
+  async createCollection(searchTerm, settings, report = null, parentCollectionId = null, derivationInfo = null) {
     // Include the report in settings if provided
     const fullSettings = report ? { ...settings, collectionReport: report } : settings;
-    const sql = `INSERT INTO collections (search_term, settings) VALUES (?, ?)`;
-    const result = await this.run(sql, [searchTerm, JSON.stringify(fullSettings)]);
+
+    // Build SQL dynamically based on whether lineage info is provided
+    let sql, params;
+    if (parentCollectionId !== null && derivationInfo !== null) {
+      sql = `INSERT INTO collections (search_term, settings, parent_collection_id, derivation_info) VALUES (?, ?, ?, ?)`;
+      params = [searchTerm, JSON.stringify(fullSettings), parentCollectionId, JSON.stringify(derivationInfo)];
+    } else {
+      sql = `INSERT INTO collections (search_term, settings) VALUES (?, ?)`;
+      params = [searchTerm, JSON.stringify(fullSettings)];
+    }
+
+    const result = await this.run(sql, params);
     return result.id;
   }
 

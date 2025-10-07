@@ -209,6 +209,7 @@ Every agent **must** read this section before starting a new work session. When 
 - [ ] No console errors?
 - [ ] Git commit made with clear message?
 - [ ] Handoff report written?
+- [ ] **Ran the full E2E Data Pipeline Test (`npm run test:e2e`) and confirmed all tests pass.**
 
 ### For Principal Architect (Gemini)
 

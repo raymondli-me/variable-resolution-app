@@ -1,0 +1,70 @@
+{
+  "format_version": "2.0",
+  "export_type": "collection",
+  "export_uuid": "test-uuid-12345678",
+  "exported_at": "2025-10-07T00:00:00.000Z",
+  "exported_by": "Variable Resolution App v3.0 - Test Fixture",
+  "collection": {
+    "uuid": "test-collection-uuid-123",
+    "id": 999,
+    "name": "Test YouTube Collection",
+    "search_term": "Test YouTube Collection",
+    "source_type": "youtube",
+    "derivation_method": null,
+    "derivation_params": null,
+    "folder_path": null,
+    "created_at": "2025-10-07T00:00:00.000Z",
+    "archived": false,
+    "starred": false,
+    "video_count": 2,
+    "comment_count": 3,
+    "item_count": 3
+  },
+  "lineage": [],
+  "items": [
+    {
+      "item_type": "comment",
+      "item_id": 1,
+      "text_content": "This is a test comment about AI safety and alignment. It's important to ensure that advanced AI systems are designed with robust safety measures.",
+      "source_metadata": {
+        "video_id": "test-video-123",
+        "video_title": "Introduction to AI Safety",
+        "author_name": "TestUser1",
+        "like_count": 42
+      }
+    },
+    {
+      "item_type": "comment",
+      "item_id": 2,
+      "text_content": "Great video! I learned a lot about the challenges in AI alignment and the importance of value learning.",
+      "source_metadata": {
+        "video_id": "test-video-123",
+        "video_title": "Introduction to AI Safety",
+        "author_name": "TestUser2",
+        "like_count": 15
+      }
+    },
+    {
+      "item_type": "comment",
+      "item_id": 3,
+      "text_content": "The discussion on reward hacking is fascinating. We need to think carefully about how we specify objectives for AI systems.",
+      "source_metadata": {
+        "video_id": "test-video-456",
+        "video_title": "Understanding Reward Hacking",
+        "author_name": "TestUser3",
+        "like_count": 28
+      }
+    }
+  ],
+  "dependencies": {
+    "pdfs": []
+  },
+  "statistics": {
+    "total_items": 3,
+    "video_chunks": 0,
+    "comments": 3,
+    "pdf_excerpts": 0,
+    "unique_videos": 2,
+    "unique_pdfs": 0
+  }
+}

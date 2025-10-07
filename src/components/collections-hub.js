@@ -146,6 +146,8 @@ class CollectionsHub {
       { label: 'BWS Experiment', action: 'bws', icon: '📊' },
       { label: 'Export', action: 'export', icon: '📤' },
       { label: 'Duplicate', action: 'duplicate', icon: '📋' },
+      { label: 'Subsample', action: 'subsample', icon: '🎲' },
+      { label: 'Filter', action: 'filter', icon: '🔍' },
       { label: 'Delete', action: 'delete', icon: '🗑️', danger: true }
     ];
 
@@ -194,16 +196,19 @@ class CollectionsHub {
         await this.showCreateBwsModal(collectionId);
         break;
       case 'export':
-        console.log('Export collection:', collectionId);
-        // TODO: Implement export functionality
+        await this.exportCollection(collectionId);
         break;
       case 'duplicate':
-        console.log('Duplicate collection:', collectionId);
-        // TODO: Implement duplicate functionality
+        await this.duplicateCollection(collectionId);
+        break;
+      case 'subsample':
+        await this.subsampleCollection(collectionId);
+        break;
+      case 'filter':
+        await this.filterCollection(collectionId);
         break;
       case 'delete':
-        console.log('Delete collection:', collectionId);
-        // TODO: Implement delete functionality
+        await this.deleteCollection(collectionId);
         break;
     }
   }
@@ -325,6 +330,14 @@ class CollectionsHub {
   }
 
   render() {
+    // Log collection data to verify lineage tracking
+    console.log('[CollectionsHub] Rendering collections:', this.collections.map(c => ({
+      id: c.id,
+      name: c.search_term,
+      parent_collection_id: c.parent_collection_id,
+      derivation_info: c.derivation_info
+    })));
+
     if (this.collections.length === 0) {
       this.container.innerHTML = `
         <div class="hub-empty-state">
@@ -390,6 +403,446 @@ class CollectionsHub {
         this.handleMenuClick(collectionId, e);
       });
     });
+  }
+
+  async exportCollection(collectionId) {
+    try {
+      // Get collection info for default filename
+      const collection = this.collections.find(c => c.id === parseInt(collectionId));
+      const defaultFilename = collection ? `${collection.search_term}.json` : `collection-${collectionId}.json`;
+
+      // Show save file dialog
+      const result = await window.api.dialog.saveFile({
+        title: 'Export Collection',
+        defaultPath: defaultFilename,
+        filters: [{ name: 'JSON Files', extensions: ['json'] }]
+      });
+
+      if (!result || result.canceled || !result.filePath) {
+        return; // User canceled
+      }
+
+      // Export to the selected path
+      const exportResult = await window.api.collections.exportToJSON(collectionId, result.filePath);
+
+      if (exportResult.success) {
+        this.showSuccess(`Collection exported successfully! ${exportResult.data.itemCount} items exported.`);
+      } else {
+        this.showError(`Export failed: ${exportResult.error}`);
+      }
+    } catch (error) {
+      console.error('Error exporting collection:', error);
+      this.showError(`Error exporting collection: ${error.message}`);
+    }
+  }
+
+  async duplicateCollection(collectionId) {
+    try {
+      // Get collection info for default name
+      const collection = this.collections.find(c => c.id === parseInt(collectionId));
+      const defaultName = collection ? `Copy of ${collection.search_term}` : 'Untitled Collection';
+
+      // Show input dialog for new collection name
+      const newName = await this.showInputDialog('Name of new collection:', defaultName);
+      if (!newName) return; // User canceled
+
+      // Call duplicate API
+      const result = await window.api.collections.duplicate({
+        sourceId: collectionId,
+        newName: newName,
+        includeComments: true
+      });
+
+      if (result.success) {
+        this.showSuccess('Collection duplicated successfully!');
+        // Refresh the collections list
+        await this.loadCollections();
+        this.render();
+      } else {
+        this.showError(`Duplication failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error duplicating collection:', error);
+      this.showError(`Error duplicating collection: ${error.message}`);
+    }
+  }
+
+  async deleteCollection(collectionId) {
+    try {
+      // Get collection info for confirmation message
+      const collection = this.collections.find(c => c.id === parseInt(collectionId));
+      const collectionName = collection ? collection.search_term : `Collection #${collectionId}`;
+
+      // Show confirmation dialog
+      const confirmed = confirm(`Are you sure you want to delete "${collectionName}"? This cannot be undone.`);
+      if (!confirmed) return;
+
+      // Call delete API
+      const result = await window.api.collections.delete(collectionId);
+
+      if (result.success) {
+        this.showSuccess('Collection deleted successfully!');
+        // Refresh the collections list
+        await this.loadCollections();
+        this.render();
+      } else {
+        this.showError(`Delete failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error deleting collection:', error);
+      this.showError(`Error deleting collection: ${error.message}`);
+    }
+  }
+
+  async subsampleCollection(collectionId) {
+    try {
+      // Get collection info
+      const collection = this.collections.find(c => c.id === parseInt(collectionId));
+      const collectionName = collection ? collection.search_term : `Collection #${collectionId}`;
+      const videoCount = collection ? collection.video_count : 0;
+
+      // Show modal to gather subsample parameters
+      const params = await this.showSubsampleModal(collectionName, videoCount);
+      if (!params) return; // User canceled
+
+      // Call subsample API
+      const result = await window.api.collections.subsample({
+        sourceId: collectionId,
+        newName: params.newName,
+        sampleSize: params.sampleSize,
+        withReplacement: params.withReplacement
+      });
+
+      if (result.success) {
+        this.showSuccess(`Subsample collection created successfully! ${params.sampleSize} videos sampled.`);
+        // Refresh the collections list
+        await this.loadCollections();
+        this.render();
+      } else {
+        this.showError(`Subsample failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error creating subsample:', error);
+      this.showError(`Error creating subsample: ${error.message}`);
+    }
+  }
+
+  async filterCollection(collectionId) {
+    try {
+      // Get collection info
+      const collection = this.collections.find(c => c.id === parseInt(collectionId));
+      const collectionName = collection ? collection.search_term : `Collection #${collectionId}`;
+
+      // Show modal to gather filter parameters
+      const params = await this.showFilterModal(collectionName);
+      if (!params) return; // User canceled
+
+      // Call filter API
+      const result = await window.api.collections.filter({
+        sourceId: collectionId,
+        newName: params.newName,
+        filters: params.filters
+      });
+
+      if (result.success) {
+        this.showSuccess(`Filtered collection created successfully! ${result.matchCount} videos matched.`);
+        // Refresh the collections list
+        await this.loadCollections();
+        this.render();
+      } else {
+        this.showError(`Filter failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error filtering collection:', error);
+      this.showError(`Error filtering collection: ${error.message}`);
+    }
+  }
+
+  showInputDialog(title, defaultValue = '') {
+    return new Promise((resolve) => {
+      // Create modal
+      const modal = document.createElement('div');
+      modal.className = 'modal-overlay';
+      modal.style.display = 'flex';
+      modal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px;">
+          <div class="modal-header">
+            <h3>${this.escapeHtml(title)}</h3>
+            <button class="close-btn">&times;</button>
+          </div>
+          <div class="modal-body">
+            <input type="text" class="input-field" value="${this.escapeHtml(defaultValue)}" style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
+          </div>
+          <div class="modal-footer" style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;">
+            <button class="btn btn-cancel">Cancel</button>
+            <button class="btn btn-primary">OK</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+      const input = modal.querySelector('.input-field');
+      input.focus();
+      input.select();
+
+      const cleanup = () => modal.remove();
+
+      // Close button
+      modal.querySelector('.close-btn').onclick = () => {
+        cleanup();
+        resolve(null);
+      };
+
+      // Cancel button
+      modal.querySelector('.btn-cancel').onclick = () => {
+        cleanup();
+        resolve(null);
+      };
+
+      // OK button
+      modal.querySelector('.btn-primary').onclick = () => {
+        const value = input.value.trim();
+        cleanup();
+        resolve(value || null);
+      };
+
+      // Enter key
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const value = input.value.trim();
+          cleanup();
+          resolve(value || null);
+        } else if (e.key === 'Escape') {
+          cleanup();
+          resolve(null);
+        }
+      });
+
+      // Click outside to cancel
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          cleanup();
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  showSubsampleModal(sourceName, videoCount) {
+    return new Promise((resolve) => {
+      const modal = document.createElement('div');
+      modal.className = 'modal-overlay';
+      modal.style.display = 'flex';
+      modal.innerHTML = `
+        <div class="modal-content" style="max-width: 500px;">
+          <div class="modal-header">
+            <h3>Subsample Collection</h3>
+            <button class="close-btn">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p style="margin-bottom: 16px; color: #9ca3af;">
+              Creating a random subsample from <strong>${this.escapeHtml(sourceName)}</strong> (${videoCount} videos)
+            </p>
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; margin-bottom: 4px; color: #d1d5db;">Sample Size</label>
+              <input type="number" id="subsample-size" min="1" max="${videoCount}" value="${Math.min(10, videoCount)}"
+                style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
+            </div>
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; margin-bottom: 4px; color: #d1d5db;">New Collection Name</label>
+              <input type="text" id="subsample-name" value="Subsample of ${this.escapeHtml(sourceName)}"
+                style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
+            </div>
+            <div style="margin-bottom: 12px;">
+              <label style="display: flex; align-items: center; color: #d1d5db; cursor: pointer;">
+                <input type="checkbox" id="subsample-replacement" style="margin-right: 8px;">
+                Sample with replacement (allow duplicates)
+              </label>
+            </div>
+          </div>
+          <div class="modal-footer" style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;">
+            <button class="btn btn-cancel">Cancel</button>
+            <button class="btn btn-primary">Create Subsample</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+      const sizeInput = modal.querySelector('#subsample-size');
+      const nameInput = modal.querySelector('#subsample-name');
+      const replacementCheckbox = modal.querySelector('#subsample-replacement');
+
+      sizeInput.focus();
+      sizeInput.select();
+
+      const cleanup = () => modal.remove();
+
+      const submit = () => {
+        const sampleSize = parseInt(sizeInput.value);
+        const newName = nameInput.value.trim();
+        const withReplacement = replacementCheckbox.checked;
+
+        if (!newName || sampleSize <= 0) {
+          alert('Please provide a valid collection name and sample size');
+          return;
+        }
+
+        cleanup();
+        resolve({ sampleSize, newName, withReplacement });
+      };
+
+      // Close button
+      modal.querySelector('.close-btn').onclick = () => {
+        cleanup();
+        resolve(null);
+      };
+
+      // Cancel button
+      modal.querySelector('.btn-cancel').onclick = () => {
+        cleanup();
+        resolve(null);
+      };
+
+      // OK button
+      modal.querySelector('.btn-primary').onclick = submit;
+
+      // Click outside to cancel
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          cleanup();
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  showFilterModal(sourceName) {
+    return new Promise((resolve) => {
+      const modal = document.createElement('div');
+      modal.className = 'modal-overlay';
+      modal.style.display = 'flex';
+      modal.innerHTML = `
+        <div class="modal-content" style="max-width: 500px;">
+          <div class="modal-header">
+            <h3>Filter Collection</h3>
+            <button class="close-btn">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p style="margin-bottom: 16px; color: #9ca3af;">
+              Creating a filtered collection from <strong>${this.escapeHtml(sourceName)}</strong>
+            </p>
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; margin-bottom: 4px; color: #d1d5db;">New Collection Name</label>
+              <input type="text" id="filter-name" value="Filtered ${this.escapeHtml(sourceName)}"
+                style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
+            </div>
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; margin-bottom: 4px; color: #d1d5db;">Minimum Views</label>
+              <input type="number" id="filter-min-views" min="0" value="0"
+                style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
+            </div>
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; margin-bottom: 4px; color: #d1d5db;">Minimum Comments</label>
+              <input type="number" id="filter-min-comments" min="0" value="0"
+                style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
+            </div>
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; margin-bottom: 4px; color: #d1d5db;">Title Keyword (optional)</label>
+              <input type="text" id="filter-keyword" placeholder="Search in title..."
+                style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
+            </div>
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; margin-bottom: 4px; color: #d1d5db;">Date Range</label>
+              <select id="filter-date-range"
+                style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
+                <option value="all">All time</option>
+                <option value="today">Today</option>
+                <option value="week">Past week</option>
+                <option value="month">Past month</option>
+                <option value="year">Past year</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-footer" style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;">
+            <button class="btn btn-cancel">Cancel</button>
+            <button class="btn btn-primary">Create Filtered Collection</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+      const nameInput = modal.querySelector('#filter-name');
+      const minViewsInput = modal.querySelector('#filter-min-views');
+      const minCommentsInput = modal.querySelector('#filter-min-comments');
+      const keywordInput = modal.querySelector('#filter-keyword');
+      const dateRangeSelect = modal.querySelector('#filter-date-range');
+
+      nameInput.focus();
+      nameInput.select();
+
+      const cleanup = () => modal.remove();
+
+      const submit = () => {
+        const newName = nameInput.value.trim();
+        const minViews = parseInt(minViewsInput.value) || 0;
+        const minComments = parseInt(minCommentsInput.value) || 0;
+        const titleKeyword = keywordInput.value.trim();
+        const dateRange = dateRangeSelect.value;
+
+        if (!newName) {
+          alert('Please provide a collection name');
+          return;
+        }
+
+        cleanup();
+        resolve({
+          newName,
+          filters: {
+            minViews,
+            minComments,
+            titleKeyword,
+            dateRange
+          }
+        });
+      };
+
+      // Close button
+      modal.querySelector('.close-btn').onclick = () => {
+        cleanup();
+        resolve(null);
+      };
+
+      // Cancel button
+      modal.querySelector('.btn-cancel').onclick = () => {
+        cleanup();
+        resolve(null);
+      };
+
+      // OK button
+      modal.querySelector('.btn-primary').onclick = submit;
+
+      // Click outside to cancel
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          cleanup();
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  showSuccess(message) {
+    console.log('✓', message);
+    if (window.toastNotification) {
+      window.toastNotification.success(message);
+    }
+  }
+
+  showError(message) {
+    console.error('✗', message);
+    if (window.toastNotification) {
+      window.toastNotification.error(message);
+    }
   }
 
   escapeHtml(text) {

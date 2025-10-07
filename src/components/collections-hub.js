@@ -27,6 +27,8 @@ class CollectionsHub {
       const result = await window.api.collections.list();
       if (result.success) {
         this.collections = result.data;
+        // Load enrichments for each collection
+        await this.loadEnrichments();
       } else {
         console.error('Failed to load collections:', result.error);
         this.collections = [];
@@ -34,6 +36,30 @@ class CollectionsHub {
     } catch (error) {
       console.error('Error loading collections:', error);
       this.collections = [];
+    }
+  }
+
+  async loadEnrichments() {
+    // Load enrichments (rating projects and BWS experiments) for all collections
+    for (const collection of this.collections) {
+      try {
+        // Get rating projects for this collection
+        const ratingProjects = await window.api.database.query(
+          'SELECT * FROM rating_projects WHERE collection_id = ? ORDER BY created_at DESC',
+          [collection.id]
+        );
+
+        collection.enrichments = {
+          rating_projects: ratingProjects || [],
+          bws_experiments: [] // BWS experiments to be added when available
+        };
+      } catch (error) {
+        console.error(`Error loading enrichments for collection ${collection.id}:`, error);
+        collection.enrichments = {
+          rating_projects: [],
+          bws_experiments: []
+        };
+      }
     }
   }
 
@@ -362,8 +388,8 @@ class CollectionsHub {
           </div>
           <div class="card-date">Created ${this.formatDate(collection.created_at)}</div>
         </div>
-        <div class="card-enrichments">
-          <span>Enrichments: 0</span>
+        <div class="card-enrichments" data-action="toggle-enrichments" data-id="${collection.id}">
+          ${this.renderEnrichmentsSummary(collection)}
         </div>
         <div class="card-footer">
           <button class="card-view-btn" data-action="view" data-id="${collection.id}">View</button>
@@ -385,6 +411,30 @@ class CollectionsHub {
     this.attachEventListeners();
   }
 
+  renderEnrichmentsSummary(collection) {
+    const enrichments = collection.enrichments || { rating_projects: [], bws_experiments: [] };
+    const totalCount = enrichments.rating_projects.length + enrichments.bws_experiments.length;
+
+    if (totalCount === 0) {
+      return '<span style="color: #718096;">No enrichments</span>';
+    }
+
+    const parts = [];
+    if (enrichments.rating_projects.length > 0) {
+      parts.push(`${enrichments.rating_projects.length} Rating ${enrichments.rating_projects.length === 1 ? 'Project' : 'Projects'}`);
+    }
+    if (enrichments.bws_experiments.length > 0) {
+      parts.push(`${enrichments.bws_experiments.length} BWS ${enrichments.bws_experiments.length === 1 ? 'Experiment' : 'Experiments'}`);
+    }
+
+    return `
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <span>${parts.join(' • ')}</span>
+        <span style="font-size: 1.2em; margin-left: 8px;">▸</span>
+      </div>
+    `;
+  }
+
   attachEventListeners() {
     // View button clicks
     this.container.querySelectorAll('[data-action="view"]').forEach(btn => {
@@ -403,6 +453,80 @@ class CollectionsHub {
         this.handleMenuClick(collectionId, e);
       });
     });
+
+    // Enrichments toggle clicks
+    this.container.querySelectorAll('[data-action="toggle-enrichments"]').forEach(elem => {
+      elem.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const collectionId = elem.dataset.id;
+        this.toggleEnrichments(collectionId, elem);
+      });
+    });
+  }
+
+  toggleEnrichments(collectionId, element) {
+    const collection = this.collections.find(c => c.id === parseInt(collectionId));
+    if (!collection || !collection.enrichments) return;
+
+    // Check if already expanded
+    const card = element.closest('.collection-card');
+    const existingDetails = card.querySelector('.enrichment-details');
+
+    if (existingDetails) {
+      // Collapse
+      existingDetails.remove();
+      element.querySelector('span:last-child').textContent = '▸';
+    } else {
+      // Expand
+      const enrichments = collection.enrichments;
+      const detailsHtml = this.renderEnrichmentsDetails(enrichments);
+
+      const detailsDiv = document.createElement('div');
+      detailsDiv.className = 'enrichment-details';
+      detailsDiv.innerHTML = detailsHtml;
+
+      element.after(detailsDiv);
+      element.querySelector('span:last-child').textContent = '▾';
+    }
+  }
+
+  renderEnrichmentsDetails(enrichments) {
+    const items = [];
+
+    enrichments.rating_projects.forEach(project => {
+      const status = project.status || 'pending';
+      const progress = project.total_items > 0
+        ? Math.round((project.rated_items / project.total_items) * 100)
+        : 0;
+
+      items.push(`
+        <div style="padding: 8px 12px; background: #374151; border-radius: 6px; margin-bottom: 6px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <span style="font-weight: 600; color: #e2e8f0;">⭐ ${this.escapeHtml(project.project_name)}</span>
+            <span style="font-size: 0.75em; padding: 2px 8px; background: #4a5568; border-radius: 4px; color: #cbd5e0;">${status}</span>
+          </div>
+          <div style="font-size: 0.875em; color: #a0aec0;">
+            Progress: ${project.rated_items}/${project.total_items} (${progress}%)
+          </div>
+        </div>
+      `);
+    });
+
+    enrichments.bws_experiments.forEach(experiment => {
+      items.push(`
+        <div style="padding: 8px 12px; background: #374151; border-radius: 6px; margin-bottom: 6px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 600; color: #e2e8f0;">📊 ${this.escapeHtml(experiment.name)}</span>
+          </div>
+        </div>
+      `);
+    });
+
+    if (items.length === 0) {
+      return '<div style="padding: 12px; text-align: center; color: #718096;">No enrichments</div>';
+    }
+
+    return `<div style="padding: 12px;">${items.join('')}</div>`;
   }
 
   async exportCollection(collectionId) {

@@ -136,6 +136,31 @@
   font-size: 0.8125rem;
   color: #a0aec0;
   font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.card-enrichments:hover {
+  background: #252f3f;
+}
+
+/* Enrichment Details (expanded state) */
+.enrichment-details {
+  background: #1a202c;
+  border-top: 1px solid #2d3748;
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+  }
+  to {
+    opacity: 1;
+    max-height: 500px;
+  }
 }
 
 /* Card Footer */

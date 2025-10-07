@@ -21,15 +21,15 @@ Our team operates as a disciplined, sequential relay team. This model prioritize
 
 | Role | Agent | Primary Responsibility |
 |------|-------|------------------------|
-| **Project Lead & Tester** | Raymond (Human) | Sets direction, defines the "why," makes final strategic decisions, and performs all UI-based testing. |
+| **Project Lead & Approver** | Raymond (Human) | Sets direction, defines the "why," makes final strategic decisions, and provides final approval on visual tests. |
 | **Consultant & Archivist** | Claude OR Gemini* | Analyzes codebase, proposes solutions, creates initial tasks, and documents all work for the team. |
-| **Implementation Agent A** | Claude or Gemini | Generalist agent responsible for executing a block of work and handing off to Agent B. |
-| **Implementation Agent B** | Claude or Gemini | Generalist agent responsible for continuing the work from Agent A and handing it back. |
-| **External Architect** | Principal Architect (Gemini) | Provides high-level oversight, ensures long-term architectural integrity, validates direction. |
+| **Implementation Agent A/B** | Claude or Gemini | Generalist agents who execute development tasks in a sequential relay. |
+| **QA & Testing Agent** | Claude or Gemini | Writes and runs automated functional (API) and visual (UI) tests to ensure application quality and stability. |
+| **External Architect** | Principal Architect (Gemini) | Provides high-level oversight and validates long-term architectural integrity. |
 
-**\*Note on Interchangeability:** The Consultant and Implementation Agent roles can be played by either Claude or Gemini.
+**\*Note on Interchangeability:** The Consultant and Agent roles can be played by either Claude or Gemini.
 
-**Success Formula:** A single, continuous stream of work + Extremely detailed handoffs between agents = A tightly integrated and robust application.
+**Success Formula:** A single, continuous stream of work + Detailed handoffs + Automated agent-driven testing = A tightly integrated and robust application.
 
 ---
 
@@ -45,7 +45,15 @@ The team no longer works in parallel. We now use a sequential "relay race" model
 4.  **Agent B - Execution:** Agent B reads the handoff, continues the work, and integrates the next set of features or fixes.
 5.  **Agent B - Handoff:** Agent B creates its own handoff document for Agent A.
 6.  **Cycle Repeats:** The `A -> B -> A -> B` cycle continues until the feature is complete.
-7.  **Testing (Human-Led):** Once a feature is declared complete by the agents, the Consultant prepares a test plan for the Project Lead (Raymond) to execute.
+### Phase 3: Integration & Testing (Agent-Driven)
+
+1.  **Code Review (Consultant):** The Consultant reviews the submitted code from the implementation agent.
+2.  **Test Plan Creation (Consultant):** The Consultant creates a test plan in plain English, outlining the user stories and functionality to be verified.
+3.  **Test Implementation (Testing Agent):** The **Testing Agent** receives the plan and writes the necessary automated tests (e.g., Jest for the API core, Playwright for visual UI tests).
+4.  **Test Execution (Testing Agent):** The Testing Agent runs the full suite of automated tests.
+5.  **Result Analysis (Consultant):** The Consultant reviews the test results, including any visual diffs from the visual regression tests.
+6.  **Final Verification (Project Lead):** The Project Lead (Raymond) gives the final "go/no-go" on any visual changes identified by the Testing Agent.
+7.  **Decision (Consultant):** Based on the results, the Consultant either approves the phase or creates new bug reports for the implementation agents.
 
 ### The Seamless Handoff Protocol
 

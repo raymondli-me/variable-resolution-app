@@ -91,8 +91,44 @@ class CollectionsHub {
   }
 
   handleViewClick(collectionId) {
-    console.log('View collection:', collectionId);
-    // TODO: This will be wired up to the actual viewer in a future task
+    // Find the collection object
+    const collection = this.collections.find(c => c.id === parseInt(collectionId));
+    if (!collection) {
+      console.error('Collection not found:', collectionId);
+      return;
+    }
+
+    // Determine collection genre
+    let isPdf = false;
+    try {
+      if (collection.settings) {
+        const settings = typeof collection.settings === 'string'
+          ? JSON.parse(collection.settings)
+          : collection.settings;
+
+        if (settings.source === 'pdf' || settings.type === 'pdf') {
+          isPdf = true;
+        }
+      }
+    } catch (e) {
+      console.error('Error parsing collection settings:', e);
+    }
+
+    // Route to the appropriate viewer
+    if (isPdf) {
+      if (window.pdfExcerptViewer) {
+        window.pdfExcerptViewer.show(collectionId);
+      } else {
+        console.error('PDF Excerpt Viewer not available');
+      }
+    } else {
+      // Default to YouTube/video collection viewer
+      if (window.collectionViewer) {
+        window.collectionViewer.show(collectionId);
+      } else {
+        console.error('Collection Viewer not available');
+      }
+    }
   }
 
   handleMenuClick(collectionId) {

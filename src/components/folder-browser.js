@@ -402,7 +402,7 @@ class FolderBrowser {
       if (itemType === 'folder') {
         item.style.display = ['rename', 'delete', 'archive', 'color', 'export'].includes(action) ? 'block' : 'none';
       } else if (itemType === 'collection') {
-        item.style.display = ['star', 'archive', 'move', 'export'].includes(action) ? 'block' : 'none';
+        item.style.display = ['star', 'archive', 'move', 'rate', 'export'].includes(action) ? 'block' : 'none';
       }
     });
 
@@ -454,6 +454,12 @@ class FolderBrowser {
         case 'move':
           // TODO: Implement move dialog
           console.log('Move dialog not implemented yet');
+          break;
+        case 'rate':
+          await this.showCreateRatingProjectModal(id);
+          break;
+        case 'bws':
+          await this.showCreateBwsModal(id);
           break;
         case 'export':
           await this.exportCollectionToJSON(id);
@@ -1465,6 +1471,133 @@ class FolderBrowser {
     } catch (error) {
       console.error('[FolderBrowser] Filter failed:', error);
       this.showError('Error filtering collection: ' + error.message);
+    }
+  }
+
+  /**
+   * Show Create Rating Project Modal with collection pre-selected
+   * @param {number} collectionId - ID of collection to rate
+   */
+  async showCreateRatingProjectModal(collectionId) {
+    try {
+      // Get modal element
+      const modal = document.getElementById('create-project-modal');
+      if (!modal) {
+        this.showError('Rating project modal not found');
+        return;
+      }
+
+      // Populate collection dropdown
+      const select = document.getElementById('ai-collection-select');
+      if (!select) {
+        this.showError('Collection selector not found');
+        return;
+      }
+
+      // Load all collections
+      const collections = await window.api.database.getCollections(1000, 0);
+      select.innerHTML = '<option value="">Choose a collection...</option>';
+
+      collections.forEach(collection => {
+        const option = document.createElement('option');
+        option.value = collection.id;
+        option.textContent = `${collection.search_term} (${collection.video_count || 0} videos)`;
+        select.appendChild(option);
+      });
+
+      // Pre-select the collection that was right-clicked
+      select.value = collectionId;
+
+      // Trigger change event to update item counts (if AIAnalysisController is listening)
+      const event = new Event('change', { bubbles: true });
+      select.dispatchEvent(event);
+
+      // Show the modal
+      modal.style.display = 'flex';
+
+      // Setup close button handler if not already set
+      const closeBtn = document.getElementById('close-create-modal');
+      if (closeBtn && !closeBtn.hasAttribute('data-listener-attached')) {
+        closeBtn.addEventListener('click', () => {
+          modal.style.display = 'none';
+        });
+        closeBtn.setAttribute('data-listener-attached', 'true');
+      }
+
+      // Close modal on background click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.style.display = 'none';
+        }
+      });
+
+    } catch (error) {
+      console.error('Error showing rating project modal:', error);
+      this.showError('Error opening rating project modal: ' + error.message);
+    }
+  }
+
+  /**
+   * Show Create BWS Experiment Modal with collection pre-selected
+   * @param {number} collectionId - ID of collection to create BWS experiment from
+   */
+  async showCreateBwsModal(collectionId) {
+    try {
+      // Get modal element
+      const modal = document.getElementById('create-bws-modal');
+      if (!modal) {
+        this.showError('BWS modal not found');
+        return;
+      }
+
+      // Populate collection dropdown
+      const select = document.getElementById('bws-collection-select');
+      if (!select) {
+        this.showError('BWS collection selector not found');
+        return;
+      }
+
+      // Load all collections
+      const collections = await window.api.database.getCollections(1000, 0);
+      select.innerHTML = '<option value="">Choose a collection...</option>';
+
+      collections.forEach(collection => {
+        const option = document.createElement('option');
+        option.value = collection.id;
+        option.textContent = `${collection.search_term} (${collection.video_count || 0} videos)`;
+        select.appendChild(option);
+      });
+
+      // Set source type to 'collection' and show collection section
+      const collectionRadio = document.querySelector('input[name="bws-source-type"][value="collection"]');
+      if (collectionRadio) {
+        collectionRadio.checked = true;
+        // Trigger change to show collection section
+        const event = new Event('change', { bubbles: true });
+        collectionRadio.dispatchEvent(event);
+      }
+
+      // Pre-select the collection that was right-clicked
+      select.value = collectionId;
+
+      // Trigger change event to update item counts (if BWS manager is listening)
+      const changeEvent = new Event('change', { bubbles: true });
+      select.dispatchEvent(changeEvent);
+
+      // Show the modal
+      modal.style.display = 'flex';
+
+      // Note: Close button handlers are set up by bws-manager.js (setupBWSEventListeners)
+      // But we'll add a backup handler for background clicks
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.style.display = 'none';
+        }
+      });
+
+    } catch (error) {
+      console.error('Error showing BWS modal:', error);
+      this.showError('Error opening BWS modal: ' + error.message);
     }
   }
 

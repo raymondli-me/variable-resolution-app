@@ -48,7 +48,7 @@ test.describe('State Discovery Protocol', () => {
     expect(title).toBe('VR Data Collector');
   });
 
-  test('02: Capture 'New Collection' Modal', async () => {
+  test('02: Capture New Collection Modal', async () => {
     await window.click('#new-collection-btn');
     await window.waitForSelector('#source-selection-modal');
     await window.screenshot({ path: path.join(resultsDir, '02-new-collection-modal.png') });

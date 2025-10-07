@@ -772,12 +772,19 @@ function updateBWSStats(experiments) {
   const totalJudgments = experiments.reduce((sum, exp) => sum + (exp.judgments_count || 0), 0);
   const totalCost = experiments.reduce((sum, exp) => sum + (exp.total_cost || 0), 0);
 
-  document.getElementById('totalBWSExperiments').textContent = totalExperiments;
-  document.getElementById('totalJudgments').textContent = totalJudgments;
-  document.getElementById('totalBWSCost').textContent = `$${totalCost.toFixed(2)}`;
+  // Only update if elements exist (they may not be present in Collections Hub)
+  const totalExpEl = document.getElementById('totalBWSExperiments');
+  if (totalExpEl) totalExpEl.textContent = totalExperiments;
+
+  const totalJudgmentsEl = document.getElementById('totalJudgments');
+  if (totalJudgmentsEl) totalJudgmentsEl.textContent = totalJudgments;
+
+  const totalCostEl = document.getElementById('totalBWSCost');
+  if (totalCostEl) totalCostEl.textContent = `$${totalCost.toFixed(2)}`;
 
   // AI-human agreement placeholder (requires implementation)
-  document.getElementById('aiHumanAgreement').textContent = '0%';
+  const agreementEl = document.getElementById('aiHumanAgreement');
+  if (agreementEl) agreementEl.textContent = '0%';
 }
 
 /**

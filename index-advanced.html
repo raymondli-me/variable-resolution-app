@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="src/styles/folder-browser.css">
     <link rel="stylesheet" href="src/styles/pdf-excerpt-viewer.css">
     <link rel="stylesheet" href="src/styles/pdf-renderer.css">
+    <link rel="stylesheet" href="src/styles/collections-hub.css">
   </head>
 <body>
   <div id="app">
@@ -42,35 +43,11 @@
       <!-- Sidebar -->
       <aside class="sidebar">
         <nav class="nav">
-          <button class="nav-item active" data-view="youtube">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-            </svg>
-            YouTube
-          </button>
-          <button class="nav-item" data-view="pdf">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-              <polyline points="10 9 9 9 8 9"></polyline>
-            </svg>
-            PDF Documents
-          </button>
-          <button class="nav-item" data-view="collections">
+          <button class="nav-item active" data-view="collections">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
             </svg>
             Collections
-          </button>
-          <button class="nav-item" data-view="ai-analysis">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-              <line x1="12" y1="22.08" x2="12" y2="12"></line>
-            </svg>
-            AI Analysis
           </button>
           <button class="nav-item" data-view="export">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -86,7 +63,7 @@
       <!-- Content Area -->
       <section class="content">
         <!-- YouTube View -->
-        <div id="youtubeView" class="view active">
+        <div id="youtubeView" class="view">
           <!-- Tab Navigation -->
           <div class="tabs">
             <button class="tab-btn active" data-tab="basic">Basic Search</button>
@@ -709,7 +686,10 @@
         </div>
 
         <!-- Collections View -->
-        <div id="collectionsView" class="view">
+        <div id="collectionsView" class="view active">
+          <!-- Collections Hub Container -->
+          <div id="collections-hub-container"></div>
+
           <!-- Tab Navigation -->
           <div class="tabs">
             <button class="tab-btn active" data-tab="saved">Saved Collections</button>
@@ -754,6 +734,8 @@
               <div class="context-menu-item" data-action="color">Change Color</div>
               <div class="context-menu-item" data-action="star">Star</div>
               <div class="context-menu-item" data-action="move">Move</div>
+              <div class="context-menu-item" data-action="rate">🤖 Rate Collection</div>
+              <div class="context-menu-item" data-action="bws">🔀 BWS Experiment</div>
               <div class="context-menu-item" data-action="export">📤 Export</div>
             </div>
           </div>
@@ -785,1045 +767,6 @@
           </div>
         </div>
 
-        <!-- AI Analysis View -->
-        <div id="ai-analysisView" class="view">
-          <!-- Sub-Tab Navigation -->
-          <div class="tabs">
-            <button class="tab-btn active" data-tab="ratings">📊 Ratings</button>
-            <button class="tab-btn" data-tab="bws">🔀 BWS</button>
-            <button class="tab-btn" data-tab="dashboard">📈 Dashboard</button>
-          </div>
-
-          <!-- Ratings Tab (existing content) -->
-          <div id="ratingsTab" class="tab-content active">
-            <div class="rating-projects-container">
-            <!-- Header with Stats -->
-            <div class="view-header">
-              <h2>🤖 Rating Projects</h2>
-              <div class="header-actions">
-                <button class="btn btn-primary" id="create-project-btn">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                  </svg>
-                  Create New Project
-                </button>
-              </div>
-            </div>
-            
-            <!-- Stats Summary -->
-            <div class="stats-bar">
-              <div class="stat-item">
-                <span class="stat-value" id="totalProjects">0</span>
-                <span class="stat-label">projects</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-value" id="totalRated">0</span>
-                <span class="stat-label">items rated</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-value" id="avgSuccessRate">0%</span>
-                <span class="stat-label">avg success rate</span>
-              </div>
-            </div>
-            
-            <!-- Search/Filter Bar -->
-            <div class="filter-bar">
-              <input type="text" id="project-search" class="search-input" placeholder="Search projects...">
-              <select id="project-filter-status" class="filter-select">
-                <option value="">All Statuses</option>
-                <option value="completed">Completed</option>
-                <option value="partial">Partial</option>
-                <option value="in_progress">In Progress</option>
-              </select>
-            </div>
-            
-            <!-- Projects Gallery -->
-            <div id="rating-projects-gallery" class="projects-gallery">
-              <div class="empty-state">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                  <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-                  <line x1="12" y1="22.08" x2="12" y2="12"></line>
-                </svg>
-                <p>No rating projects yet</p>
-                <button class="btn btn-primary" onclick="document.getElementById('create-project-btn').click()">
-                  Create Your First Project
-                </button>
-              </div>
-            </div>
-            
-            <!-- Create New Rating Project Modal -->
-            <div id="create-project-modal" class="modal" style="display: none;">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h3>Create New Rating Project</h3>
-                  <button class="close-btn" id="close-create-modal">&times;</button>
-                </div>
-                <div class="modal-body">
-                  <!-- Parent Project Info (shown when creating child) -->
-                  <div id="parent-project-info" class="parent-project-notice" style="display:none;">
-                    <div class="notice-box">
-                      <strong>Creating Child Project</strong>
-                      <p>This project will use ratings from: <span id="parent-project-name-display"></span></p>
-                      <p class="small">Items will be filtered based on the criteria below.</p>
-                    </div>
-                  </div>
-
-                  <!-- Collection Selection -->
-                  <div class="form-group">
-                    <label for="ai-collection-select">Select Collection:</label>
-                    <select id="ai-collection-select" class="form-control">
-                      <option value="">Choose a collection...</option>
-                    </select>
-                    <input type="hidden" id="parent-project-id" value="">
-                  </div>
-
-                  <!-- Filter Criteria (shown only for child projects) -->
-                  <div id="filter-criteria-section" style="display:none;">
-                    <div class="form-group">
-                      <label>Filter Parent Project Items:</label>
-                      <div class="filter-controls">
-                        <div class="filter-row">
-                          <label for="filter-min-score">Minimum Score:</label>
-                          <input type="number" id="filter-min-score" class="form-control" value="0.7" min="0" max="1" step="0.1">
-                          <label for="filter-max-score">Maximum Score:</label>
-                          <input type="number" id="filter-max-score" class="form-control" value="1.0" min="0" max="1" step="0.1">
-                        </div>
-                        <div class="filter-row">
-                          <label class="checkbox-label">
-                            <input type="checkbox" id="filter-video-chunks" checked>
-                            <span>Include Video Chunks</span>
-                          </label>
-                          <label class="checkbox-label">
-                            <input type="checkbox" id="filter-comments" checked>
-                            <span>Include Comments</span>
-                          </label>
-                        </div>
-                        <div class="filter-preview">
-                          <small>Estimated items after filtering: <strong id="filtered-items-count">calculating...</strong></small>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="form-group">
-                    <label for="project-name">Project Name:</label>
-                    <input type="text" id="project-name" class="form-control" placeholder="e.g., Mental Health Stigma Analysis">
-                  </div>
-              
-              <div class="form-group">
-                <label for="research-intent">What are you looking for? (Research Intent)</label>
-                <textarea id="research-intent" class="form-control" rows="4" 
-                  placeholder="Describe what content is relevant to your research. Be specific about topics, themes, or patterns you want to identify."></textarea>
-              </div>
-              
-              <div class="form-group">
-                <label>Rating Scale:</label>
-                <div class="radio-group">
-                  <label class="radio-label">
-                    <input type="radio" name="rating-scale" value="binary" checked>
-                    <span>Relevant / Not Relevant</span>
-                  </label>
-                  <label class="radio-label">
-                    <input type="radio" name="rating-scale" value="ternary">
-                    <span>High / Medium / Low Relevance</span>
-                  </label>
-                  <label class="radio-label">
-                    <input type="radio" name="rating-scale" value="five_point">
-                    <span>5-Point Scale (1-5)</span>
-                  </label>
-                </div>
-              </div>
-              
-              <div class="form-group">
-                <label>Content to Rate:</label>
-                <div class="checkbox-group">
-                  <label class="checkbox-label">
-                    <input type="checkbox" id="rate-chunks" checked>
-                    <span>Video Chunks <span class="item-count" id="chunks-count">(0 items)</span></span>
-                  </label>
-                  <label class="checkbox-label">
-                    <input type="checkbox" id="rate-comments" checked>
-                    <span>Comments <span class="item-count" id="comments-count">(0 items)</span></span>
-                  </label>
-                  <label class="checkbox-label">
-                    <input type="checkbox" id="rate-pdfs" checked>
-                    <span>PDF Excerpts <span class="item-count" id="pdfs-count">(0 items)</span></span>
-                  </label>
-                </div>
-              </div>
-
-              <!-- PDF Visual Context Mode -->
-              <div class="form-group" id="pdf-visual-mode-section" style="padding-left: 1.5rem; margin-top: -0.5rem;">
-                <label class="checkbox-label">
-                  <input type="checkbox" id="pdf-visual-mode" checked>
-                  <span>📸 Include PDF Visual Context</span>
-                </label>
-                <small style="display: block; margin-left: 1.7rem; color: #6b7280; margin-top: 0.25rem;">
-                  Send page images with highlighted excerpts to AI (richer context but slower)
-                </small>
-              </div>
-
-              <details class="advanced-options">
-                <summary>⚙️ Rate Limiting & Performance</summary>
-                <div class="advanced-content">
-                  <div class="form-group">
-                    <label for="concurrent-requests">Concurrent Requests:</label>
-                    <input type="number" id="concurrent-requests" class="form-control" value="5" min="1" max="20">
-                    <small>⚠️ How many API calls at once (lower = more stable, 5 recommended)</small>
-                  </div>
-                  
-                  <div class="form-group">
-                    <label for="batch-size">Batch Size:</label>
-                    <input type="number" id="batch-size" class="form-control" value="50" min="10" max="200">
-                    <small>Items processed before progress update (doesn't affect speed)</small>
-                  </div>
-                  
-                  <div class="form-group">
-                    <label for="retry-delay">Retry Delay (seconds):</label>
-                    <input type="number" id="retry-delay" class="form-control" value="2" min="1" max="10" step="0.5">
-                    <small>Wait time between retries (with exponential backoff)</small>
-                  </div>
-                  
-                  <div class="form-group">
-                    <label class="checkbox-label">
-                      <input type="checkbox" id="include-confidence" checked>
-                      <span>Include confidence scores</span>
-                    </label>
-                  </div>
-                </div>
-              </details>
-              
-              <div class="cost-estimate">
-                Estimated: <span id="items-estimate">0 items</span> × ~$0.00015 = <span id="cost-estimate">$0.00</span>
-              </div>
-              
-                  <div class="button-group">
-                    <button class="btn btn-primary" id="start-rating-btn">Start Rating</button>
-                    <button class="btn btn-secondary" id="preview-rating-btn">🔍 Preview First 5</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Rating Progress Section (Inline) -->
-            <div id="rating-progress-section" class="rating-progress-panel" style="display: none;">
-              <div class="progress-panel-header">
-                <h3>⚡ Rating in Progress: <span id="progress-project-name"></span></h3>
-                <button class="close-btn" id="minimize-rating-btn" title="Minimize (rating continues in background)">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                  </svg>
-                </button>
-              </div>
-              
-              <div class="progress-section">
-                <div class="progress-bar-modern">
-                  <div class="progress-fill-modern" id="rating-progress-fill"></div>
-                </div>
-                <div class="progress-stats">
-                  <span id="rating-progress-text" class="progress-stat-main">0 / 0 (0%)</span>
-                  <span id="rating-time-estimate" class="progress-stat-time">Est. remaining: calculating...</span>
-                </div>
-              </div>
-              
-              <div class="rating-stream-container">
-                <h4>Live Updates</h4>
-                <div class="rating-stream" id="rating-stream">
-                  <!-- Live updates will appear here -->
-                </div>
-              </div>
-              
-              <div class="rating-distribution-container">
-                <h4>Distribution</h4>
-                <div id="rating-distribution-bars"></div>
-              </div>
-              
-              <div class="progress-actions">
-                <button class="btn btn-warning btn-sm" id="pause-rating-btn">⏸ Pause</button>
-                <button class="btn btn-danger btn-sm" id="cancel-rating-btn">✕ Cancel</button>
-                <button class="btn btn-secondary btn-sm" id="export-current-btn">💾 Export Current</button>
-              </div>
-              
-              <div class="progress-note">
-                <small>💡 Tip: You can minimize this panel. Rating continues in the background.</small>
-              </div>
-            </div>
-            
-            <!-- Rating Project Viewer (slides in from right) -->
-            <div id="rating-project-viewer" class="rating-viewer" style="display: none;">
-              <div class="rating-viewer-header">
-                <button class="btn btn-secondary btn-sm" id="close-rating-viewer">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M19 12H5M12 19l-7-7 7-7"/>
-                  </svg>
-                  Back to Projects
-                </button>
-                <!-- Lineage Breadcrumbs -->
-                <div id="project-lineage" class="project-lineage" style="display:none;"></div>
-                <h2 id="rating-viewer-title">Project Name</h2>
-                <div class="rating-viewer-actions">
-                  <button class="btn btn-primary btn-sm" id="create-child-project-btn">🌳 Create Child Project</button>
-                  <button class="btn btn-secondary btn-sm" id="export-project-btn">💾 Export</button>
-                  <button class="btn btn-warning btn-sm" id="retry-failed-btn" style="display:none;">🔄 Retry Failed</button>
-                </div>
-              </div>
-              
-              <div class="rating-viewer-stats">
-                <div class="stat-card">
-                  <span class="stat-label">Total Rated</span>
-                  <span class="stat-value" id="viewer-total">0</span>
-                </div>
-                <div class="stat-card">
-                  <span class="stat-label">Success Rate</span>
-                  <span class="stat-value success" id="viewer-success-rate">0%</span>
-                </div>
-                <div class="stat-card">
-                  <span class="stat-label">Avg Score</span>
-                  <span class="stat-value" id="viewer-avg-score">0.00</span>
-                </div>
-                <div class="stat-card">
-                  <span class="stat-label">Failed</span>
-                  <span class="stat-value failed" id="viewer-failed">0</span>
-                </div>
-              </div>
-              
-              <div class="rating-viewer-tabs">
-                <button class="rating-tab active" data-tab="overview">📊 Overview</button>
-                <button class="rating-tab" data-tab="ratings">📋 Ratings</button>
-                <button class="rating-tab" data-tab="failed">❌ Failed</button>
-              </div>
-              
-              <div class="rating-viewer-content">
-                <!-- Overview Tab -->
-                <div class="rating-tab-content active" id="overview-tab">
-                  <div class="overview-section">
-                    <h3>Research Intent</h3>
-                    <div class="research-intent-box" id="viewer-research-intent"></div>
-                  </div>
-                  
-                  <div class="overview-section">
-                    <h3>Score Distribution</h3>
-                    <div class="distribution-chart" id="viewer-distribution">
-                      <!-- Will be populated -->
-                    </div>
-                  </div>
-                  
-                  <div class="overview-section">
-                    <h3>Content Type Breakdown</h3>
-                    <div class="type-breakdown" id="viewer-type-breakdown">
-                      <!-- Will be populated -->
-                    </div>
-                  </div>
-                </div>
-                
-                <!-- Ratings Browser Tab -->
-                <div class="rating-tab-content" id="ratings-tab">
-                  <div class="ratings-filter-bar">
-                    <input type="text" class="search-input" id="ratings-search" placeholder="🔍 Search ratings...">
-                    <select class="filter-select" id="ratings-filter-score">
-                      <option value="all">All Scores</option>
-                      <option value="high">High (>0.7)</option>
-                      <option value="medium">Medium (0.4-0.7)</option>
-                      <option value="low">Low (<0.4)</option>
-                    </select>
-                    <select class="filter-select" id="ratings-filter-type">
-                      <option value="all">All Types</option>
-                      <option value="video_chunk">Video Chunks</option>
-                      <option value="comment">Comments</option>
-                    </select>
-                  </div>
-                  
-                  <div class="ratings-list" id="ratings-list">
-                    <!-- Will be populated with rating cards -->
-                  </div>
-                </div>
-                
-                <!-- Failed Items Tab -->
-                <div class="rating-tab-content" id="failed-tab">
-                  <div class="failed-items-header">
-                    <p>These items failed to be rated. You can retry them individually or all at once.</p>
-                  </div>
-                  <div class="failed-items-list" id="failed-items-list">
-                    <!-- Will be populated with failed items -->
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          </div>
-          <!-- End Ratings Tab -->
-
-          <!-- BWS Tab -->
-          <div id="bwsTab" class="tab-content">
-            <div class="bws-container">
-              <!-- Header with Stats -->
-              <div class="view-header">
-                <div>
-                  <h2>🔀 Best-Worst Scaling Experiments</h2>
-                  <p class="subtitle">Compare items pairwise to generate precise rankings</p>
-                </div>
-                <div class="header-actions">
-                  <button class="btn btn-primary" id="create-bws-btn">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <line x1="12" y1="5" x2="12" y2="19"></line>
-                      <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                    Create BWS Experiment
-                  </button>
-                </div>
-              </div>
-
-              <!-- Stats Summary -->
-              <div class="stats-bar">
-                <div class="stat-item">
-                  <span class="stat-value" id="totalBWSExperiments">0</span>
-                  <span class="stat-label">experiments</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-value" id="totalJudgments">0</span>
-                  <span class="stat-label">judgments</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-value" id="aiHumanAgreement">0%</span>
-                  <span class="stat-label">AI-human agreement</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-value" id="totalBWSCost">$0.00</span>
-                  <span class="stat-label">API cost</span>
-                </div>
-              </div>
-
-              <!-- Search/Filter Bar -->
-              <div class="filter-bar">
-                <input type="text" id="bws-search" class="search-input" placeholder="Search experiments...">
-                <select id="bws-filter-status" class="filter-select">
-                  <option value="">All Statuses</option>
-                  <option value="draft">Draft</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="completed">Completed</option>
-                  <option value="paused">Paused</option>
-                </select>
-              </div>
-
-              <!-- BWS Experiments Gallery -->
-              <div id="bws-experiments-gallery" class="projects-gallery">
-                <div class="empty-state">
-                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                    <polyline points="7.8 2 12 5.4 16.2 2"></polyline>
-                    <polyline points="7.8 22 12 18.6 16.2 22"></polyline>
-                  </svg>
-                  <p>No BWS experiments yet</p>
-                  <p class="hint">First, create rating projects to filter your data, then run BWS experiments for fine-grained rankings</p>
-                  <button class="btn btn-primary" onclick="document.getElementById('create-bws-btn').click()">
-                    Create Your First Experiment
-                  </button>
-                </div>
-              </div>
-
-              <!-- Create BWS Experiment Modal -->
-              <div id="create-bws-modal" class="modal" style="display: none;">
-                <div class="modal-content modal-large">
-                  <div class="modal-header">
-                    <h3>Create BWS Experiment</h3>
-                    <button class="close-btn" id="close-bws-modal">&times;</button>
-                  </div>
-                  <div class="modal-body">
-                    <!-- Step 1: Choose Source Type -->
-                    <div class="form-group">
-                      <label>What do you want to compare?</label>
-                      <div class="radio-group" style="display: flex; gap: 20px; margin-bottom: 10px;">
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                          <input type="radio" name="bws-source-type" value="rating-project" checked>
-                          <span>Items from a Rating Project</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                          <input type="radio" name="bws-source-type" value="collection">
-                          <span>Items from a Collection</span>
-                        </label>
-                      </div>
-                      <small id="bws-source-type-hint">Use rated items filtered by relevance score</small>
-                    </div>
-
-                    <!-- Rating Project Selection -->
-                    <div id="bws-rating-project-section" class="form-group">
-                      <label for="bws-rating-project-select">Select Rating Project:</label>
-                      <select id="bws-rating-project-select" class="form-control">
-                        <option value="">Choose a rating project...</option>
-                      </select>
-                      <small>Select a completed rating project to use as source for BWS comparisons</small>
-                    </div>
-
-                    <!-- Collection Selection -->
-                    <div id="bws-collection-section" class="form-group" style="display: none;">
-                      <label for="bws-collection-select">Select Collection:</label>
-                      <select id="bws-collection-select" class="form-control">
-                        <option value="">Choose a collection...</option>
-                      </select>
-                      <small>Compare items directly from a collection (without needing ratings first)</small>
-                    </div>
-
-                    <!-- Collection Content Type Selection -->
-                    <div id="bws-collection-content-section" style="display: none;">
-                      <div class="form-group">
-                        <label>What to compare:</label>
-                        <div class="checkbox-group">
-                          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px;">
-                            <input type="checkbox" id="bws-include-comments" checked>
-                            <span>Comments</span>
-                          </label>
-                          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px;">
-                            <input type="checkbox" id="bws-include-chunks">
-                            <span>Video Chunks</span>
-                          </label>
-                          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                            <input type="checkbox" id="bws-include-pdfs">
-                            <span>PDF Excerpts</span>
-                          </label>
-                        </div>
-                        <small>Select which types of content to include in the comparison</small>
-                      </div>
-                    </div>
-
-                    <!-- Source Info Display -->
-                    <div id="bws-source-info" class="notice-box" style="display:none;">
-                      <div class="info-row">
-                        <strong>Source:</strong> <span id="bws-selected-source-name"></span>
-                      </div>
-                      <div class="info-row">
-                        <strong>Total Items:</strong> <span id="bws-total-items">0</span>
-                      </div>
-                      <div class="info-row">
-                        <strong>Item Type:</strong> <span id="bws-item-type"></span>
-                      </div>
-                    </div>
-
-                    <!-- Step 2: Filter Criteria (only for rating projects) -->
-                    <div id="bws-filter-section" style="display:none;">
-                      <div class="form-group">
-                        <label>Filter Items by Score:</label>
-                        <div class="filter-row">
-                          <label for="bws-min-score">Minimum Score:</label>
-                          <input type="number" id="bws-min-score" class="form-control" value="0.7" min="0" max="1" step="0.1">
-                          <small>Only include items with relevance score ≥ this value</small>
-                        </div>
-                        <div class="filter-preview">
-                          <small>Filtered items: <strong id="bws-filtered-count">calculating...</strong></small>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- Step 3: Experiment Configuration -->
-                    <div id="bws-config-section" style="display:none;">
-                      <div class="form-group">
-                        <label for="bws-experiment-name">Experiment Name:</label>
-                        <input type="text" id="bws-experiment-name" class="form-control" placeholder="e.g., Top Quality Comments Ranking">
-                      </div>
-
-                      <div class="form-group">
-                        <label for="bws-research-intent">Comparison Criteria / Research Intent:</label>
-                        <textarea id="bws-research-intent" class="form-control" rows="3"
-                          placeholder="What makes one item better than another? Be specific about the quality dimension you're measuring."></textarea>
-                        <small>Example: "Which comment provides the most substantive, informative content about the topic?"</small>
-                      </div>
-
-                      <div class="form-row">
-                        <div class="form-group">
-                          <label for="bws-tuple-size">Tuple Size:</label>
-                          <select id="bws-tuple-size" class="form-control">
-                            <option value="2">2 items (pairwise)</option>
-                            <option value="3" selected>3 items</option>
-                            <option value="4">4 items</option>
-                            <option value="5">5 items</option>
-                          </select>
-                          <small>How many items to show per comparison</small>
-                        </div>
-
-                        <div class="form-group">
-                          <label for="bws-target-appearances">Target Appearances:</label>
-                          <input type="number" id="bws-target-appearances" class="form-control" value="4" min="2" max="10">
-                          <small>Times each item should appear (affects total comparisons)</small>
-                        </div>
-                      </div>
-
-                      <div class="form-row">
-                        <div class="form-group">
-                          <label for="bws-design-method">Generation Method:</label>
-                          <select id="bws-design-method" class="form-control">
-                            <option value="random">Random (fast, simple)</option>
-                            <option value="balanced" selected>Balanced (equal coverage)</option>
-                            <option value="maxdiff">MaxDiff (optimal, future)</option>
-                          </select>
-                          <small>How to generate comparison sets</small>
-                        </div>
-
-                        <div class="form-group">
-                          <label for="bws-rater-type">Rater Type:</label>
-                          <select id="bws-rater-type" class="form-control">
-                            <option value="ai" selected>AI + Human (Unified Interface)</option>
-                          </select>
-                          <small>AI ratings (bright borders) + Your ratings (light borders) in one interface</small>
-                        </div>
-                      </div>
-
-                      <div class="form-group">
-                        <label for="bws-scoring-method">Scoring Method:</label>
-                        <select id="bws-scoring-method" class="form-control">
-                          <option value="counting" selected>Counting (simple: #best - #worst)</option>
-                          <option value="bradley_terry">Bradley-Terry (probabilistic, future)</option>
-                        </select>
-                        <small>How to calculate final rankings</small>
-                      </div>
-
-                      <!-- Estimate Display -->
-                      <div class="cost-estimate">
-                        <div class="estimate-row">
-                          <span>Estimated comparisons:</span>
-                          <strong id="bws-estimate-tuples">0</strong>
-                        </div>
-                        <div class="estimate-row">
-                          <span>Items to rank:</span>
-                          <strong id="bws-estimate-items">0</strong>
-                        </div>
-                        <div class="estimate-row" id="bws-ai-cost-row" style="display:none;">
-                          <span>Estimated AI cost:</span>
-                          <strong id="bws-estimate-cost">$0.00</strong>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div class="button-group">
-                      <button class="btn btn-secondary" id="bws-cancel-btn">Cancel</button>
-                      <button class="btn btn-primary" id="bws-create-btn" disabled>Create Experiment</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <!-- End Create BWS Modal -->
-
-              <!-- BWS Rating Interface (Full Screen Overlay) -->
-              <div id="bws-rating-interface" class="bws-rating-overlay" style="display: none;">
-                <div class="bws-rating-container">
-                  <!-- Header with Progress -->
-                  <div class="bws-rating-header">
-                    <div class="bws-rating-title">
-                      <h2 id="bws-rating-exp-name">BWS Rating</h2>
-                      <p id="bws-rating-exp-desc" class="subtitle"></p>
-                      <p id="bws-rating-rater-info" class="subtitle" style="display: none; color: #0ea5e9; font-size: 0.85rem;"></p>
-                    </div>
-                    <div class="bws-rating-progress-wrapper">
-                      <div class="bws-rating-progress-info">
-                        <span id="bws-rating-progress-text">0 / 0 (0%)</span>
-                        <div class="bws-rating-header-buttons">
-                          <button id="bws-rating-pause-btn" class="btn btn-secondary" title="Pause and take a break">⏸️ Pause</button>
-                          <button id="bws-rating-close-btn" class="btn btn-secondary" title="Exit rating">← Exit</button>
-                        </div>
-                      </div>
-                      <div class="bws-rating-progress-bar">
-                        <div id="bws-rating-progress-fill" class="bws-rating-progress-fill"></div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- View Controls & Filters -->
-                  <div class="bws-view-controls">
-                    <div class="bws-filter-group">
-                      <label>View:</label>
-                      <select id="bws-filter-mode" class="bws-filter-select">
-                        <option value="all">All Tuples</option>
-                        <option value="unrated">Unrated Only</option>
-                        <option value="ai-rated">AI Rated</option>
-                        <option value="human-rated">Human Rated</option>
-                      </select>
-                    </div>
-                    <div class="bws-toggle-group">
-                      <label class="bws-toggle-label">
-                        <input type="checkbox" id="bws-auto-refresh" checked>
-                        <span>🔄 Auto-refresh</span>
-                      </label>
-                      <label class="bws-toggle-label">
-                        <input type="checkbox" id="bws-blind-mode">
-                        <span id="bws-blind-mode-label">👁 Blind Mode: OFF</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <!-- AI Progress Banner (Inline, Non-Blocking) -->
-                  <div id="bws-ai-progress-banner" class="bws-ai-progress-banner" style="display: none;">
-                    <div class="bws-ai-progress-content">
-                      <div class="bws-ai-progress-header">
-                        <span class="bws-ai-progress-icon">🤖</span>
-                        <span class="bws-ai-progress-title" id="bws-ai-progress-title">AI Rating in Progress</span>
-                        <button id="bws-ai-progress-pause" class="btn-icon" title="Pause AI rating" style="display: none;">
-                          ⏸
-                        </button>
-                      </div>
-
-                      <div class="bws-ai-progress-bar-container">
-                        <div class="bws-ai-progress-bar-track">
-                          <div id="bws-ai-progress-bar-fill" class="bws-ai-progress-bar-fill" style="width: 0%;"></div>
-                        </div>
-                        <div class="bws-ai-progress-stats">
-                          <span id="bws-ai-progress-count-inline">0 / 0</span>
-                          <span id="bws-ai-progress-percentage-inline">0%</span>
-                        </div>
-                      </div>
-
-                      <div id="bws-ai-latest-inline" class="bws-ai-latest-inline" style="display: none;">
-                        <span class="latest-label">Latest:</span>
-                        <span id="bws-ai-latest-text-inline"></span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Scrollable List View -->
-                  <div id="bws-list-view" class="bws-list-view">
-                    <!-- Tuple cards will be dynamically inserted here -->
-                  </div>
-
-                  <!-- Single Tuple Rating View (existing, hidden by default in list mode) -->
-                  <div id="bws-single-rating-view" class="bws-single-rating-view" style="display: none;">
-                    <!-- Instructions -->
-                    <div class="bws-rating-instructions">
-                      <p><strong>Instructions:</strong> Select the <span class="text-success">BEST</span> and <span class="text-danger">WORST</span> items from the set below based on the research intent.</p>
-                      <p class="text-muted">Keyboard shortcuts: <kbd>1-4</kbd> for Best, <kbd>Q-R</kbd> for Worst, <kbd>Enter</kbd> to Submit</p>
-                    </div>
-
-                    <!-- Item Cards Grid -->
-                    <div id="bws-rating-items-grid" class="bws-rating-items-grid">
-                      <!-- Cards will be dynamically inserted here -->
-                    </div>
-                  </div>
-
-                  <!-- Navigation and Action Buttons -->
-                  <div class="bws-navigation-bar">
-                    <div class="bws-nav-left">
-                      <button id="bws-nav-prev-btn" class="btn btn-secondary">
-                        ← Previous
-                      </button>
-                    </div>
-
-                    <div class="bws-nav-center">
-                      <button id="bws-rating-submit-btn" class="btn btn-primary" disabled>
-                        Submit Judgment
-                      </button>
-                      <button id="bws-rating-skip-btn" class="btn btn-secondary">
-                        Skip
-                      </button>
-                    </div>
-
-                    <div class="bws-nav-right">
-                      <button id="bws-nav-next-btn" class="btn btn-secondary">
-                        Next →
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Tuple Position Indicator -->
-                  <div id="bws-tuple-position" class="bws-tuple-position">
-                    Tuple <span id="bws-current-index">1</span> of <span id="bws-total-count">0</span>
-                  </div>
-
-                  <!-- Loading State -->
-                  <div id="bws-rating-loading" class="bws-rating-loading" style="display: none;">
-                    <div class="spinner"></div>
-                    <p>Loading next comparison...</p>
-                  </div>
-                </div>
-              </div>
-              <!-- End BWS Rating Interface -->
-
-              <!-- BWS Video Detail Modal -->
-              <div id="bws-video-detail-modal" class="bws-video-detail-modal" style="display: none;" onclick="if(event.target === this) closeBWSVideoDetailModal()">
-                <div class="bws-video-detail-content">
-                  <button class="modal-close-btn" onclick="closeBWSVideoDetailModal()" title="Close">&times;</button>
-
-                  <h3 id="bws-modal-title">Video Detail</h3>
-
-                  <div class="bws-modal-video-wrapper">
-                    <video id="bws-modal-video" class="bws-modal-video" controls loop>
-                      <source type="video/mp4">
-                    </video>
-                  </div>
-
-                  <div class="bws-modal-info">
-                    <div class="bws-modal-section">
-                      <h4>📝 Transcript</h4>
-                      <p id="bws-modal-transcript" class="bws-modal-transcript"></p>
-                    </div>
-
-                    <div class="bws-modal-section">
-                      <h4>📊 Metadata</h4>
-                      <div id="bws-modal-meta" class="bws-modal-meta"></div>
-                    </div>
-                  </div>
-
-                  <button class="btn btn-primary" onclick="closeBWSVideoDetailModal()" style="margin-top: 1rem;">
-                    ← Back to Comparison
-                  </button>
-                </div>
-              </div>
-              <!-- End BWS Video Detail Modal -->
-
-              <!-- AI Rating Progress Overlay -->
-              <div id="bws-ai-progress-overlay" class="bws-ai-progress-overlay" style="display: none;">
-                <div class="bws-ai-progress-modal">
-                  <button id="bws-ai-progress-close" class="modal-close-btn" title="Close (progress continues)">&times;</button>
-                  <h3>🤖 AI Rating in Progress</h3>
-                  <p id="bws-ai-progress-text">Processing comparisons...</p>
-
-                  <div class="bws-ai-progress-bar">
-                    <div id="bws-ai-progress-fill" class="bws-ai-progress-fill"></div>
-                  </div>
-
-                  <div class="bws-ai-progress-stats">
-                    <span id="bws-ai-progress-count">0 / 0</span>
-                    <span id="bws-ai-progress-percentage">0%</span>
-                  </div>
-
-                  <div id="bws-ai-latest-result" class="bws-ai-latest-result" style="display: none;">
-                    <strong>Latest:</strong>
-                    <div id="bws-ai-latest-text"></div>
-                  </div>
-
-                  <p class="text-muted" style="margin-top: 1rem; font-size: 0.85rem;">
-                    This may take a few minutes. You can continue using the app.
-                  </p>
-                </div>
-              </div>
-              <!-- End AI Progress Overlay -->
-
-              <!-- BWS Results View -->
-              <div id="bws-results-overlay" class="bws-results-overlay" style="display: none;">
-                <div class="bws-results-container">
-                  <!-- Header -->
-                  <div class="bws-results-header">
-                    <div>
-                      <h2 id="bws-results-title">BWS Results</h2>
-                      <p id="bws-results-subtitle" class="subtitle"></p>
-                    </div>
-                    <button id="bws-results-close" class="btn btn-secondary">← Back to Experiments</button>
-                  </div>
-
-                  <!-- Stats Summary -->
-                  <div class="bws-results-stats">
-                    <div class="stat-card">
-                      <span class="stat-label">Total Items Ranked</span>
-                      <span class="stat-value" id="bws-results-total">0</span>
-                    </div>
-                    <div class="stat-card">
-                      <span class="stat-label">Comparisons Made</span>
-                      <span class="stat-value" id="bws-results-comparisons">0</span>
-                    </div>
-                    <div class="stat-card">
-                      <span class="stat-label">Scoring Method</span>
-                      <span class="stat-value" id="bws-results-method">Counting</span>
-                    </div>
-                  </div>
-
-                  <!-- Export Actions and Rater Selector -->
-                  <div class="bws-results-actions">
-                    <div class="bws-rater-selector-wrapper" style="display: none;">
-                      <label for="bws-rater-selector" style="margin-right: 0.5rem; font-weight: 600;">View Scores:</label>
-                      <select id="bws-rater-selector" class="form-control" style="display: inline-block; width: auto; min-width: 200px;">
-                        <option value="combined">🔀 Combined (All Raters)</option>
-                      </select>
-                    </div>
-                    <div style="flex: 1;"></div>
-                    <button id="bws-export-csv" class="btn btn-secondary">📄 Export CSV</button>
-                    <button id="bws-export-json" class="btn btn-secondary">📦 Export JSON</button>
-                  </div>
-
-                  <!-- Results Table -->
-                  <div class="bws-results-table-container">
-                    <table class="bws-results-table">
-                      <thead>
-                        <tr>
-                          <th data-sort="rank" class="sortable">Rank <span class="sort-arrow">↕</span></th>
-                          <th>Item</th>
-                          <th data-sort="score_bt" class="sortable">BT Score <span class="sort-arrow">↕</span></th>
-                          <th data-sort="score" class="sortable">Count <span class="sort-arrow">↕</span></th>
-                          <th data-sort="best" class="sortable">Best <span class="sort-arrow">↕</span></th>
-                          <th data-sort="worst" class="sortable">Worst <span class="sort-arrow">↕</span></th>
-                          <th data-sort="appearances" class="sortable">Appearances <span class="sort-arrow">↕</span></th>
-                        </tr>
-                      </thead>
-                      <tbody id="bws-results-tbody">
-                        <!-- Results will be inserted here -->
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-              <!-- End BWS Results View -->
-
-              <!-- Video Chunk Preview Modal -->
-              <div id="bws-video-modal" class="modal" style="display: none;">
-                <div class="modal-content modal-large">
-                  <div class="modal-header">
-                    <h3 id="bws-video-modal-title">Video Chunk</h3>
-                    <button class="modal-close-btn" onclick="closeBWSVideoModal()">&times;</button>
-                  </div>
-                  <div class="modal-body">
-                    <div class="video-preview-container">
-                      <video id="bws-video-player" controls style="width: 100%; border-radius: 8px; background: #000;">
-                        Your browser does not support the video tag.
-                      </video>
-                    </div>
-                    <div class="bws-video-info">
-                      <h4>Transcript</h4>
-                      <p id="bws-video-transcript" style="line-height: 1.6; color: var(--text-secondary);"></p>
-                      <div class="bws-video-meta">
-                        <span id="bws-video-time"></span>
-                        <span id="bws-video-score"></span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <!-- End Video Modal -->
-
-            </div>
-          </div>
-          <!-- End BWS Tab -->
-
-          <!-- Dashboard Tab -->
-          <div id="dashboardTab" class="tab-content">
-            <div class="dashboard-container">
-              <!-- Header -->
-              <div class="view-header">
-                <div>
-                  <h2>📈 AI Analysis Dashboard</h2>
-                  <p class="subtitle">Overview of your rating projects and BWS experiments</p>
-                </div>
-              </div>
-
-              <!-- Combined Stats -->
-              <div class="stats-bar stats-bar-wide">
-                <div class="stat-item">
-                  <span class="stat-value" id="dash-total-projects">0</span>
-                  <span class="stat-label">rating projects</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-value" id="dash-total-bws">0</span>
-                  <span class="stat-label">BWS experiments</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-value" id="dash-total-items">0</span>
-                  <span class="stat-label">items rated</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-value" id="dash-total-judgments">0</span>
-                  <span class="stat-label">BWS judgments</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-value" id="dash-success-rate">0%</span>
-                  <span class="stat-label">success rate</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-value" id="dash-total-cost">$0.00</span>
-                  <span class="stat-label">total cost</span>
-                </div>
-              </div>
-
-              <!-- Quick Access Cards -->
-              <div class="quick-access-grid">
-                <div class="quick-access-card" onclick="document.querySelector('[data-tab=ratings]').click()">
-                  <div class="quick-icon">🎯</div>
-                  <h3>Rating Projects</h3>
-                  <div class="quick-stat">
-                    <span class="quick-value" id="quick-projects">0</span>
-                    <span class="quick-label">total</span>
-                  </div>
-                  <div class="quick-actions">
-                    <span class="link-text">View All →</span>
-                  </div>
-                </div>
-
-                <div class="quick-access-card" onclick="document.querySelector('[data-tab=bws]').click()">
-                  <div class="quick-icon">🔀</div>
-                  <h3>BWS Experiments</h3>
-                  <div class="quick-stat">
-                    <span class="quick-value" id="quick-bws">0</span>
-                    <span class="quick-label">total</span>
-                  </div>
-                  <div class="quick-actions">
-                    <span class="link-text">View All →</span>
-                  </div>
-                </div>
-
-                <div class="quick-access-card" onclick="document.querySelector('[data-view=collections]').click()">
-                  <div class="quick-icon">📦</div>
-                  <h3>Collections</h3>
-                  <div class="quick-stat">
-                    <span class="quick-value" id="quick-collections">0</span>
-                    <span class="quick-label">total</span>
-                  </div>
-                  <div class="quick-actions">
-                    <span class="link-text">View All →</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Recent Activity Feed -->
-              <div class="activity-feed">
-                <h3>Recent Activity</h3>
-                <div id="activity-feed-list" class="activity-list">
-                  <div class="empty-state-small">
-                    <p>No recent activity</p>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Workflow Navigator -->
-              <div class="workflow-guide">
-                <h3>Recommended Workflow</h3>
-                <div class="workflow-steps">
-                  <div class="workflow-step">
-                    <div class="step-number">1</div>
-                    <div class="step-content">
-                      <h4>Collect Data</h4>
-                      <p>Search YouTube and gather videos with comments</p>
-                      <button class="btn btn-sm" onclick="document.querySelector('[data-view=youtube]').click()">Go to YouTube →</button>
-                    </div>
-                  </div>
-                  <div class="workflow-arrow">→</div>
-                  <div class="workflow-step">
-                    <div class="step-number">2</div>
-                    <div class="step-content">
-                      <h4>Rate Relevance</h4>
-                      <p>Use AI to filter items by relevance</p>
-                      <button class="btn btn-sm" onclick="document.querySelector('[data-tab=ratings]').click()">Create Rating Project →</button>
-                    </div>
-                  </div>
-                  <div class="workflow-arrow">→</div>
-                  <div class="workflow-step">
-                    <div class="step-number">3</div>
-                    <div class="step-content">
-                      <h4>Refine & Filter</h4>
-                      <p>Create child projects with high-scoring items</p>
-                    </div>
-                  </div>
-                  <div class="workflow-arrow">→</div>
-                  <div class="workflow-step">
-                    <div class="step-number">4</div>
-                    <div class="step-content">
-                      <h4>Run BWS</h4>
-                      <p>Generate precise rankings with comparisons</p>
-                      <button class="btn btn-sm" onclick="document.querySelector('[data-tab=bws]').click()">Create BWS Experiment →</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <!-- End Dashboard Tab -->
-
-        </div>
-        <!-- End AI Analysis View -->
 
         <!-- Export View -->
         <div id="exportView" class="view">
@@ -2022,6 +965,7 @@
   <script src="src/components/merge-manager.js"></script>
   <!-- Stubs removed - using real APIs now -->
   <script src="src/components/folder-browser.js"></script>
+  <script src="src/components/collections-hub.js"></script>
 
   <!-- PDF.js Library for visual PDF rendering -->
   <script src="node_modules/pdfjs-dist/build/pdf.js"></script>
@@ -2042,5 +986,345 @@
 
   <script src="src/bws-manager.js"></script>
   <script src="src/renderer-advanced.js"></script>
+
+  <!-- Create New Rating Project Modal (Global) -->
+  <div id="create-project-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Create New Rating Project</h3>
+        <button class="close-btn" id="close-create-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Parent Project Info (shown when creating child) -->
+        <div id="parent-project-info" class="parent-project-notice" style="display:none;">
+          <div class="notice-box">
+            <strong>Creating Child Project</strong>
+            <p>This project will use ratings from: <span id="parent-project-name-display"></span></p>
+            <p class="small">Items will be filtered based on the criteria below.</p>
+          </div>
+        </div>
+
+        <!-- Collection Selection -->
+        <div class="form-group">
+          <label for="ai-collection-select">Select Collection:</label>
+          <select id="ai-collection-select" class="form-control">
+            <option value="">Choose a collection...</option>
+          </select>
+          <input type="hidden" id="parent-project-id" value="">
+        </div>
+
+        <!-- Filter Criteria (shown only for child projects) -->
+        <div id="filter-criteria-section" style="display:none;">
+          <div class="form-group">
+            <label>Filter Parent Project Items:</label>
+            <div class="filter-controls">
+              <div class="filter-row">
+                <label for="filter-min-score">Minimum Score:</label>
+                <input type="number" id="filter-min-score" class="form-control" value="0.7" min="0" max="1" step="0.1">
+                <label for="filter-max-score">Maximum Score:</label>
+                <input type="number" id="filter-max-score" class="form-control" value="1.0" min="0" max="1" step="0.1">
+              </div>
+              <div class="filter-row">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="filter-video-chunks" checked>
+                  <span>Include Video Chunks</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="filter-comments" checked>
+                  <span>Include Comments</span>
+                </label>
+              </div>
+              <div class="filter-preview">
+                <small>Estimated items after filtering: <strong id="filtered-items-count">calculating...</strong></small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="project-name">Project Name:</label>
+          <input type="text" id="project-name" class="form-control" placeholder="e.g., Mental Health Stigma Analysis">
+        </div>
+
+    <div class="form-group">
+      <label for="research-intent">What are you looking for? (Research Intent)</label>
+      <textarea id="research-intent" class="form-control" rows="4"
+        placeholder="Describe what content is relevant to your research. Be specific about topics, themes, or patterns you want to identify."></textarea>
+    </div>
+
+    <div class="form-group">
+      <label>Rating Scale:</label>
+      <div class="radio-group">
+        <label class="radio-label">
+          <input type="radio" name="rating-scale" value="binary" checked>
+          <span>Relevant / Not Relevant</span>
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="rating-scale" value="ternary">
+          <span>High / Medium / Low Relevance</span>
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="rating-scale" value="five_point">
+          <span>5-Point Scale (1-5)</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Content to Rate:</label>
+      <div class="checkbox-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="rate-chunks" checked>
+          <span>Video Chunks <span class="item-count" id="chunks-count">(0 items)</span></span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="rate-comments" checked>
+          <span>Comments <span class="item-count" id="comments-count">(0 items)</span></span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="rate-pdfs" checked>
+          <span>PDF Excerpts <span class="item-count" id="pdfs-count">(0 items)</span></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- PDF Visual Context Mode -->
+    <div class="form-group" id="pdf-visual-mode-section" style="padding-left: 1.5rem; margin-top: -0.5rem;">
+      <label class="checkbox-label">
+        <input type="checkbox" id="pdf-visual-mode" checked>
+        <span>📸 Include PDF Visual Context</span>
+      </label>
+      <small style="display: block; margin-left: 1.7rem; color: #6b7280; margin-top: 0.25rem;">
+        Send page images with highlighted excerpts to AI (richer context but slower)
+      </small>
+    </div>
+
+    <details class="advanced-options">
+      <summary>⚙️ Rate Limiting & Performance</summary>
+      <div class="advanced-content">
+        <div class="form-group">
+          <label for="concurrent-requests">Concurrent Requests:</label>
+          <input type="number" id="concurrent-requests" class="form-control" value="5" min="1" max="20">
+          <small>⚠️ How many API calls at once (lower = more stable, 5 recommended)</small>
+        </div>
+
+        <div class="form-group">
+          <label for="batch-size">Batch Size:</label>
+          <input type="number" id="batch-size" class="form-control" value="50" min="10" max="200">
+          <small>Items processed before progress update (doesn't affect speed)</small>
+        </div>
+
+        <div class="form-group">
+          <label for="retry-delay">Retry Delay (seconds):</label>
+          <input type="number" id="retry-delay" class="form-control" value="2" min="1" max="10" step="0.5">
+          <small>Wait time between retries (with exponential backoff)</small>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="include-confidence" checked>
+            <span>Include confidence scores</span>
+          </label>
+        </div>
+      </div>
+    </details>
+
+    <div class="cost-estimate">
+      Estimated: <span id="items-estimate">0 items</span> × ~$0.00015 = <span id="cost-estimate">$0.00</span>
+    </div>
+
+        <div class="button-group">
+          <button class="btn btn-primary" id="start-rating-btn">Start Rating</button>
+          <button class="btn btn-secondary" id="preview-rating-btn">🔍 Preview First 5</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- End Create New Rating Project Modal -->
+
+  <!-- BWS (Best-Worst Scaling) Modals -->
+  <!-- Create BWS Experiment Modal -->
+  <div id="create-bws-modal" class="modal" style="display: none;">
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h3>Create BWS Experiment</h3>
+        <button class="close-btn" id="close-bws-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Step 1: Choose Source Type -->
+        <div class="form-group">
+          <label>What do you want to compare?</label>
+          <div class="radio-group" style="display: flex; gap: 20px; margin-bottom: 10px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="radio" name="bws-source-type" value="rating-project" checked>
+              <span>Items from a Rating Project</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="radio" name="bws-source-type" value="collection">
+              <span>Items from a Collection</span>
+            </label>
+          </div>
+          <small id="bws-source-type-hint">Use rated items filtered by relevance score</small>
+        </div>
+
+        <!-- Rating Project Selection -->
+        <div id="bws-rating-project-section" class="form-group">
+          <label for="bws-rating-project-select">Select Rating Project:</label>
+          <select id="bws-rating-project-select" class="form-control">
+            <option value="">Choose a rating project...</option>
+          </select>
+          <small>Select a completed rating project to use as source for BWS comparisons</small>
+        </div>
+
+        <!-- Collection Selection -->
+        <div id="bws-collection-section" class="form-group" style="display: none;">
+          <label for="bws-collection-select">Select Collection:</label>
+          <select id="bws-collection-select" class="form-control">
+            <option value="">Choose a collection...</option>
+          </select>
+          <small>Compare items directly from a collection (without needing ratings first)</small>
+        </div>
+
+        <!-- Collection Content Type Selection -->
+        <div id="bws-collection-content-section" style="display: none;">
+          <div class="form-group">
+            <label>What to compare:</label>
+            <div class="checkbox-group">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px;">
+                <input type="checkbox" id="bws-include-comments" checked>
+                <span>Comments</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px;">
+                <input type="checkbox" id="bws-include-chunks">
+                <span>Video Chunks</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="bws-include-pdfs">
+                <span>PDF Excerpts</span>
+              </label>
+            </div>
+            <small>Select which types of content to include in the comparison</small>
+          </div>
+        </div>
+
+        <!-- Source Info Display -->
+        <div id="bws-source-info" class="notice-box" style="display:none;">
+          <div class="info-row">
+            <strong>Source:</strong> <span id="bws-selected-source-name"></span>
+          </div>
+          <div class="info-row">
+            <strong>Total Items:</strong> <span id="bws-total-items">0</span>
+          </div>
+          <div class="info-row">
+            <strong>Item Type:</strong> <span id="bws-item-type"></span>
+          </div>
+        </div>
+
+        <!-- Step 2: Filter Criteria (only for rating projects) -->
+        <div id="bws-filter-section" style="display:none;">
+          <div class="form-group">
+            <label>Filter Items by Score:</label>
+            <div class="filter-row">
+              <label for="bws-min-score">Minimum Score:</label>
+              <input type="number" id="bws-min-score" class="form-control" value="0.7" min="0" max="1" step="0.1">
+              <small>Only include items with relevance score ≥ this value</small>
+            </div>
+            <div class="filter-preview">
+              <small>Filtered items: <strong id="bws-filtered-count">calculating...</strong></small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: Experiment Configuration -->
+        <div id="bws-config-section" style="display:none;">
+          <div class="form-group">
+            <label for="bws-experiment-name">Experiment Name:</label>
+            <input type="text" id="bws-experiment-name" class="form-control" placeholder="e.g., Top Quality Comments Ranking">
+          </div>
+
+          <div class="form-group">
+            <label for="bws-research-intent">Comparison Criteria / Research Intent:</label>
+            <textarea id="bws-research-intent" class="form-control" rows="3"
+              placeholder="What makes one item better than another? Be specific about the quality dimension you're measuring."></textarea>
+            <small>Example: "Which comment provides the most substantive, informative content about the topic?"</small>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="bws-tuple-size">Tuple Size:</label>
+              <select id="bws-tuple-size" class="form-control">
+                <option value="2">2 items (pairwise)</option>
+                <option value="3" selected>3 items</option>
+                <option value="4">4 items</option>
+                <option value="5">5 items</option>
+              </select>
+              <small>How many items to show per comparison</small>
+            </div>
+
+            <div class="form-group">
+              <label for="bws-target-appearances">Target Appearances:</label>
+              <input type="number" id="bws-target-appearances" class="form-control" value="4" min="2" max="10">
+              <small>Times each item should appear (affects total comparisons)</small>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="bws-design-method">Generation Method:</label>
+              <select id="bws-design-method" class="form-control">
+                <option value="random">Random (fast, simple)</option>
+                <option value="balanced" selected>Balanced (equal coverage)</option>
+                <option value="maxdiff">MaxDiff (optimal, future)</option>
+              </select>
+              <small>How to generate comparison sets</small>
+            </div>
+
+            <div class="form-group">
+              <label for="bws-rater-type">Rater Type:</label>
+              <select id="bws-rater-type" class="form-control">
+                <option value="ai" selected>AI + Human (Unified Interface)</option>
+              </select>
+              <small>AI ratings (bright borders) + Your ratings (light borders) in one interface</small>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="bws-scoring-method">Scoring Method:</label>
+            <select id="bws-scoring-method" class="form-control">
+              <option value="counting" selected>Counting (simple: #best - #worst)</option>
+              <option value="bradley_terry">Bradley-Terry (probabilistic, future)</option>
+            </select>
+            <small>How to calculate final rankings</small>
+          </div>
+
+          <!-- Estimate Display -->
+          <div class="cost-estimate">
+            <div class="estimate-row">
+              <span>Estimated comparisons:</span>
+              <strong id="bws-estimate-tuples">0</strong>
+            </div>
+            <div class="estimate-row">
+              <span>Items to rank:</span>
+              <strong id="bws-estimate-items">0</strong>
+            </div>
+            <div class="estimate-row" id="bws-ai-cost-row" style="display:none;">
+              <span>Estimated AI cost:</span>
+              <strong id="bws-estimate-cost">$0.00</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="button-group">
+          <button class="btn btn-secondary" id="bws-cancel-btn">Cancel</button>
+          <button class="btn btn-primary" id="bws-create-btn" disabled>Create Experiment</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- End Create BWS Modal -->
+  <!-- Note: BWS Rating Interface, Video Detail Modal, AI Progress Overlay, and Results View were removed for brevity.
+       They are loaded dynamically by the BWS Manager when needed. -->
+
 </body>
 </html>

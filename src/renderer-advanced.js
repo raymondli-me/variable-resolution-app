@@ -1,5 +1,5 @@
 // Renderer process JavaScript
-let currentView = 'youtube';
+let currentView = 'collections';
 let currentTab = 'basic';
 let selectedVideos = new Set();
 let collectionJob = null;
@@ -9,7 +9,7 @@ let extractionSettings = {};
 document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
   loadSettings();
-  showView('youtube');
+  showView('collections');
   applyExtractionDefaults();
 });
 

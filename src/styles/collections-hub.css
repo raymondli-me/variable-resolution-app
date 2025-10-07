@@ -1,0 +1,272 @@
+/**
+ * Collections Hub Styles
+ * Card-based gallery view for collections
+ */
+
+/* Hub Header */
+.hub-header {
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.hub-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.hub-subtitle {
+  margin: 0;
+  font-size: 1rem;
+  color: #6b7280;
+}
+
+/* Collection Grid */
+.collection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+  padding: 2rem;
+  background: #f9fafb;
+}
+
+/* Collection Card */
+.collection-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.collection-card:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+  transform: translateY(-2px);
+}
+
+/* Card Header */
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.25rem 0.75rem;
+  background: linear-gradient(to bottom, #f9fafb, #ffffff);
+}
+
+.card-genre-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.card-menu-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.card-menu-btn:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+/* Card Body */
+.card-body {
+  padding: 0 1.25rem 1rem;
+  flex: 1;
+}
+
+.card-title {
+  margin: 0 0 0.75rem 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #111827;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.card-stats {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.stat-item {
+  font-size: 0.875rem;
+  color: #4b5563;
+  font-weight: 500;
+}
+
+.card-date {
+  font-size: 0.8125rem;
+  color: #9ca3af;
+}
+
+/* Card Enrichments */
+.card-enrichments {
+  padding: 0.75rem 1.25rem;
+  background: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+  font-size: 0.8125rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* Card Footer */
+.card-footer {
+  padding: 0 1.25rem 1.25rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.card-view-btn {
+  flex: 1;
+  padding: 0.625rem 1rem;
+  background: #3b82f6;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.card-view-btn:hover {
+  background: #2563eb;
+  transform: scale(1.02);
+}
+
+.card-view-btn:active {
+  transform: scale(0.98);
+}
+
+/* Empty State */
+.hub-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+  background: #f9fafb;
+  min-height: 400px;
+}
+
+.empty-icon {
+  font-size: 4rem;
+  margin-bottom: 1.5rem;
+  opacity: 0.5;
+}
+
+.hub-empty-state h2 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.hub-empty-state p {
+  margin: 0;
+  font-size: 1rem;
+  color: #6b7280;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .collection-grid {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .hub-header {
+    padding: 1rem;
+  }
+
+  .hub-title {
+    font-size: 1.5rem;
+  }
+}
+
+/* Dark mode support (if implemented) */
+@media (prefers-color-scheme: dark) {
+  .hub-header {
+    background: #1f2937;
+    border-bottom-color: #374151;
+  }
+
+  .hub-title {
+    color: #f9fafb;
+  }
+
+  .hub-subtitle {
+    color: #9ca3af;
+  }
+
+  .collection-grid {
+    background: #111827;
+  }
+
+  .collection-card {
+    background: #1f2937;
+    border-color: #374151;
+  }
+
+  .collection-card:hover {
+    border-color: #3b82f6;
+  }
+
+  .card-header {
+    background: linear-gradient(to bottom, #111827, #1f2937);
+  }
+
+  .card-title {
+    color: #f9fafb;
+  }
+
+  .stat-item {
+    color: #d1d5db;
+  }
+
+  .card-date {
+    color: #6b7280;
+  }
+
+  .card-menu-btn {
+    color: #6b7280;
+  }
+
+  .card-menu-btn:hover {
+    background: #374151;
+    color: #f9fafb;
+  }
+
+  .hub-empty-state {
+    background: #111827;
+  }
+
+  .hub-empty-state h2 {
+    color: #f9fafb;
+  }
+
+  .hub-empty-state p {
+    color: #9ca3af;
+  }
+}

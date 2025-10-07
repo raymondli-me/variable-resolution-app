@@ -15,7 +15,23 @@ function registerCollectionHandlers(getDatabase) {
     try {
       const db = await getDatabase();
       const filepath = await db.exportCollection(collectionId, outputPath, options);
-      return { success: true, data: filepath };
+
+      // Get file size
+      const stats = fs.statSync(filepath);
+      const fileSize = stats.size;
+
+      // Get item count from collection
+      const videos = await db.all('SELECT COUNT(*) as count FROM videos WHERE collection_id = ?', [collectionId]);
+      const itemCount = videos[0]?.count || 0;
+
+      return {
+        success: true,
+        data: {
+          filePath: filepath,
+          itemCount,
+          fileSize
+        }
+      };
     } catch (error) {
       console.error('Error exporting collection:', error);
       return { success: false, error: error.message };

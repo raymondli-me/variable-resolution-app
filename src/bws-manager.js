@@ -791,7 +791,7 @@ async function loadBWSExperiments() {
 
     const gallery = document.getElementById('bws-experiments-gallery');
     if (!gallery) {
-      console.error('BWS experiments gallery element not found');
+      // Gallery element doesn't exist (old BWS tab was removed) - silently skip
       return;
     }
 

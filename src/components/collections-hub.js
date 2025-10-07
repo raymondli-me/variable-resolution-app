@@ -43,14 +43,11 @@ class CollectionsHub {
     // Load enrichments (rating projects and BWS experiments) for all collections
     for (const collection of this.collections) {
       try {
-        // Get rating projects for this collection
-        const ratingProjects = await window.api.database.query(
-          'SELECT * FROM rating_projects WHERE collection_id = ? ORDER BY created_at DESC',
-          [collection.id]
-        );
+        // Get rating projects for this collection using the correct API
+        const result = await window.api.ai.getRatingProjects({ collectionId: collection.id });
 
         collection.enrichments = {
-          rating_projects: ratingProjects || [],
+          rating_projects: result.success ? (result.data || []) : [],
           bws_experiments: [] // BWS experiments to be added when available
         };
       } catch (error) {

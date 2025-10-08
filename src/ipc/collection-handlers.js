@@ -298,7 +298,7 @@ function registerCollectionHandlers(getDatabase) {
     }
   });
 
-  // Subsample collection
+  // Subsample collection (genre-aware: supports both video and PDF collections)
   ipcMain.handle('collections:subsample', async (event, params) => {
     try {
       const db = await getDatabase();
@@ -309,72 +309,164 @@ function registerCollectionHandlers(getDatabase) {
         return { success: false, error: 'Source collection not found' };
       }
 
-      // Get all videos from source
-      const videos = await db.all('SELECT * FROM videos WHERE collection_id = ?', [params.sourceId]);
+      // Parse settings to determine collection type
+      const settings = typeof sourceCollection.settings === 'string'
+        ? JSON.parse(sourceCollection.settings)
+        : sourceCollection.settings || {};
 
-      if (videos.length === 0) {
-        return { success: false, error: 'Source collection has no videos' };
+      const collectionType = settings.type || 'video'; // Default to video for backwards compatibility
+
+      // Determine what to sample based on collection type
+      let items = [];
+      let itemType = '';
+
+      if (collectionType === 'pdf') {
+        // PDF collection: sample excerpts
+        itemType = 'pdf_excerpt';
+        items = await db.all('SELECT * FROM pdf_excerpts WHERE collection_id = ?', [params.sourceId]);
+
+        if (items.length === 0) {
+          return { success: false, error: 'Source collection has no PDF excerpts' };
+        }
+      } else {
+        // Video collection: sample videos (original behavior)
+        itemType = 'video';
+        items = await db.all('SELECT * FROM videos WHERE collection_id = ?', [params.sourceId]);
+
+        if (items.length === 0) {
+          return { success: false, error: 'Source collection has no videos' };
+        }
       }
 
-      if (params.sampleSize > videos.length && !params.withReplacement) {
-        return { success: false, error: `Cannot sample ${params.sampleSize} videos from collection of ${videos.length} without replacement` };
+      // Validate sample size
+      if (params.sampleSize > items.length && !params.withReplacement) {
+        return { success: false, error: `Cannot sample ${params.sampleSize} items from collection of ${items.length} without replacement` };
       }
 
-      // Random subsample
-      let sampledVideos = [];
+      // Random subsample (same algorithm for both types)
+      let sampledItems = [];
       if (params.withReplacement) {
         // Sample with replacement
         for (let i = 0; i < params.sampleSize; i++) {
-          const randomIndex = Math.floor(Math.random() * videos.length);
-          sampledVideos.push(videos[randomIndex]);
+          const randomIndex = Math.floor(Math.random() * items.length);
+          sampledItems.push(items[randomIndex]);
         }
       } else {
         // Sample without replacement (Fisher-Yates shuffle)
-        const shuffled = [...videos];
+        const shuffled = [...items];
         for (let i = shuffled.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
         }
-        sampledVideos = shuffled.slice(0, params.sampleSize);
+        sampledItems = shuffled.slice(0, params.sampleSize);
       }
 
-      // Create new collection
-      const newCollectionId = await db.createCollection(params.newName, sourceCollection.settings || {});
+      // Create new derived collection with lineage tracking
+      const derivationInfo = {
+        method: 'subsample',
+        parameters: {
+          sampleSize: params.sampleSize,
+          withReplacement: params.withReplacement || false
+        }
+      };
 
-      // Copy sampled videos
-      for (const video of sampledVideos) {
-        await db.run(`
-          INSERT INTO videos (
-            collection_id, id, title, channel_title, view_count, like_count,
-            comment_count, published_at, duration, thumbnails, local_path
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-          newCollectionId, video.id, video.title, video.channel_title,
-          video.view_count, video.like_count, video.comment_count, video.published_at,
-          video.duration, video.thumbnails, video.local_path
-        ]);
+      const newCollectionId = await db.createCollection(
+        params.newName,
+        settings,
+        null, // report
+        params.sourceId, // parentCollectionId
+        derivationInfo
+      );
 
-        // Copy comments for this video
-        const comments = await db.all('SELECT * FROM comments WHERE collection_id = ? AND video_id = ?', [params.sourceId, video.id]);
-        for (const comment of comments) {
+      // Copy sampled items based on type
+      if (itemType === 'pdf_excerpt') {
+        // Get unique PDF IDs from sampled excerpts
+        const uniquePdfIds = [...new Set(sampledItems.map(e => e.pdf_id))];
+
+        console.log(`[Subsample] Source collection: ${params.sourceId}`);
+        console.log(`[Subsample] Unique PDF IDs in excerpts: ${uniquePdfIds.join(', ')}`);
+
+        // Map old PDF IDs to new PDF IDs (PDFs get new auto-increment IDs in new collection)
+        const pdfIdMap = {};
+
+        // Copy PDF records first (excerpts reference these via pdf_id)
+        for (const oldPdfId of uniquePdfIds) {
+          const pdfRecord = await db.get('SELECT * FROM pdfs WHERE id = ? AND collection_id = ?', [oldPdfId, params.sourceId]);
+          console.log(`[Subsample] Looking for PDF ${oldPdfId} in collection ${params.sourceId}: ${pdfRecord ? 'FOUND' : 'NOT FOUND'}`);
+          if (pdfRecord) {
+            // Insert PDF with new collection_id but keep original file_path
+            const result = await db.run(`
+              INSERT INTO pdfs (
+                collection_id, file_path, title, author, num_pages, file_size, metadata
+              ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            `, [
+              newCollectionId, pdfRecord.file_path, pdfRecord.title, pdfRecord.author,
+              pdfRecord.num_pages, pdfRecord.file_size, pdfRecord.metadata
+            ]);
+
+            // Store mapping: old PDF ID -> new PDF ID
+            pdfIdMap[oldPdfId] = result.id;
+            console.log(`[Subsample] Mapped old PDF ID ${oldPdfId} -> new PDF ID ${result.id}`);
+          }
+        }
+
+        // Now copy PDF excerpts using the new PDF IDs
+        for (const excerpt of sampledItems) {
+          const newPdfId = pdfIdMap[excerpt.pdf_id];
+          if (!newPdfId) {
+            console.error(`[Subsample] No mapping found for pdf_id ${excerpt.pdf_id}`);
+            continue;
+          }
+
           await db.run(`
-            INSERT INTO comments (
-              collection_id, video_id, comment_id, author, text, like_count, published_at, parent_id
+            INSERT INTO pdf_excerpts (
+              pdf_id, collection_id, excerpt_number, page_number,
+              text_content, char_start, char_end, bbox
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           `, [
-            newCollectionId, comment.video_id, comment.comment_id, comment.author,
-            comment.text, comment.like_count, comment.published_at, comment.parent_id
+            newPdfId, newCollectionId, excerpt.excerpt_number, excerpt.page_number,
+            excerpt.text_content, excerpt.char_start, excerpt.char_end, excerpt.bbox
           ]);
         }
-      }
 
-      // Update counts
-      await db.run(`
-        UPDATE collections
-        SET video_count = (SELECT COUNT(*) FROM videos WHERE collection_id = ?),
-            comment_count = (SELECT COUNT(*) FROM comments WHERE collection_id = ?)
-        WHERE id = ?
-      `, [newCollectionId, newCollectionId, newCollectionId]);
+        // Note: We don't update an excerpt_count on collections table (it doesn't exist yet)
+        // The count can be queried dynamically when needed
+      } else {
+        // Copy videos (original behavior)
+        for (const video of sampledItems) {
+          await db.run(`
+            INSERT INTO videos (
+              collection_id, id, title, channel_title, view_count, like_count,
+              comment_count, published_at, duration, thumbnails, local_path
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            newCollectionId, video.id, video.title, video.channel_title,
+            video.view_count, video.like_count, video.comment_count, video.published_at,
+            video.duration, video.thumbnails, video.local_path
+          ]);
+
+          // Copy comments for this video
+          const comments = await db.all('SELECT * FROM comments WHERE collection_id = ? AND video_id = ?', [params.sourceId, video.id]);
+          for (const comment of comments) {
+            await db.run(`
+              INSERT INTO comments (
+                collection_id, video_id, comment_id, author, text, like_count, published_at, parent_id
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+              newCollectionId, comment.video_id, comment.comment_id, comment.author,
+              comment.text, comment.like_count, comment.published_at, comment.parent_id
+            ]);
+          }
+        }
+
+        // Update counts for video collections
+        await db.run(`
+          UPDATE collections
+          SET video_count = (SELECT COUNT(*) FROM videos WHERE collection_id = ?),
+              comment_count = (SELECT COUNT(*) FROM comments WHERE collection_id = ?)
+          WHERE id = ?
+        `, [newCollectionId, newCollectionId, newCollectionId]);
+      }
 
       return { success: true, collectionId: newCollectionId };
     } catch (error) {

@@ -34,7 +34,32 @@ class Database {
     });
   }
 
+  /**
+   * Add source column to excerpt_ratings table if it doesn't exist
+   */
+  async addSourceColumnIfNeeded() {
+    try {
+      // Check if column exists
+      const result = await this.get(`PRAGMA table_info(excerpt_ratings)`);
+      const columns = await this.all(`PRAGMA table_info(excerpt_ratings)`);
+
+      const hasSourceColumn = columns.some(col => col.name === 'source');
+
+      if (!hasSourceColumn) {
+        console.log('[Database] Adding source column to excerpt_ratings table');
+        await this.run(`ALTER TABLE excerpt_ratings ADD COLUMN source TEXT DEFAULT 'human'`);
+        console.log('[Database] Source column added successfully');
+      }
+    } catch (error) {
+      // Table might not exist yet, which is fine
+      console.log('[Database] Excerpt ratings table does not exist yet (will be created)');
+    }
+  }
+
   async createTables() {
+    // First, add source column to excerpt_ratings if it doesn't exist
+    await this.addSourceColumnIfNeeded();
+
     const queries = [
       // Collections table
       `CREATE TABLE IF NOT EXISTS collections (
@@ -248,6 +273,21 @@ class Database {
         score INTEGER NOT NULL,
         reasoning TEXT,
         reasoning_depth TEXT DEFAULT 'brief',
+        source TEXT DEFAULT 'human',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (excerpt_id) REFERENCES pdf_excerpts(id) ON DELETE CASCADE,
+        FOREIGN KEY (variable_id) REFERENCES rating_variables(id) ON DELETE CASCADE,
+        UNIQUE(excerpt_id, variable_id)
+      )`,
+
+      // AI Excerpt Ratings table - for AI-generated ratings of PDF excerpts
+      `CREATE TABLE IF NOT EXISTS ai_excerpt_ratings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        excerpt_id INTEGER NOT NULL,
+        variable_id INTEGER NOT NULL,
+        score TEXT NOT NULL,
+        reasoning TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (excerpt_id) REFERENCES pdf_excerpts(id) ON DELETE CASCADE,
@@ -258,7 +298,9 @@ class Database {
       // Indexes for rating tables
       `CREATE INDEX IF NOT EXISTS idx_rating_variables_collection ON rating_variables(collection_id)`,
       `CREATE INDEX IF NOT EXISTS idx_excerpt_ratings_excerpt ON excerpt_ratings(excerpt_id)`,
-      `CREATE INDEX IF NOT EXISTS idx_excerpt_ratings_variable ON excerpt_ratings(variable_id)`
+      `CREATE INDEX IF NOT EXISTS idx_excerpt_ratings_variable ON excerpt_ratings(variable_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_ai_excerpt_ratings_excerpt ON ai_excerpt_ratings(excerpt_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_ai_excerpt_ratings_variable ON ai_excerpt_ratings(variable_id)`
     ];
 
     for (const query of queries) {
@@ -2040,6 +2082,53 @@ class Database {
    */
   async deleteRatingVariable(variableId) {
     await this.run('DELETE FROM rating_variables WHERE id = ?', [variableId]);
+  }
+
+  // ============================================
+  // AI EXCERPT RATINGS METHODS
+  // ============================================
+
+  /**
+   * Save or update an AI excerpt rating
+   */
+  async saveAIExcerptRating(ratingData) {
+    const { excerpt_id, variable_id, score, reasoning } = ratingData;
+
+    const result = await this.run(`
+      INSERT INTO ai_excerpt_ratings (
+        excerpt_id, variable_id, score, reasoning, updated_at
+      ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(excerpt_id, variable_id)
+      DO UPDATE SET
+        score = excluded.score,
+        reasoning = excluded.reasoning,
+        updated_at = CURRENT_TIMESTAMP
+    `, [excerpt_id, variable_id, score, reasoning || null]);
+
+    return result.id;
+  }
+
+  /**
+   * Get AI rating for a specific excerpt and variable
+   */
+  async getAIExcerptRating(excerptId, variableId) {
+    return await this.get(`
+      SELECT *
+      FROM ai_excerpt_ratings
+      WHERE excerpt_id = ? AND variable_id = ?
+    `, [excerptId, variableId]);
+  }
+
+  /**
+   * Get all AI ratings for a PDF's excerpts
+   */
+  async getAIRatingsForPDF(pdfId, variableId) {
+    return await this.all(`
+      SELECT air.*
+      FROM ai_excerpt_ratings air
+      JOIN pdf_excerpts pe ON air.excerpt_id = pe.id
+      WHERE pe.pdf_id = ? AND air.variable_id = ?
+    `, [pdfId, variableId]);
   }
 
   // ============================================

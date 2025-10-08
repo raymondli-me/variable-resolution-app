@@ -350,6 +350,64 @@ function registerPDFHandlers(getDatabase) {
     }
   });
 
+  // AI EXCERPT RATINGS IPC HANDLERS
+  ipcMain.handle('pdf:saveAIExcerptRating', async (event, ratingData) => {
+    try {
+      const db = require('../database/db');
+      const ratingId = await db.saveAIExcerptRating(ratingData);
+
+      return {
+        success: true,
+        ratingId
+      };
+
+    } catch (error) {
+      console.error('Save AI excerpt rating error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
+  ipcMain.handle('pdf:getAIExcerptRating', async (event, { excerptId, variableId }) => {
+    try {
+      const db = require('../database/db');
+      const rating = await db.getAIExcerptRating(excerptId, variableId);
+
+      return {
+        success: true,
+        data: rating
+      };
+
+    } catch (error) {
+      console.error('Get AI excerpt rating error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
+  ipcMain.handle('pdf:getAIRatingsForPDF', async (event, { pdfId, variableId }) => {
+    try {
+      const db = require('../database/db');
+      const ratings = await db.getAIRatingsForPDF(pdfId, variableId);
+
+      return {
+        success: true,
+        data: ratings
+      };
+
+    } catch (error) {
+      console.error('Get AI ratings for PDF error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
   ipcMain.handle('pdf:getRatingsByVariable', async (event, variableId) => {
     try {
       const db = require('../database/db');

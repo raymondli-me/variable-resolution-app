@@ -68,6 +68,9 @@ contextBridge.exposeInMainWorld('api', {
     saveExcerptRating: (ratingData) => ipcRenderer.invoke('pdf:saveExcerptRating', ratingData),
     getExcerptRatings: (excerptId) => ipcRenderer.invoke('pdf:getExcerptRatings', excerptId),
     getExcerptRating: (params) => ipcRenderer.invoke('pdf:getExcerptRating', params),
+    saveAIExcerptRating: (ratingData) => ipcRenderer.invoke('pdf:saveAIExcerptRating', ratingData),
+    getAIExcerptRating: (params) => ipcRenderer.invoke('pdf:getAIExcerptRating', params),
+    getAIRatingsForPDF: (params) => ipcRenderer.invoke('pdf:getAIRatingsForPDF', params),
     getRatingsByVariable: (variableId) => ipcRenderer.invoke('pdf:getRatingsByVariable', variableId),
     deleteExcerptRating: (params) => ipcRenderer.invoke('pdf:deleteExcerptRating', params),
     getVariableRatingStats: (variableId) => ipcRenderer.invoke('pdf:getVariableRatingStats', variableId)

@@ -774,6 +774,19 @@ class PDFExcerptViewer {
 
         console.log('[PDFExcerptViewer] AI rating received and cached:', result.rating);
 
+        // Save AI rating to database for persistence
+        try {
+          await window.api.pdf.saveAIExcerptRating({
+            excerpt_id: excerpt.id,
+            variable_id: this.selectedVariable.id,
+            score: result.rating.score || result.rating.relevance || 'N/A',
+            reasoning: result.rating.reasoning || result.rating.analysis || null
+          });
+          console.log('[PDFExcerptViewer] AI rating saved to database');
+        } catch (dbError) {
+          console.error('[PDFExcerptViewer] Failed to save AI rating to database:', dbError);
+        }
+
         // Update rating progress after AI rating
         this.throttledUpdateProgress();
       } else {
@@ -1528,8 +1541,9 @@ class PDFExcerptViewer {
       // Set reasoning depth from variable (not user-selectable anymore)
       this.selectedDepth = this.selectedVariable.reasoning_depth || 'brief';
 
-      // Re-trigger AI rating if an excerpt is currently being viewed
+      // Reload human rating for current excerpt with new variable
       if (this.currentExcerpt) {
+        this.loadHumanRating(this.currentExcerpt);
         this.triggerAICopilotRating(this.currentExcerpt);
       }
 
@@ -1857,10 +1871,22 @@ class PDFExcerptViewer {
           humanRatedCount++;
         }
 
-        // Check for AI rating in cache
-        const aiCacheKey = `${excerpt.id}_${this.selectedVariable.id}`;
-        if (this.aiRatingCache.has(aiCacheKey)) {
+        // Check for AI rating in database (not just cache for persistence)
+        const aiRatingResult = await window.api.pdf.getAIExcerptRating({
+          excerpt_id: excerpt.id,
+          variable_id: this.selectedVariable.id
+        });
+
+        if (aiRatingResult.success && aiRatingResult.data) {
           aiRatedCount++;
+          // Also populate cache for quick access
+          const cacheKey = `${excerpt.id}_${this.selectedVariable.id}`;
+          if (!this.aiRatingCache.has(cacheKey)) {
+            this.aiRatingCache.set(cacheKey, {
+              score: aiRatingResult.data.score,
+              reasoning: aiRatingResult.data.reasoning
+            });
+          }
         }
       }
 

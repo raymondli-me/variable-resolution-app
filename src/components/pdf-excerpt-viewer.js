@@ -34,6 +34,21 @@ class PDFExcerptViewer {
     // AI rating cache: Map<"excerptId_variableId", rating>
     this.aiRatingCache = new Map();
 
+    // Rate All state
+    this.rateAllInProgress = false;
+    this.rateAllPaused = false;
+    this.rateAllCurrentIndex = 0;
+    this.rateAllExcerpts = [];
+    this.currentlyRatingExcerptId = null;
+    this.rateAllBatchSize = 10; // Number of excerpts to rate in parallel
+    this.currentBatchExcerptIds = new Set(); // IDs of excerpts in current batch
+
+    // Track excerpts currently being rated to prevent duplicates
+    this.excerptRatingLocks = new Set(); // Set of "excerptId_variableId" strings
+
+    // AI rating on click toggle
+    this.aiRatingOnClick = true; // Enable/disable AI rating when clicking excerpts
+
     // Speech recognition
     this.recognition = null;
     this.isRecording = false;
@@ -195,9 +210,34 @@ class PDFExcerptViewer {
             <div class="detail-section" id="excerptListSection" style="flex: 1; min-height: 200px; display: flex; flex-direction: column;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <h4 style="margin: 0;">Excerpts</h4>
-                <div id="ratingProgress" class="rating-progress-indicator" style="display: flex; gap: 12px; font-size: 11px; color: #9ca3af;">
-                  <span id="humanProgress" title="Human ratings">👤 <span style="color: #3b82f6; font-weight: 600;">0/0</span></span>
-                  <span id="aiProgress" title="AI ratings">🤖 <span style="color: #10b981; font-weight: 600;">0/0</span></span>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <div id="ratingProgress" class="rating-progress-indicator" style="display: flex; gap: 12px; font-size: 11px; color: #9ca3af;">
+                    <span id="humanProgress" title="Human ratings">👤 <span style="color: #3b82f6; font-weight: 600;">0/0</span></span>
+                    <span id="aiProgress" title="AI ratings">🤖 <span style="color: #10b981; font-weight: 600;">0/0</span></span>
+                  </div>
+                  <button id="rateAllBtn" onclick="window.pdfExcerptViewer.rateAllWithAI()" style="padding: 4px 10px; background: #10b981; border: none; border-radius: 4px; color: white; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;" title="Rate all unrated excerpts with AI">
+                    🤖 Rate All
+                  </button>
+                  <button id="pauseRateAllBtn" onclick="window.pdfExcerptViewer.pauseRateAll()" style="display: none; padding: 4px 10px; background: #f59e0b; border: none; border-radius: 4px; color: white; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;" title="Pause AI rating">
+                    ⏸ Pause
+                  </button>
+                  <button id="resumeRateAllBtn" onclick="window.pdfExcerptViewer.resumeRateAll()" style="display: none; padding: 4px 10px; background: #10b981; border: none; border-radius: 4px; color: white; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;" title="Resume AI rating">
+                    ▶ Resume
+                  </button>
+                </div>
+              </div>
+              <div id="rateAllStatus" style="display: none; padding: 8px; background: #1e293b; border-radius: 4px; margin-bottom: 8px; color: #10b981; font-size: 12px; text-align: center;">
+                AI Rating in Progress...
+              </div>
+              <div id="rateAllSettings" style="display: flex; flex-direction: column; gap: 8px; padding: 8px; background: #111827; border-radius: 4px; margin-bottom: 8px; font-size: 12px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <label style="color: #9ca3af;">Batch Size:</label>
+                  <input type="number" id="batchSizeInput" min="1" max="50" value="10" onchange="window.pdfExcerptViewer.updateBatchSize(this.value)" style="width: 60px; padding: 4px 8px; background: #1f2937; border: 1px solid #374151; color: #e5e7eb; border-radius: 4px;" />
+                  <span style="color: #6b7280; font-size: 11px;">(excerpts rated in parallel)</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <input type="checkbox" id="aiRatingOnClickToggle" checked onchange="window.pdfExcerptViewer.toggleAIRatingOnClick(this.checked)" style="cursor: pointer;" />
+                  <label for="aiRatingOnClickToggle" style="color: #9ca3af; cursor: pointer;">Auto-rate with AI when clicking excerpts</label>
                 </div>
               </div>
               <div class="excerpt-list-panel" id="excerptListPanel" style="flex: 1; margin: 0; border: none; background: transparent;">
@@ -664,10 +704,12 @@ class PDFExcerptViewer {
     excerptsList.innerHTML = pageExcerpts.map(excerpt => {
       const text = excerpt.text_content || '';
       const activeClass = excerpt.id === this.activeExcerptId ? ' active' : '';
+      const batchClass = this.currentBatchExcerptIds.has(excerpt.id) ? ' batch-rating' : '';
+      const ratingIndicator = this.currentBatchExcerptIds.has(excerpt.id) ? '<span style="color: #10b981; font-size: 14px; margin-left: 8px; animation: pulse 1.5s ease-in-out infinite;">🤖</span>' : '';
 
       return `
-        <div class="excerpt-list-item${activeClass}" data-excerpt-id="${excerpt.id}" onclick="window.pdfExcerptViewer.onExcerptClick(${excerpt.id})">
-          <div class="excerpt-page-number">Page ${excerpt.page_number || '?'} • Excerpt ${excerpt.excerpt_number || '?'}</div>
+        <div class="excerpt-list-item${activeClass}${batchClass}" data-excerpt-id="${excerpt.id}" onclick="window.pdfExcerptViewer.onExcerptClick(${excerpt.id})">
+          <div class="excerpt-page-number">Page ${excerpt.page_number || '?'} • Excerpt ${excerpt.excerpt_number || '?'}${ratingIndicator}</div>
           <div class="excerpt-text">${this.escapeHtml(text.substring(0, 200))}${text.length > 200 ? '...' : ''}</div>
         </div>
       `;
@@ -764,8 +806,32 @@ class PDFExcerptViewer {
       }
     } catch (error) {
       console.error('[PDFExcerptViewer] Error loading AI rating from database:', error);
-      // Continue to generate new rating if database load fails
+      // Continue to check if we should generate new rating
     }
+
+    // No existing rating found - check if we should generate a NEW one
+    const shouldGenerateNewRating = this.aiRatingOnClick && !(this.rateAllInProgress && !this.rateAllPaused);
+
+    if (!shouldGenerateNewRating) {
+      // Don't generate new rating, but show a dimmed message
+      const reason = !this.aiRatingOnClick
+        ? 'Enable "Auto-rate with AI" toggle to generate ratings on click.'
+        : 'Rate All is running. New ratings will be generated automatically.';
+
+      this.showAICopilotDisabled(reason);
+      console.log('[PDFExcerptViewer] Not generating new rating:', reason);
+      return;
+    }
+
+    // Check if this excerpt is already being rated (prevent double-rating)
+    if (this.excerptRatingLocks.has(cacheKey)) {
+      console.log('[PDFExcerptViewer] Excerpt already being rated, skipping duplicate request:', cacheKey);
+      this.showAICopilotLoading(); // Show loading state while waiting
+      return;
+    }
+
+    // Acquire lock to prevent double-rating
+    this.excerptRatingLocks.add(cacheKey);
 
     // Show loading state
     this.showAICopilotLoading();
@@ -827,6 +893,9 @@ class PDFExcerptViewer {
     } catch (error) {
       console.error('[PDFExcerptViewer] AI rating error:', error);
       this.showAICopilotError(error.message || 'Error getting AI rating');
+    } finally {
+      // Release lock
+      this.excerptRatingLocks.delete(cacheKey);
     }
   }
 
@@ -1454,6 +1523,29 @@ class PDFExcerptViewer {
     }
   }
 
+  /**
+   * Show AI Co-Pilot disabled state (dimmed message, not red error)
+   * @param {string} message - Informational message to display
+   */
+  showAICopilotDisabled(message) {
+    const loading = this.getElement('aiCopilotLoading', true);
+    const content = this.getElement('aiCopilotContent', true);
+    const error = this.getElement('aiCopilotError', true);
+    const errorMessageEl = this.getElement('aiErrorMessage', true);
+
+    if (loading) loading.style.display = 'none';
+    if (content) content.style.display = 'none';
+    if (error) {
+      error.style.display = 'block';
+      error.style.opacity = '0.5'; // Dimmed, not bright red
+    }
+
+    if (errorMessageEl) {
+      errorMessageEl.textContent = message || 'AI rating on click is disabled';
+      errorMessageEl.style.color = '#9ca3af'; // Gray instead of red
+    }
+  }
+
   // ============================================
   // RATING VARIABLES METHODS
   // ============================================
@@ -1882,6 +1974,7 @@ class PDFExcerptViewer {
    */
   async updateRatingProgress() {
     if (!this.selectedVariable || !this.currentPDF || !this.allExcerpts || this.allExcerpts.length === 0) {
+      console.warn('[PDFExcerptViewer] Cannot update progress: missing required data');
       return;
     }
 
@@ -1910,11 +2003,13 @@ class PDFExcerptViewer {
       if (humanProgressEl) {
         const humanPercent = totalExcerpts > 0 ? Math.round((humanRatedCount / totalExcerpts) * 100) : 0;
         humanProgressEl.textContent = `${humanRatedCount}/${totalExcerpts} (${humanPercent}%)`;
+        humanProgressEl.style.color = humanRatedCount === totalExcerpts ? '#10b981' : '#3b82f6';
       }
 
       if (aiProgressEl) {
         const aiPercent = totalExcerpts > 0 ? Math.round((aiRatedCount / totalExcerpts) * 100) : 0;
         aiProgressEl.textContent = `${aiRatedCount}/${totalExcerpts} (${aiPercent}%)`;
+        aiProgressEl.style.color = aiRatedCount === totalExcerpts ? '#10b981' : '#10b981';
       }
 
       console.log(`[PDFExcerptViewer] Progress updated: Human ${humanRatedCount}/${totalExcerpts}, AI ${aiRatedCount}/${totalExcerpts}`);
@@ -1993,6 +2088,411 @@ class PDFExcerptViewer {
       }
     } catch (error) {
       console.error('[PDFExcerptViewer] Error fetching AI rating history:', error);
+    }
+  }
+
+  // ============================================
+  // RATE ALL METHODS
+  // ============================================
+
+  /**
+   * Rate all unrated excerpts with AI
+   */
+  async rateAllWithAI() {
+    // Check if a variable is selected
+    if (!this.selectedVariable) {
+      this.showNotification('Please select a variable first', 'error');
+      return;
+    }
+
+    // Check if current PDF is loaded
+    if (!this.currentPDF) {
+      this.showNotification('No PDF loaded', 'error');
+      return;
+    }
+
+    // Check if already in progress
+    if (this.rateAllInProgress) {
+      this.showNotification('AI rating is already in progress', 'info');
+      return;
+    }
+
+    // Check if API is available
+    if (!window.api?.ai?.rateSingleExcerpt) {
+      this.showNotification('AI rating API not available', 'error');
+      return;
+    }
+
+    try {
+      // Get all excerpts that need AI ratings for the current variable
+      // IMPORTANT: Only rate excerpts from the CURRENT PDF, not the entire collection
+      const unratedExcerpts = [];
+
+      // Filter to only excerpts from current PDF
+      const currentPDFExcerpts = this.allExcerpts.filter(e => e.pdf_id === this.currentPDF.id);
+
+      console.log(`[PDFExcerptViewer] Rate All: Current PDF has ${currentPDFExcerpts.length} excerpts`);
+
+      for (const excerpt of currentPDFExcerpts) {
+        const cacheKey = `${excerpt.id}_${this.selectedVariable.id}`;
+
+        // Check cache first
+        if (this.aiRatingCache.has(cacheKey)) {
+          continue; // Already rated (in cache)
+        }
+
+        // Check database
+        try {
+          const dbResult = await window.api.pdf.getAIExcerptRating({
+            excerpt_id: excerpt.id,
+            variable_id: this.selectedVariable.id
+          });
+
+          if (dbResult.success && dbResult.data) {
+            // Already rated in database, cache it
+            const rating = {
+              score: dbResult.data.score,
+              reasoning: dbResult.data.reasoning
+            };
+            this.aiRatingCache.set(cacheKey, rating);
+            continue;
+          }
+        } catch (error) {
+          console.error('[PDFExcerptViewer] Error checking AI rating:', error);
+        }
+
+        // Not rated - add to list
+        unratedExcerpts.push(excerpt);
+      }
+
+      if (unratedExcerpts.length === 0) {
+        this.showNotification('All excerpts are already rated!', 'info');
+        return;
+      }
+
+      // Start rating process
+      this.rateAllExcerpts = unratedExcerpts;
+      this.rateAllCurrentIndex = 0;
+      this.rateAllInProgress = true;
+      this.rateAllPaused = false;
+
+      // Update UI
+      this.updateRateAllUI();
+
+      console.log(`[PDFExcerptViewer] Starting Rate All: ${unratedExcerpts.length} excerpts to rate`);
+      this.showNotification(`Starting AI rating: ${unratedExcerpts.length} excerpts`, 'info');
+
+      // Start the rating loop
+      await this.processNextExcerpt();
+
+    } catch (error) {
+      console.error('[PDFExcerptViewer] Error starting Rate All:', error);
+      this.showNotification('Error starting Rate All: ' + error.message, 'error');
+      this.stopRateAll();
+    }
+  }
+
+  /**
+   * Update batch size for parallel rating
+   */
+  updateBatchSize(value) {
+    const batchSize = parseInt(value);
+    if (batchSize >= 1 && batchSize <= 50) {
+      this.rateAllBatchSize = batchSize;
+      console.log(`[PDFExcerptViewer] Batch size updated to ${batchSize}`);
+    }
+  }
+
+  /**
+   * Toggle AI rating on click
+   */
+  toggleAIRatingOnClick(enabled) {
+    this.aiRatingOnClick = enabled;
+    console.log(`[PDFExcerptViewer] AI rating on click: ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Process the next batch of excerpts in the Rate All queue (in parallel)
+   */
+  async processNextExcerpt() {
+    // Check if we should stop
+    if (!this.rateAllInProgress || this.rateAllPaused) {
+      return;
+    }
+
+    // Check if we're done
+    if (this.rateAllCurrentIndex >= this.rateAllExcerpts.length) {
+      this.completeRateAll();
+      return;
+    }
+
+    // Get next batch of excerpts
+    const batchStart = this.rateAllCurrentIndex;
+    const batchEnd = Math.min(batchStart + this.rateAllBatchSize, this.rateAllExcerpts.length);
+    const batch = [];
+
+    // Clear previous batch tracking
+    this.currentBatchExcerptIds.clear();
+
+    // Collect excerpts for this batch (skip already-locked ones)
+    for (let i = batchStart; i < batchEnd; i++) {
+      const excerpt = this.rateAllExcerpts[i];
+      const cacheKey = `${excerpt.id}_${this.selectedVariable.id}`;
+
+      // Skip if already being rated
+      if (this.excerptRatingLocks.has(cacheKey)) {
+        console.log('[PDFExcerptViewer] Skipping locked excerpt:', cacheKey);
+        continue;
+      }
+
+      // Acquire lock
+      this.excerptRatingLocks.add(cacheKey);
+      batch.push({ excerpt, cacheKey });
+
+      // Track for visual highlighting
+      this.currentBatchExcerptIds.add(excerpt.id);
+    }
+
+    // Update UI to show batch glow
+    this.renderExcerpts();
+
+    if (batch.length === 0) {
+      // All excerpts in this batch are locked, move to next batch
+      this.rateAllCurrentIndex = batchEnd;
+      setTimeout(() => this.processNextExcerpt(), 500);
+      return;
+    }
+
+    // Update status
+    this.updateRateAllStatus(`Rating batch: ${batchStart + 1}-${batchEnd} of ${this.rateAllExcerpts.length} (${batch.length} in parallel)...`);
+
+    console.log(`[PDFExcerptViewer] Processing batch of ${batch.length} excerpts in parallel`);
+
+    // Process all excerpts in batch in parallel
+    const promises = batch.map(async ({ excerpt, cacheKey }) => {
+      try {
+        // Build research intent
+        const researchIntent = `Rate this excerpt on the variable "${this.selectedVariable.label}". ${this.selectedVariable.definition || ''}`;
+
+        // Build PDF context
+        const pdfContext = {
+          title: this.currentPDF?.title || 'PDF Document',
+          page_number: excerpt.page_number,
+          variable: {
+            label: this.selectedVariable.label,
+            definition: this.selectedVariable.definition,
+            scale_type: this.selectedVariable.scale_type,
+            anchors: this.selectedVariable.anchors,
+            reasoning_depth: this.selectedVariable.reasoning_depth
+          }
+        };
+
+        // Call AI rating API
+        const result = await window.api.ai.rateSingleExcerpt({
+          excerptText: excerpt.text_content,
+          pdfContext: pdfContext,
+          researchIntent: researchIntent
+        });
+
+        if (result.success && result.rating) {
+          // Cache the rating
+          this.aiRatingCache.set(cacheKey, result.rating);
+
+          // Save to database
+          try {
+            await window.api.pdf.saveAIExcerptRating({
+              excerpt_id: excerpt.id,
+              variable_id: this.selectedVariable.id,
+              score: result.rating.score || result.rating.relevance || 'N/A',
+              reasoning: result.rating.reasoning || result.rating.analysis || null
+            });
+            console.log(`[PDFExcerptViewer] AI rating saved for excerpt ${excerpt.id}`);
+          } catch (dbError) {
+            console.error('[PDFExcerptViewer] Failed to save AI rating:', dbError);
+          }
+
+          // If this is the current excerpt, update AI display
+          if (this.currentExcerpt && this.currentExcerpt.id === excerpt.id) {
+            this.updateAICopilotDisplay(result.rating);
+          }
+
+          return { success: true, excerpt };
+        } else {
+          console.error('[PDFExcerptViewer] AI rating failed for excerpt:', excerpt.id, result.error);
+          return { success: false, excerpt, error: result.error };
+        }
+      } catch (error) {
+        console.error('[PDFExcerptViewer] Error rating excerpt:', error);
+        return { success: false, excerpt, error };
+      } finally {
+        // Release lock
+        this.excerptRatingLocks.delete(cacheKey);
+      }
+    });
+
+    // Wait for all ratings in batch to complete
+    await Promise.all(promises);
+
+    // Clear batch tracking
+    this.currentBatchExcerptIds.clear();
+
+    // Update progress counters after batch completes
+    this.updateRatingProgress();
+
+    // Update UI to remove batch glow
+    this.renderExcerpts();
+
+    // Move to next batch
+    this.rateAllCurrentIndex = batchEnd;
+
+    // Continue with next batch (small delay)
+    setTimeout(() => {
+      this.processNextExcerpt();
+    }, 500);
+  }
+
+  /**
+   * Navigate to a specific excerpt
+   */
+  navigateToExcerpt(excerpt) {
+    // Set as active
+    this.activeExcerptId = excerpt.id;
+    this.currentExcerpt = excerpt;
+
+    // Calculate which page of the excerpt list this excerpt is on
+    const excerptIndex = this.filteredExcerpts.findIndex(e => e.id === excerpt.id);
+    if (excerptIndex !== -1) {
+      const targetPage = Math.floor(excerptIndex / this.excerptsPerPage) + 1;
+      if (targetPage !== this.currentPage) {
+        this.currentPage = targetPage;
+        this.renderExcerpts();
+      }
+    }
+
+    // Update visual state
+    document.querySelectorAll('.excerpt-list-item').forEach(el => {
+      el.classList.remove('active');
+    });
+    const element = document.querySelector(`[data-excerpt-id="${excerpt.id}"]`);
+    if (element) {
+      element.classList.add('active');
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // Jump to page in PDF viewer
+    if (this.renderer && excerpt.page_number) {
+      this.renderer.goToPage(excerpt.page_number);
+    }
+
+    // Highlight in PDF
+    if (this.highlighter) {
+      this.highlighter.setActiveExcerpt(excerpt.id);
+    }
+
+    // Update detail panel text
+    const textEl = this.getElement('detailExcerptText');
+    if (textEl) {
+      textEl.textContent = excerpt.text_content || 'No text available';
+    }
+
+    // Load human rating
+    this.loadHumanRating(excerpt);
+  }
+
+  /**
+   * Pause the Rate All process
+   */
+  pauseRateAll() {
+    if (!this.rateAllInProgress) {
+      return;
+    }
+
+    this.rateAllPaused = true;
+    this.updateRateAllUI();
+    this.updateRateAllStatus(`Paused at excerpt ${this.rateAllCurrentIndex} of ${this.rateAllExcerpts.length}`);
+    this.showNotification('AI rating paused', 'info');
+    console.log('[PDFExcerptViewer] Rate All paused');
+  }
+
+  /**
+   * Resume the Rate All process
+   */
+  async resumeRateAll() {
+    if (!this.rateAllInProgress || !this.rateAllPaused) {
+      return;
+    }
+
+    this.rateAllPaused = false;
+    this.updateRateAllUI();
+    this.showNotification('AI rating resumed', 'info');
+    console.log('[PDFExcerptViewer] Rate All resumed');
+
+    // Continue processing
+    await this.processNextExcerpt();
+  }
+
+  /**
+   * Stop the Rate All process
+   */
+  stopRateAll() {
+    this.rateAllInProgress = false;
+    this.rateAllPaused = false;
+    this.rateAllCurrentIndex = 0;
+    this.rateAllExcerpts = [];
+    this.currentlyRatingExcerptId = null;
+    this.currentBatchExcerptIds.clear();
+    this.updateRateAllUI();
+    this.renderExcerpts(); // Clear visual indicators
+  }
+
+  /**
+   * Complete the Rate All process
+   */
+  completeRateAll() {
+    const totalRated = this.rateAllExcerpts.length;
+    this.stopRateAll();
+    this.updateRateAllStatus('');
+    this.showNotification(`AI rating complete! Rated ${totalRated} excerpts`, 'success');
+    console.log(`[PDFExcerptViewer] Rate All complete: ${totalRated} excerpts rated`);
+  }
+
+  /**
+   * Update Rate All UI elements
+   */
+  updateRateAllUI() {
+    const rateAllBtn = this.getElement('rateAllBtn', true);
+    const pauseBtn = this.getElement('pauseRateAllBtn', true);
+    const resumeBtn = this.getElement('resumeRateAllBtn', true);
+    const statusDiv = this.getElement('rateAllStatus', true);
+
+    if (this.rateAllInProgress && !this.rateAllPaused) {
+      // In progress - show Pause button
+      if (rateAllBtn) rateAllBtn.style.display = 'none';
+      if (pauseBtn) pauseBtn.style.display = 'block';
+      if (resumeBtn) resumeBtn.style.display = 'none';
+      if (statusDiv) statusDiv.style.display = 'block';
+    } else if (this.rateAllInProgress && this.rateAllPaused) {
+      // Paused - show Resume button
+      if (rateAllBtn) rateAllBtn.style.display = 'none';
+      if (pauseBtn) pauseBtn.style.display = 'none';
+      if (resumeBtn) resumeBtn.style.display = 'block';
+      if (statusDiv) statusDiv.style.display = 'block';
+    } else {
+      // Not in progress - show Rate All button
+      if (rateAllBtn) rateAllBtn.style.display = 'block';
+      if (pauseBtn) pauseBtn.style.display = 'none';
+      if (resumeBtn) resumeBtn.style.display = 'none';
+      if (statusDiv) statusDiv.style.display = 'none';
+    }
+  }
+
+  /**
+   * Update Rate All status message
+   */
+  updateRateAllStatus(message) {
+    const statusDiv = this.getElement('rateAllStatus', true);
+    if (statusDiv) {
+      statusDiv.textContent = message || 'AI Rating in Progress...';
     }
   }
 }

@@ -201,6 +201,49 @@
   box-shadow: 0 0 8px rgba(76, 175, 80, 0.3);
 }
 
+/* AI Rating Indicator */
+.excerpt-list-item.ai-rating {
+  border-color: #10b981;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+  animation: ai-rating-pulse 2s ease-in-out infinite;
+}
+
+/* Batch Rating Indicator - for excerpts in current batch */
+.excerpt-list-item.batch-rating {
+  border-color: #10b981;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+  animation: batch-rating-pulse 2s ease-in-out infinite;
+}
+
+@keyframes ai-rating-pulse {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.6);
+  }
+}
+
+@keyframes batch-rating-pulse {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.3);
+    border-color: #10b981;
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.6);
+    border-color: #34d399;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
 .excerpt-page-number {
   color: #808080;
   font-size: 12px;

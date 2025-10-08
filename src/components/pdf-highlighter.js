@@ -14,8 +14,11 @@ class PDFHighlighter {
     this.excerpts = [];
     this.activeExcerptId = null;
     this.searchMatches = new Set();
+    this.tooltip = null;
+    this.currentHoverExcerpt = null;
 
     this.createHighlightCanvas();
+    this.createTooltip();
     this.setupEventListeners();
   }
 
@@ -25,7 +28,8 @@ class PDFHighlighter {
   createHighlightCanvas() {
     this.highlightCanvas = document.createElement('canvas');
     this.highlightCanvas.className = 'pdf-highlight-canvas';
-    this.highlightCanvas.style.pointerEvents = 'none'; // Let clicks pass through to PDF
+    this.highlightCanvas.style.pointerEvents = 'auto'; // Enable click events on highlights
+    this.highlightCanvas.style.cursor = 'pointer'; // Show pointer cursor over highlights
     this.highlightCtx = this.highlightCanvas.getContext('2d');
 
     // Append to the canvas wrapper (not container) so it overlays the PDF canvas
@@ -39,6 +43,30 @@ class PDFHighlighter {
   }
 
   /**
+   * Create tooltip element for rating data
+   */
+  createTooltip() {
+    this.tooltip = document.createElement('div');
+    this.tooltip.className = 'pdf-highlight-tooltip';
+    this.tooltip.style.cssText = `
+      position: fixed;
+      display: none;
+      background: rgba(30, 30, 30, 0.95);
+      color: #e0e0e0;
+      padding: 12px 16px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      font-size: 13px;
+      line-height: 1.5;
+      max-width: 320px;
+      z-index: 10000;
+      pointer-events: none;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    `;
+    document.body.appendChild(this.tooltip);
+  }
+
+  /**
    * Listen to PDF renderer events
    */
   setupEventListeners() {
@@ -46,6 +74,21 @@ class PDFHighlighter {
     document.addEventListener('pdfRenderer:pageRendered', (event) => {
       this.syncCanvasSize();
       this.drawHighlights();
+    });
+
+    // Handle clicks on highlights
+    this.highlightCanvas.addEventListener('click', (event) => {
+      this.handleClick(event);
+    });
+
+    // Handle mouse movement for tooltips
+    this.highlightCanvas.addEventListener('mousemove', (event) => {
+      this.handleMouseMove(event);
+    });
+
+    // Hide tooltip when mouse leaves canvas
+    this.highlightCanvas.addEventListener('mouseleave', () => {
+      this.hideTooltip();
     });
   }
 
@@ -203,7 +246,150 @@ class PDFHighlighter {
   }
 
   /**
+   * Handle click on highlight canvas
+   * @param {MouseEvent} event - Click event
+   */
+  handleClick(event) {
+    const rect = this.highlightCanvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    const excerpt = this.findExcerptAtPoint(x, y);
+
+    if (excerpt) {
+      console.log('[PDFHighlighter] Clicked on excerpt:', excerpt.id);
+
+      // Dispatch custom event for excerpt list to listen to
+      const clickEvent = new CustomEvent('highlight:clicked', {
+        detail: { excerptId: excerpt.id, excerpt }
+      });
+      document.dispatchEvent(clickEvent);
+    } else {
+      // Clicked on empty space - clear active highlight
+      this.clearActiveExcerpt();
+
+      // Dispatch event to clear list selection too
+      const clearEvent = new CustomEvent('highlight:cleared');
+      document.dispatchEvent(clearEvent);
+    }
+  }
+
+  /**
+   * Handle mouse movement for tooltip display
+   * @param {MouseEvent} event - Mouse event
+   */
+  handleMouseMove(event) {
+    const rect = this.highlightCanvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    const excerpt = this.findExcerptAtPoint(x, y);
+
+    if (excerpt && excerpt !== this.currentHoverExcerpt) {
+      this.currentHoverExcerpt = excerpt;
+
+      // Only show tooltip if excerpt has rating data
+      if (excerpt.rating) {
+        this.showTooltip(excerpt, event.clientX, event.clientY);
+      } else {
+        this.hideTooltip();
+      }
+    } else if (!excerpt && this.currentHoverExcerpt) {
+      this.currentHoverExcerpt = null;
+      this.hideTooltip();
+    } else if (excerpt && excerpt === this.currentHoverExcerpt) {
+      // Update tooltip position as mouse moves
+      this.updateTooltipPosition(event.clientX, event.clientY);
+    }
+  }
+
+  /**
+   * Show tooltip with rating data
+   * @param {Object} excerpt - Excerpt with rating data
+   * @param {number} x - Mouse X position
+   * @param {number} y - Mouse Y position
+   */
+  showTooltip(excerpt, x, y) {
+    if (!excerpt.rating) return;
+
+    const rating = excerpt.rating;
+
+    // Format the tooltip content
+    const scorePercent = Math.round(rating.relevance_score * 100);
+    const confidencePercent = Math.round(rating.confidence * 100);
+
+    let content = `<div style="margin-bottom: 8px;">`;
+    content += `<strong style="color: #4fc3f7;">Rating Analysis</strong>`;
+    content += `</div>`;
+
+    content += `<div style="margin-bottom: 6px;">`;
+    content += `<span style="color: #aaa;">Score:</span> `;
+    content += `<strong style="color: ${scorePercent >= 70 ? '#66bb6a' : scorePercent >= 40 ? '#ffa726' : '#ef5350'}">${scorePercent}%</strong>`;
+    content += `</div>`;
+
+    content += `<div style="margin-bottom: 6px;">`;
+    content += `<span style="color: #aaa;">Confidence:</span> `;
+    content += `<strong style="color: #e0e0e0;">${confidencePercent}%</strong>`;
+    content += `</div>`;
+
+    if (rating.reasoning) {
+      content += `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.1);">`;
+      content += `<span style="color: #aaa; font-size: 11px;">Reasoning:</span><br>`;
+      content += `<span style="color: #e0e0e0; font-size: 12px;">${this.escapeHtml(rating.reasoning)}</span>`;
+      content += `</div>`;
+    }
+
+    this.tooltip.innerHTML = content;
+    this.updateTooltipPosition(x, y);
+    this.tooltip.style.display = 'block';
+  }
+
+  /**
+   * Update tooltip position
+   * @param {number} x - Mouse X position
+   * @param {number} y - Mouse Y position
+   */
+  updateTooltipPosition(x, y) {
+    const offset = 15;
+    const tooltipRect = this.tooltip.getBoundingClientRect();
+
+    let left = x + offset;
+    let top = y + offset;
+
+    // Keep tooltip within viewport
+    if (left + tooltipRect.width > window.innerWidth) {
+      left = x - tooltipRect.width - offset;
+    }
+
+    if (top + tooltipRect.height > window.innerHeight) {
+      top = y - tooltipRect.height - offset;
+    }
+
+    this.tooltip.style.left = left + 'px';
+    this.tooltip.style.top = top + 'px';
+  }
+
+  /**
+   * Hide tooltip
+   */
+  hideTooltip() {
+    this.tooltip.style.display = 'none';
+  }
+
+  /**
+   * Escape HTML for safe display
+   * @param {string} text - Text to escape
+   * @returns {string} Escaped HTML
+   */
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text || '';
+    return div.innerHTML;
+  }
+
+  /**
    * Find excerpt at canvas coordinates (for click handling)
+   * Prefers smaller/more specific excerpts when multiple overlap
    * @param {number} x - Canvas X coordinate
    * @param {number} y - Canvas Y coordinate
    * @returns {Object|null} Excerpt at coordinates, or null
@@ -211,14 +397,22 @@ class PDFHighlighter {
   findExcerptAtPoint(x, y) {
     const currentPage = this.renderer.getCurrentPage();
     const scale = this.renderer.getScale();
+    const canvasHeight = this.highlightCanvas.height;
 
     const pageExcerpts = this.excerpts.filter(e => e.page_number === currentPage && e.bbox);
 
+    // Find all excerpts that contain this point
+    const matchingExcerpts = [];
+
     for (const excerpt of pageExcerpts) {
       const bbox = typeof excerpt.bbox === 'string' ? JSON.parse(excerpt.bbox) : excerpt.bbox;
+
+      // Apply same Y-flip transformation as in drawHighlights
+      const flippedY = canvasHeight - ((bbox.y + bbox.height) * scale);
+
       const scaledBbox = {
         x: bbox.x * scale,
-        y: bbox.y * scale,
+        y: flippedY,
         width: bbox.width * scale,
         height: bbox.height * scale
       };
@@ -230,11 +424,21 @@ class PDFHighlighter {
         y >= scaledBbox.y &&
         y <= scaledBbox.y + scaledBbox.height
       ) {
-        return excerpt;
+        matchingExcerpts.push({
+          excerpt,
+          area: scaledBbox.width * scaledBbox.height
+        });
       }
     }
 
-    return null;
+    // If no matches, return null
+    if (matchingExcerpts.length === 0) {
+      return null;
+    }
+
+    // If multiple matches, return the one with the smallest area (most specific)
+    matchingExcerpts.sort((a, b) => a.area - b.area);
+    return matchingExcerpts[0].excerpt;
   }
 
   /**
@@ -252,6 +456,12 @@ class PDFHighlighter {
   destroy() {
     if (this.highlightCanvas && this.highlightCanvas.parentNode) {
       this.highlightCanvas.parentNode.removeChild(this.highlightCanvas);
+    }
+
+    // Remove tooltip
+    if (this.tooltip && this.tooltip.parentNode) {
+      this.tooltip.parentNode.removeChild(this.tooltip);
+      this.tooltip = null;
     }
   }
 }

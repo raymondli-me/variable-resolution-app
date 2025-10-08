@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="src/styles/folder-browser.css">
     <link rel="stylesheet" href="src/styles/pdf-excerpt-viewer.css">
     <link rel="stylesheet" href="src/styles/pdf-renderer.css">
+    <link rel="stylesheet" href="src/styles/pdf-gallery-viewer.css">
     <link rel="stylesheet" href="src/styles/collections-hub.css">
   </head>
 <body>
@@ -605,7 +606,7 @@
               <div class="form-group">
                 <label for="pdfFileInput">PDF Document</label>
                 <div class="file-input-wrapper">
-                  <input type="file" id="pdfFileInput" accept=".pdf" style="display: none;" />
+                  <input type="file" id="pdfFileInput" accept=".pdf" multiple style="display: none;" />
                   <button id="pdfFileBrowseBtn" class="btn btn-secondary" style="width: 100%;">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
                       <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"></path>
@@ -690,81 +691,6 @@
           <!-- Collections Hub Container -->
           <div id="collections-hub-container"></div>
 
-          <!-- Tab Navigation -->
-          <div class="tabs">
-            <button class="tab-btn active" data-tab="saved">Saved Collections</button>
-            <button class="tab-btn" data-tab="merged">Merged Collections</button>
-          </div>
-
-          <!-- Saved Collections Tab -->
-          <div id="savedTab" class="tab-content active">
-            <!-- Folder Browser Component -->
-            <div class="folder-browser-container">
-              <div class="folder-browser-header">
-                <h3>Collections</h3>
-                <div style="display: flex; gap: 0.5rem;">
-                  <button id="new-collection-btn" class="btn btn-success" onclick="window.folderBrowser.showNewCollectionModal()">
-                    <span>➕</span> New Collection
-                  </button>
-                  <button id="create-folder-btn" class="btn btn-primary">
-                    <span>📁</span> New Folder
-                  </button>
-                  <button id="import-collection-btn" class="btn btn-secondary">
-                    <span>📥</span> Import
-                  </button>
-                  <button id="export-database-btn" class="btn btn-secondary">
-                    <span>💾</span> Backup DB
-                  </button>
-                </div>
-              </div>
-
-              <div id="folder-tree" class="folder-tree">
-                <!-- Tree will be rendered here by folder-browser.js -->
-                <div class="folder-tree-loading">
-                  Loading collections...
-                </div>
-              </div>
-            </div>
-
-            <!-- Context menu (hidden by default) -->
-            <div id="folder-context-menu" class="context-menu" style="display: none;">
-              <div class="context-menu-item" data-action="rename">Rename</div>
-              <div class="context-menu-item" data-action="delete">Delete</div>
-              <div class="context-menu-item" data-action="archive">Archive</div>
-              <div class="context-menu-item" data-action="color">Change Color</div>
-              <div class="context-menu-item" data-action="star">Star</div>
-              <div class="context-menu-item" data-action="move">Move</div>
-              <div class="context-menu-item" data-action="rate">🤖 Rate Collection</div>
-              <div class="context-menu-item" data-action="bws">🔀 BWS Experiment</div>
-              <div class="context-menu-item" data-action="export">📤 Export</div>
-            </div>
-          </div>
-
-          <!-- Merged Collections Tab -->
-          <div id="mergedTab" class="tab-content">
-            <div class="view-header">
-              <h3 style="margin: 0;">Merged Collections</h3>
-              <button id="createMergeBtn" class="btn btn-primary">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-                Create Merge
-              </button>
-            </div>
-
-            <div id="mergeList" class="merge-list">
-              <div class="empty-state">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path d="M4 7h16M4 12h16M4 17h16"></path>
-                  <path d="M12 3v18" opacity="0.3"></path>
-                </svg>
-                <h3>No Merged Collections</h3>
-                <p>Combine multiple collections into one dataset for analysis or rating</p>
-                <button class="btn btn-primary" onclick="document.getElementById('createMergeBtn').click()">Create Your First Merge</button>
-              </div>
-            </div>
-          </div>
         </div>
 
 
@@ -980,6 +906,7 @@
   <script src="src/components/pdf-renderer.js"></script>
   <script src="src/components/pdf-highlighter.js"></script>
   <script src="src/components/pdf-excerpt-viewer.js"></script>
+  <script src="src/components/pdf-gallery-viewer.js"></script>
 
   <!-- PDF Services -->
   <script src="src/services/pdf-page-image-generator.js"></script>
@@ -1046,28 +973,28 @@
           <input type="text" id="project-name" class="form-control" placeholder="e.g., Mental Health Stigma Analysis">
         </div>
 
+        <div class="form-group">
+          <label for="rating-variable">Rating Variable:</label>
+          <input type="text" id="rating-variable" class="form-control" placeholder="e.g., Stigma Level, Positive Sentiment, Relevance">
+          <small style="display: block; margin-top: 0.25rem; color: #6b7280;">
+            What are you measuring or coding for?
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label for="rating-scale-dropdown">Scale:</label>
+          <select id="rating-scale-dropdown" class="form-control">
+            <option value="binary">Binary (Relevant / Not Relevant)</option>
+            <option value="ternary">3-Point (High / Medium / Low)</option>
+            <option value="five_point">5-Point (1-5)</option>
+            <option value="seven_point">7-Point (1-7)</option>
+          </select>
+        </div>
+
     <div class="form-group">
       <label for="research-intent">What are you looking for? (Research Intent)</label>
       <textarea id="research-intent" class="form-control" rows="4"
         placeholder="Describe what content is relevant to your research. Be specific about topics, themes, or patterns you want to identify."></textarea>
-    </div>
-
-    <div class="form-group">
-      <label>Rating Scale:</label>
-      <div class="radio-group">
-        <label class="radio-label">
-          <input type="radio" name="rating-scale" value="binary" checked>
-          <span>Relevant / Not Relevant</span>
-        </label>
-        <label class="radio-label">
-          <input type="radio" name="rating-scale" value="ternary">
-          <span>High / Medium / Low Relevance</span>
-        </label>
-        <label class="radio-label">
-          <input type="radio" name="rating-scale" value="five_point">
-          <span>5-Point Scale (1-5)</span>
-        </label>
-      </div>
     </div>
 
     <div class="form-group">

@@ -1027,25 +1027,20 @@ class FolderBrowser {
               </div>
 
               <div class="form-group">
-                <label>Select PDF File *</label>
+                <label>Select PDF Files *</label>
                 <div class="file-upload-area" id="pdfDropZoneModal">
                   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"></path>
                     <polyline points="17 8 12 3 7 8"></polyline>
                     <line x1="12" y1="3" x2="12" y2="15"></line>
                   </svg>
-                  <p>Drag & drop PDF here or click to browse</p>
-                  <input type="file" id="pdfFileInputModal" accept=".pdf" style="display: none;" />
+                  <p>Drag & drop PDFs here or click to browse</p>
+                  <input type="file" id="pdfFileInputModal" accept=".pdf" multiple style="display: none;" />
                   <button type="button" class="btn" onclick="document.getElementById('pdfFileInputModal').click()">
-                    Choose File
+                    Choose Files
                   </button>
                   <div id="selectedFileNameModal" style="margin-top: 12px; color: #4ade80;"></div>
                 </div>
-              </div>
-
-              <div class="form-group">
-                <label>Document Title (Optional)</label>
-                <input type="text" id="pdfTitleModal" placeholder="Will use filename if not provided" />
               </div>
 
               <div class="form-group">
@@ -1083,13 +1078,16 @@ class FolderBrowser {
     const modal = document.getElementById('pdf-form-modal');
     const fileInput = document.getElementById('pdfFileInputModal');
     const dropZone = document.getElementById('pdfDropZoneModal');
-    let selectedFile = null;
+    let selectedFiles = [];
 
     // File selection handler
     fileInput.addEventListener('change', (e) => {
-      selectedFile = e.target.files[0];
-      if (selectedFile) {
-        document.getElementById('selectedFileNameModal').textContent = `📄 ${selectedFile.name}`;
+      selectedFiles = Array.from(e.target.files).filter(f => f.type === 'application/pdf');
+      if (selectedFiles.length > 0) {
+        const displayText = selectedFiles.length === 1
+          ? `📄 ${selectedFiles[0].name}`
+          : `📄 ${selectedFiles.length} PDFs selected (${(selectedFiles.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024).toFixed(2)} MB)`;
+        document.getElementById('selectedFileNameModal').textContent = displayText;
       }
     });
 
@@ -1107,11 +1105,14 @@ class FolderBrowser {
       e.preventDefault();
       dropZone.classList.remove('drag-over');
 
-      const files = e.dataTransfer.files;
-      if (files.length > 0 && files[0].type === 'application/pdf') {
-        selectedFile = files[0];
-        fileInput.files = files;
-        document.getElementById('selectedFileNameModal').textContent = `📄 ${files[0].name}`;
+      const files = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
+      if (files.length > 0) {
+        selectedFiles = files;
+        fileInput.files = e.dataTransfer.files;
+        const displayText = files.length === 1
+          ? `📄 ${files[0].name}`
+          : `📄 ${files.length} PDFs selected (${(files.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024).toFixed(2)} MB)`;
+        document.getElementById('selectedFileNameModal').textContent = displayText;
       }
     });
 
@@ -1119,15 +1120,14 @@ class FolderBrowser {
     document.getElementById('pdfUploadForm').addEventListener('submit', async (e) => {
       e.preventDefault();
 
-      if (!selectedFile) {
-        this.showError('Please select a PDF file');
+      if (selectedFiles.length === 0) {
+        this.showError('Please select at least one PDF file');
         return;
       }
 
-      await this.uploadPDFFromModal({
-        file: selectedFile,
+      await this.uploadMultiplePDFsFromModal({
+        files: selectedFiles,
         collectionName: document.getElementById('pdfCollectionNameModal').value,
-        title: document.getElementById('pdfTitleModal').value || selectedFile.name.replace(/\.pdf$/i, ''),
         chunkingStrategy: document.getElementById('pdfChunkingStrategyModal').value
       });
     });
@@ -1183,6 +1183,12 @@ class FolderBrowser {
         // Reload folder tree
         this.loadFolderTree();
 
+        // Emit collection created event for any listeners
+        const event = new CustomEvent('collectionCreated', {
+          detail: { collectionId, name: params.collectionName }
+        });
+        window.dispatchEvent(event);
+
         // Close modal after short delay
         setTimeout(() => {
           document.getElementById('pdf-form-modal')?.remove();
@@ -1193,6 +1199,81 @@ class FolderBrowser {
     } catch (error) {
       console.error('[FolderBrowser] PDF upload failed:', error);
       this.showError('Error uploading PDF: ' + error.message);
+      document.getElementById('pdfUploadForm').style.display = 'block';
+      document.getElementById('uploadProgressModal').style.display = 'none';
+    }
+  }
+
+  /**
+   * Upload multiple PDFs from folder browser modal
+   */
+  async uploadMultiplePDFsFromModal(params) {
+    try {
+      // Show progress
+      document.getElementById('pdfUploadForm').style.display = 'none';
+      document.getElementById('uploadProgressModal').style.display = 'block';
+      const progressFill = document.getElementById('progressFillModal');
+      const progressText = document.getElementById('progressTextModal');
+
+      // Step 1: Create collection
+      progressText.textContent = 'Creating collection...';
+      progressFill.style.width = '5%';
+
+      const createResult = await window.api.collections.createPDFCollection({ name: params.collectionName });
+      if (!createResult.success) {
+        throw new Error(createResult.error || 'Failed to create collection');
+      }
+
+      const collectionId = createResult.collectionId;
+      const totalFiles = params.files.length;
+      let totalExcerpts = 0;
+
+      // Step 2: Upload each PDF
+      for (let i = 0; i < totalFiles; i++) {
+        const file = params.files[i];
+        const fileNum = i + 1;
+
+        progressText.textContent = `Uploading ${fileNum} of ${totalFiles}: ${file.name}`;
+        const baseProgress = 5 + ((i / totalFiles) * 85);
+        progressFill.style.width = `${baseProgress}%`;
+
+        const uploadResult = await window.api.pdf.upload({
+          filePath: file.path,
+          collectionId,
+          title: file.name.replace(/\.pdf$/i, ''),
+          chunkingStrategy: params.chunkingStrategy,
+          chunkSize: 500
+        });
+
+        if (!uploadResult.success) {
+          throw new Error(`Failed to upload ${file.name}: ${uploadResult.error || 'Unknown error'}`);
+        }
+
+        totalExcerpts += uploadResult.excerpts || 0;
+      }
+
+      // Complete
+      progressText.textContent = `Successfully uploaded ${totalFiles} PDF${totalFiles > 1 ? 's' : ''}!`;
+      progressFill.style.width = '100%';
+
+      this.showSuccess(`PDF collection "${params.collectionName}" created with ${totalFiles} PDF${totalFiles > 1 ? 's' : ''} and ${totalExcerpts} excerpts!`);
+
+      // Reload folder tree
+      this.loadFolderTree();
+
+      // Emit collection created event for any listeners
+      const event = new CustomEvent('collectionCreated', {
+        detail: { collectionId, name: params.collectionName }
+      });
+      window.dispatchEvent(event);
+
+      // Close modal after short delay
+      setTimeout(() => {
+        document.getElementById('pdf-form-modal')?.remove();
+      }, 1500);
+    } catch (error) {
+      console.error('[FolderBrowser] Multiple PDF upload failed:', error);
+      this.showError('Error uploading PDFs: ' + error.message);
       document.getElementById('pdfUploadForm').style.display = 'block';
       document.getElementById('uploadProgressModal').style.display = 'none';
     }

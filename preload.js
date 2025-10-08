@@ -50,7 +50,27 @@ contextBridge.exposeInMainWorld('api', {
     getExcerpts: (pdfId) => ipcRenderer.invoke('pdf:getExcerpts', pdfId),
     getFilePath: (pdfId) => ipcRenderer.invoke('pdf:getFilePath', pdfId),
     delete: (pdfId) => ipcRenderer.invoke('pdf:delete', pdfId),
-    generatePageImage: (params) => ipcRenderer.invoke('pdf:generatePageImage', params)
+    generatePageImage: (params) => ipcRenderer.invoke('pdf:generatePageImage', params),
+
+    // Rating Variables APIs
+    createRatingVariable: (variableData) => ipcRenderer.invoke('pdf:createRatingVariable', variableData),
+    getRatingVariables: (collectionId) => ipcRenderer.invoke('pdf:getRatingVariables', collectionId),
+    getRatingVariable: (variableId) => ipcRenderer.invoke('pdf:getRatingVariable', variableId),
+    updateRatingVariable: (params) => ipcRenderer.invoke('pdf:updateRatingVariable', params),
+    deleteRatingVariable: (variableId) => ipcRenderer.invoke('pdf:deleteRatingVariable', variableId),
+
+    // Global Rating Variables APIs
+    createGlobalRatingVariable: (variableData) => ipcRenderer.invoke('ai:createGlobalRatingVariable', variableData),
+    getGlobalRatingVariables: () => ipcRenderer.invoke('ai:getGlobalRatingVariables'),
+    deleteGlobalRatingVariable: (variableId) => ipcRenderer.invoke('ai:deleteGlobalRatingVariable', variableId),
+
+    // Excerpt Ratings APIs
+    saveExcerptRating: (ratingData) => ipcRenderer.invoke('pdf:saveExcerptRating', ratingData),
+    getExcerptRatings: (excerptId) => ipcRenderer.invoke('pdf:getExcerptRatings', excerptId),
+    getExcerptRating: (params) => ipcRenderer.invoke('pdf:getExcerptRating', params),
+    getRatingsByVariable: (variableId) => ipcRenderer.invoke('pdf:getRatingsByVariable', variableId),
+    deleteExcerptRating: (params) => ipcRenderer.invoke('pdf:deleteExcerptRating', params),
+    getVariableRatingStats: (variableId) => ipcRenderer.invoke('pdf:getVariableRatingStats', variableId)
   },
   
   // Dialog operations
@@ -98,7 +118,11 @@ contextBridge.exposeInMainWorld('api', {
     getProjectLineage: (params) => ipcRenderer.invoke('ai:getProjectLineage', params),
     getFilteredItemCount: (params) => ipcRenderer.invoke('ai:getFilteredItemCount', params),
     // BWS-related helper
-    getRatingsForProject: (params) => ipcRenderer.invoke('ai:getRatingsForProject', params)
+    getRatingsForProject: (params) => ipcRenderer.invoke('ai:getRatingsForProject', params),
+    // Co-Pilot rating for PDF excerpts
+    rateSingleExcerpt: (params) => ipcRenderer.invoke('ai:rateSingleExcerpt', params),
+    // Variable Definition Suggester
+    suggestVariableDefinition: (params) => ipcRenderer.invoke('ai:suggestVariableDefinition', params)
   },
 
   // BWS (Best-Worst Scaling) operations

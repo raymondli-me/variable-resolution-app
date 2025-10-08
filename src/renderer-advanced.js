@@ -961,28 +961,35 @@ async function exportToSupabase() {
 // PDF Upload Functions
 // ========================================
 
-let selectedPDFFile = null;
+let selectedPDFFiles = []; // Changed to array for multi-file support
 
 function handlePDFFileSelection(e) {
-  const file = e.target.files[0];
-  if (file && file.type === 'application/pdf') {
-    selectedPDFFile = file;
+  const files = Array.from(e.target.files).filter(f => f.type === 'application/pdf');
 
-    const pdfFileName = document.getElementById('pdfFileName');
-    if (pdfFileName) {
-      pdfFileName.textContent = `Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
-    }
-
-    // Auto-fill title from filename if empty
-    const titleInput = document.getElementById('pdfTitle');
-    if (titleInput && !titleInput.value) {
-      titleInput.value = file.name.replace(/\.pdf$/i, '');
-    }
-
-    updatePDFUploadButton();
-  } else {
-    showNotification('Please select a valid PDF file', 'error');
+  if (files.length === 0) {
+    showNotification('Please select at least one valid PDF file', 'error');
+    return;
   }
+
+  selectedPDFFiles = files;
+
+  const pdfFileName = document.getElementById('pdfFileName');
+  if (pdfFileName) {
+    if (files.length === 1) {
+      pdfFileName.textContent = `Selected: ${files[0].name} (${(files[0].size / 1024 / 1024).toFixed(2)} MB)`;
+    } else {
+      const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+      pdfFileName.textContent = `Selected: ${files.length} PDFs (${(totalSize / 1024 / 1024).toFixed(2)} MB total)`;
+    }
+  }
+
+  // Auto-fill title from filename if empty (only for single file)
+  const titleInput = document.getElementById('pdfTitle');
+  if (titleInput && !titleInput.value && files.length === 1) {
+    titleInput.value = files[0].name.replace(/\.pdf$/i, '');
+  }
+
+  updatePDFUploadButton();
 }
 
 function updatePDFUploadButton() {
@@ -1001,16 +1008,16 @@ function updatePDFUploadButton() {
     hasValidCollection = collectionId !== '';
   }
 
-  console.log('PDF Upload Button Update - Mode:', isNewCollection ? 'new' : 'existing', 'Valid:', hasValidCollection, 'File:', selectedPDFFile ? selectedPDFFile.name : 'none');
+  console.log('PDF Upload Button Update - Mode:', isNewCollection ? 'new' : 'existing', 'Valid:', hasValidCollection, 'Files:', selectedPDFFiles.length);
 
   if (uploadBtn) {
-    uploadBtn.disabled = !(selectedPDFFile && hasValidCollection);
+    uploadBtn.disabled = !(selectedPDFFiles.length > 0 && hasValidCollection);
   }
 }
 
 async function uploadPDF() {
-  if (!selectedPDFFile) {
-    showNotification('Please select a PDF file', 'error');
+  if (selectedPDFFiles.length === 0) {
+    showNotification('Please select at least one PDF file', 'error');
     return;
   }
 
@@ -1074,73 +1081,90 @@ async function uploadPDF() {
       }
     }
 
-    const titleEl = document.getElementById('pdfTitle');
-    const title = (titleEl ? titleEl.value : '') || selectedPDFFile.name.replace(/\.pdf$/i, '');
-
     const chunkingStrategyEl = document.getElementById('pdfChunkingStrategy');
     const chunkingStrategy = chunkingStrategyEl ? chunkingStrategyEl.value : 'fixed';
 
     const chunkSizeEl = document.getElementById('pdfChunkSize');
     const chunkSize = chunkSizeEl ? parseInt(chunkSizeEl.value) || 500 : 500;
 
-    addPDFLog('Starting PDF upload...');
-    if (statusEl) statusEl.textContent = 'Uploading PDF file...';
-    if (percentageEl) percentageEl.textContent = '10%';
-    if (progressBar) progressBar.style.width = '10%';
+    const totalFiles = selectedPDFFiles.length;
+    let totalExcerpts = 0;
 
-    // Call IPC to upload PDF
-    const result = await window.api.pdf.upload({
-      filePath: selectedPDFFile.path,
-      collectionId,
-      title,
-      chunkingStrategy,
-      chunkSize
-    });
+    // Upload each PDF file
+    for (let i = 0; i < totalFiles; i++) {
+      const file = selectedPDFFiles[i];
+      const currentFileNum = i + 1;
 
-    if (result.success) {
-      if (statusEl) statusEl.textContent = 'PDF processed successfully!';
-      if (percentageEl) percentageEl.textContent = '100%';
-      if (progressBar) progressBar.style.width = '100%';
+      // Update progress for this file
+      addPDFLog(`Uploading file ${currentFileNum} of ${totalFiles}: ${file.name}`);
+      if (statusEl) statusEl.textContent = `Uploading ${currentFileNum} of ${totalFiles} PDFs...`;
 
-      addPDFLog(`✓ PDF uploaded: ${result.metadata.title}`, 'success');
-      addPDFLog(`✓ Created ${result.excerpts} excerpts`, 'success');
-      addPDFLog(`✓ Chunking strategy: ${chunkingStrategy}`, 'info');
+      // Calculate overall progress percentage
+      const baseProgress = (i / totalFiles) * 90 + 10; // 10% reserved for collection creation, 90% for uploads
+      if (percentageEl) percentageEl.textContent = `${Math.round(baseProgress)}%`;
+      if (progressBar) progressBar.style.width = `${baseProgress}%`;
 
-      showNotification(`PDF processed: ${result.excerpts} excerpts created`, 'success');
+      // Get title - use provided title only for single file, otherwise use filename
+      const titleEl = document.getElementById('pdfTitle');
+      const title = (totalFiles === 1 && titleEl && titleEl.value)
+        ? titleEl.value
+        : file.name.replace(/\.pdf$/i, '');
 
-      // Reset form
-      setTimeout(() => {
-        selectedPDFFile = null;
+      // Call IPC to upload PDF
+      const result = await window.api.pdf.upload({
+        filePath: file.path,
+        collectionId,
+        title,
+        chunkingStrategy,
+        chunkSize
+      });
 
-        const pdfFileInput = document.getElementById('pdfFileInput');
-        if (pdfFileInput) pdfFileInput.value = '';
-
-        const pdfFileName = document.getElementById('pdfFileName');
-        if (pdfFileName) pdfFileName.textContent = '';
-
-        const pdfTitle = document.getElementById('pdfTitle');
-        if (pdfTitle) pdfTitle.value = '';
-
-        const pdfUploadProgress = document.getElementById('pdfUploadProgress');
-        if (pdfUploadProgress) pdfUploadProgress.style.display = 'none';
-
-        const uploadPDFBtn = document.getElementById('uploadPDFBtn');
-        if (uploadPDFBtn) uploadPDFBtn.disabled = false;
-
-        if (logEl) logEl.innerHTML = '';
-
-        // Reload PDF list
-        loadPDFDocuments(collectionId);
-
-        // CRITICAL FIX: Refresh folder browser tree to show new collection
-        if (window.folderBrowser && typeof window.folderBrowser.loadFolderTree === 'function') {
-          window.folderBrowser.loadFolderTree();
-        }
-      }, 2000);
-
-    } else {
-      throw new Error(result.error || 'Upload failed');
+      if (result.success) {
+        addPDFLog(`✓ ${file.name}: ${result.excerpts} excerpts created`, 'success');
+        totalExcerpts += result.excerpts;
+      } else {
+        addPDFLog(`✗ ${file.name}: ${result.error || 'Upload failed'}`, 'error');
+        // Continue with other files even if one fails
+      }
     }
+
+    // All uploads complete
+    if (statusEl) statusEl.textContent = `All PDFs processed successfully!`;
+    if (percentageEl) percentageEl.textContent = '100%';
+    if (progressBar) progressBar.style.width = '100%';
+
+    addPDFLog(`✓ Completed: ${totalFiles} PDFs, ${totalExcerpts} total excerpts`, 'success');
+    showNotification(`${totalFiles} PDFs processed: ${totalExcerpts} total excerpts created`, 'success');
+
+    // Reset form
+    setTimeout(() => {
+      selectedPDFFiles = [];
+
+      const pdfFileInput = document.getElementById('pdfFileInput');
+      if (pdfFileInput) pdfFileInput.value = '';
+
+      const pdfFileName = document.getElementById('pdfFileName');
+      if (pdfFileName) pdfFileName.textContent = '';
+
+      const pdfTitle = document.getElementById('pdfTitle');
+      if (pdfTitle) pdfTitle.value = '';
+
+      const pdfUploadProgress = document.getElementById('pdfUploadProgress');
+      if (pdfUploadProgress) pdfUploadProgress.style.display = 'none';
+
+      const uploadPDFBtn = document.getElementById('uploadPDFBtn');
+      if (uploadPDFBtn) uploadPDFBtn.disabled = false;
+
+      if (logEl) logEl.innerHTML = '';
+
+      // Reload PDF list
+      loadPDFDocuments(collectionId);
+
+      // CRITICAL FIX: Refresh folder browser tree to show new collection
+      if (window.folderBrowser && typeof window.folderBrowser.loadFolderTree === 'function') {
+        window.folderBrowser.loadFolderTree();
+      }
+    }, 2000);
 
   } catch (error) {
     console.error('PDF upload error:', error);
@@ -2866,8 +2890,9 @@ class AIAnalysisController {
 
   async startRating() {
     const projectName = document.getElementById('project-name')?.value;
+    const ratingVariable = document.getElementById('rating-variable')?.value;
     const researchIntent = document.getElementById('research-intent')?.value;
-    const ratingScale = document.querySelector('input[name="rating-scale"]:checked')?.value;
+    const ratingScale = document.getElementById('rating-scale-dropdown')?.value;
     const batchSize = parseInt(document.getElementById('batch-size')?.value || '50');
     const concurrentRequests = parseInt(document.getElementById('concurrent-requests')?.value || '5');
     const retryDelay = parseFloat(document.getElementById('retry-delay')?.value || '2');
@@ -2936,6 +2961,7 @@ class AIAnalysisController {
     const config = {
       collectionId: this.currentCollection,
       projectName,
+      ratingVariable,
       researchIntent,
       ratingScale,
       includeChunks,

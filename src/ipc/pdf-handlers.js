@@ -191,6 +191,220 @@ function registerPDFHandlers(getDatabase) {
       };
     }
   });
+
+  // ============================================
+  // RATING VARIABLES IPC HANDLERS
+  // ============================================
+
+  ipcMain.handle('pdf:createRatingVariable', async (event, variableData) => {
+    try {
+      const db = require('../database/db');
+      const variableId = await db.createRatingVariable(variableData);
+
+      return {
+        success: true,
+        variableId
+      };
+
+    } catch (error) {
+      console.error('Create rating variable error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
+  ipcMain.handle('pdf:getRatingVariables', async (event, collectionId) => {
+    try {
+      const db = require('../database/db');
+      const variables = await db.getRatingVariables(collectionId);
+
+      return {
+        success: true,
+        data: variables
+      };
+
+    } catch (error) {
+      console.error('Get rating variables error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
+  ipcMain.handle('pdf:getRatingVariable', async (event, variableId) => {
+    try {
+      const db = require('../database/db');
+      const variable = await db.getRatingVariable(variableId);
+
+      return {
+        success: true,
+        data: variable
+      };
+
+    } catch (error) {
+      console.error('Get rating variable error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
+  ipcMain.handle('pdf:updateRatingVariable', async (event, { variableId, updates }) => {
+    try {
+      const db = require('../database/db');
+      await db.updateRatingVariable(variableId, updates);
+
+      return {
+        success: true
+      };
+
+    } catch (error) {
+      console.error('Update rating variable error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
+  ipcMain.handle('pdf:deleteRatingVariable', async (event, variableId) => {
+    try {
+      const db = require('../database/db');
+      await db.deleteRatingVariable(variableId);
+
+      return {
+        success: true
+      };
+
+    } catch (error) {
+      console.error('Delete rating variable error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
+  // ============================================
+  // EXCERPT RATINGS IPC HANDLERS
+  // ============================================
+
+  ipcMain.handle('pdf:saveExcerptRating', async (event, ratingData) => {
+    try {
+      const db = require('../database/db');
+      const ratingId = await db.saveExcerptRating(ratingData);
+
+      return {
+        success: true,
+        ratingId
+      };
+
+    } catch (error) {
+      console.error('Save excerpt rating error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
+  ipcMain.handle('pdf:getExcerptRatings', async (event, excerptId) => {
+    try {
+      const db = require('../database/db');
+      const ratings = await db.getExcerptRatings(excerptId);
+
+      return {
+        success: true,
+        data: ratings
+      };
+
+    } catch (error) {
+      console.error('Get excerpt ratings error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
+  ipcMain.handle('pdf:getExcerptRating', async (event, { excerptId, variableId }) => {
+    try {
+      const db = require('../database/db');
+      const rating = await db.getExcerptRating(excerptId, variableId);
+
+      return {
+        success: true,
+        data: rating
+      };
+
+    } catch (error) {
+      console.error('Get excerpt rating error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
+  ipcMain.handle('pdf:getRatingsByVariable', async (event, variableId) => {
+    try {
+      const db = require('../database/db');
+      const ratings = await db.getRatingsByVariable(variableId);
+
+      return {
+        success: true,
+        data: ratings
+      };
+
+    } catch (error) {
+      console.error('Get ratings by variable error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
+  ipcMain.handle('pdf:deleteExcerptRating', async (event, { excerptId, variableId }) => {
+    try {
+      const db = require('../database/db');
+      await db.deleteExcerptRating(excerptId, variableId);
+
+      return {
+        success: true
+      };
+
+    } catch (error) {
+      console.error('Delete excerpt rating error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
+  ipcMain.handle('pdf:getVariableRatingStats', async (event, variableId) => {
+    try {
+      const db = require('../database/db');
+      const stats = await db.getVariableRatingStats(variableId);
+
+      return {
+        success: true,
+        data: stats
+      };
+
+    } catch (error) {
+      console.error('Get variable rating stats error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
 }
 
 module.exports = { registerPDFHandlers };

@@ -5,6 +5,9 @@
 
 /* Hub Header */
 .hub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 2rem 2.5rem 1.75rem;
   border-bottom: 1px solid #2d3748;
   background: linear-gradient(to bottom, #1a202c, #2d3748);
@@ -25,6 +28,76 @@
   font-weight: 400;
 }
 
+/* View Toggle */
+.view-toggle-container {
+  display: flex;
+  gap: 0.5rem;
+  background: #1a202c;
+  padding: 0.375rem;
+  border-radius: 10px;
+  border: 1px solid #374151;
+}
+
+.view-toggle-btn {
+  padding: 0.625rem 0.875rem;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.view-toggle-btn:hover {
+  background: #2d3748;
+  color: #e2e8f0;
+}
+
+.view-toggle-btn.active {
+  background: #3b82f6;
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+
+.view-toggle-btn svg {
+  display: block;
+}
+
+/* Create Merge Button */
+.btn-create-merge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(139, 92, 246, 0.3);
+}
+
+.btn-create-merge:hover {
+  background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(139, 92, 246, 0.4);
+}
+
+.btn-create-merge:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(139, 92, 246, 0.3);
+}
+
+.btn-create-merge svg {
+  display: block;
+}
+
 /* Collection Grid */
 .collection-grid {
   display: grid;
@@ -36,21 +109,39 @@
 
 /* Collection Card */
 .collection-card {
-  background: #2d3748;
-  border: 1px solid #4a5568;
-  border-radius: 16px;
+  background: linear-gradient(135deg, #2d3748 0%, #1f2937 100%);
+  border: 1px solid #374151;
+  border-radius: 18px;
   overflow: hidden;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.2);
+  position: relative;
+  backdrop-filter: blur(10px);
+}
+
+.collection-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--card-accent-color, #3b82f6), transparent);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+
+.collection-card:hover::before {
+  opacity: 1;
 }
 
 .collection-card:hover {
-  border-color: #3b82f6;
-  box-shadow: 0 12px 24px rgba(59, 130, 246, 0.25), 0 8px 16px rgba(0, 0, 0, 0.3);
-  transform: translateY(-4px);
+  border-color: var(--card-accent-color, #3b82f6);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.4), 0 8px 16px var(--card-accent-shadow, rgba(59, 130, 246, 0.2));
+  transform: translateY(-6px) scale(1.02);
 }
 
 /* Card Header */
@@ -58,14 +149,38 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1.5rem 1.5rem 0.875rem;
-  background: linear-gradient(to bottom, #374151, #2d3748);
+  padding: 1.25rem 1.5rem;
+  background: linear-gradient(135deg, rgba(55, 65, 81, 0.6) 0%, rgba(31, 41, 55, 0.4) 100%);
+  border-bottom: 1px solid rgba(75, 85, 99, 0.3);
 }
 
-.card-genre-icon {
-  font-size: 2.25rem;
-  line-height: 1;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.05));
+.card-genre-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--card-accent-color, #3b82f6);
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px var(--card-accent-shadow, rgba(59, 130, 246, 0.3));
+}
+
+.card-type-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.75rem;
+  background: rgba(107, 114, 128, 0.2);
+  color: #9ca3af;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 6px;
+  border: 1px solid rgba(107, 114, 128, 0.3);
 }
 
 .card-menu-btn {
@@ -92,8 +207,9 @@
 
 /* Card Body */
 .card-body {
-  padding: 0 1.5rem 1.25rem;
+  padding: 1.5rem 1.5rem 1.25rem;
   flex: 1;
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .card-title {
@@ -163,37 +279,7 @@
   }
 }
 
-/* Card Footer */
-.card-footer {
-  padding: 0 1.5rem 1.5rem;
-  display: flex;
-  gap: 0.5rem;
-}
-
-.card-view-btn {
-  flex: 1;
-  padding: 0.75rem 1.25rem;
-  background: linear-gradient(to bottom, #3b82f6, #2563eb);
-  color: #ffffff;
-  border: none;
-  border-radius: 10px;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.2), 0 1px 3px rgba(59, 130, 246, 0.1);
-}
-
-.card-view-btn:hover {
-  background: linear-gradient(to bottom, #2563eb, #1d4ed8);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3), 0 2px 6px rgba(59, 130, 246, 0.2);
-}
-
-.card-view-btn:active {
-  transform: translateY(0px);
-  box-shadow: 0 1px 3px rgba(59, 130, 246, 0.2);
-}
+/* Card Footer - Removed, entire card is now clickable */
 
 /* Empty State */
 .hub-empty-state {
@@ -376,3 +462,33 @@
     color: #9ca3af;
   }
 }
+
+/* Advanced Status-Based Design System */
+
+/* Genre-Based Accent Colors (Primary Theme) */
+.genre-youtube {
+  --card-accent-color: #3b82f6;
+  --card-accent-color-hover: #2563eb;
+  --card-accent-shadow: rgba(59, 130, 246, 0.3);
+}
+
+.genre-pdf {
+  --card-accent-color: #10b981;
+  --card-accent-color-hover: #059669;
+  --card-accent-shadow: rgba(16, 185, 129, 0.3);
+}
+
+/* Type-Based Left Border Colors */
+.type-base {
+  border-left: 4px solid #6b7280;
+}
+
+.type-merged {
+  border-left: 4px solid #8b5cf6;
+}
+
+.type-derived {
+  border-left: 4px solid #14b8a6;
+}
+
+/* Genre-specific badge styling is handled by CSS variables */

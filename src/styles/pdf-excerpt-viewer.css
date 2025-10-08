@@ -450,3 +450,230 @@
     background: rgba(0, 0, 0, 0.85);
   }
 }
+
+/* ========== Qualitative Coding Dashboard Styles ========== */
+
+/* Dashboard Container - Two Column Layout */
+.rating-dashboard {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 16px;
+}
+
+/* Individual Column Styling */
+.rating-column {
+  background: var(--bg-secondary, #0f172a);
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rating-column h5 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color, #334155);
+}
+
+/* "Your Analysis" column specific styling */
+.rating-column.your-analysis h5 {
+  color: var(--accent-primary, #3b82f6);
+}
+
+/* "AI Co-Pilot Analysis" column specific styling */
+.rating-column.ai-analysis {
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.rating-column.ai-analysis h5 {
+  color: #10b981; /* Green for AI */
+}
+
+/* Rating Field Container */
+.rating-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rating-field label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Variable Display */
+.variable-display {
+  padding: 10px 14px;
+  background: var(--bg-primary, #1e293b);
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 6px;
+  color: var(--text-primary, #f1f5f9);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Score Buttons Container */
+.score-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Score Button Styling */
+.score-btn {
+  flex: 1;
+  min-width: 45px;
+  padding: 12px 8px;
+  background: var(--bg-primary, #1e293b);
+  border: 2px solid var(--border-color, #334155);
+  border-radius: 6px;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.score-btn:hover {
+  background: var(--bg-hover, #334155);
+  border-color: var(--accent-primary, #3b82f6);
+  color: var(--text-primary, #f1f5f9);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+}
+
+.score-btn.selected {
+  background: var(--accent-primary, #3b82f6);
+  border-color: var(--accent-primary, #3b82f6);
+  color: white;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+}
+
+.score-btn:active {
+  transform: translateY(0);
+}
+
+/* Notes/Reasoning Textarea */
+.detail-notes {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px;
+  background: var(--bg-primary, #1e293b);
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 6px;
+  color: var(--text-primary, #f1f5f9);
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.6;
+  resize: vertical;
+  transition: all 0.2s;
+}
+
+.detail-notes:focus {
+  outline: none;
+  border-color: var(--accent-primary, #3b82f6);
+  background: rgba(30, 41, 59, 0.8);
+}
+
+.detail-notes::placeholder {
+  color: var(--text-tertiary, #64748b);
+}
+
+/* AI Analysis Display Fields (Read-only) */
+.rating-column.ai-analysis .variable-display,
+.rating-column.ai-analysis .detail-notes {
+  background: rgba(30, 41, 59, 0.4);
+  cursor: default;
+}
+
+/* AI Reasoning Display */
+.ai-reasoning {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  overflow-y: auto;
+  max-height: 300px;
+}
+
+/* AI Score Display */
+.score-display {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* AI Co-Pilot Display Container */
+.ai-copilot-display {
+  width: 100%;
+  overflow: hidden;
+}
+
+/* Save/Submit Button */
+.save-notes-btn {
+  padding: 12px 24px;
+  background: var(--accent-primary, #3b82f6);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  align-self: flex-start;
+}
+
+.save-notes-btn:hover {
+  background: var(--accent-hover, #2563eb);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  transform: translateY(-1px);
+}
+
+.save-notes-btn:active {
+  transform: translateY(0);
+}
+
+/* Detail Section Header */
+.detail-section h4 {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--border-color, #334155);
+}
+
+/* Responsive Design for Dashboard */
+@media (max-width: 1024px) {
+  .rating-dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .rating-column.ai-analysis {
+    order: 2;
+  }
+}
+
+@media (max-width: 768px) {
+  .score-btn {
+    min-width: 40px;
+    padding: 10px 6px;
+    font-size: 14px;
+  }
+
+  .rating-column {
+    padding: 16px;
+  }
+
+  .detail-notes {
+    min-height: 100px;
+  }
+}

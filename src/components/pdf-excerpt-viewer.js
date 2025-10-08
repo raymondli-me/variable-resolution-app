@@ -14,7 +14,32 @@ class PDFExcerptViewer {
     this.renderer = null;
     this.highlighter = null;
     this.activeExcerptId = null;
+    this.currentExcerpt = null;
+
+    // Layout state
+    this.layoutState = this.loadLayoutState();
+    this.isResizing = false;
+    this.currentResizer = null;
+
+    // Text size state
+    this.detailPanelFontSize = this.loadTextSize();
+
+    // Rating variables state
+    this.availableVariables = [];
+    this.selectedVariable = null;
+    this.selectedDepth = 'brief';
+    this.autoSaveTimeout = null;
+
+    // AI rating cache: Map<"excerptId_variableId", rating>
+    this.aiRatingCache = new Map();
+
+    // Speech recognition
+    this.recognition = null;
+    this.isRecording = false;
+
     this.createModal();
+    this.setupResizers();
+    this.setupSpeechRecognition();
   }
 
   createModal() {
@@ -39,7 +64,7 @@ class PDFExcerptViewer {
         <!-- Main Content: Side-by-side -->
         <div class="pdf-viewer-main">
           <!-- LEFT: PDF Viewer Panel (60%) -->
-          <div class="pdf-viewer-panel">
+          <div class="pdf-viewer-panel" id="pdfViewerPanel">
             <div id="pdfViewerContainer" class="pdf-viewer-container">
               <div class="pdf-loading" id="pdfLoadingState">Loading PDF...</div>
             </div>
@@ -48,30 +73,137 @@ class PDFExcerptViewer {
               <span>Page <span id="pdfCurrentPage">1</span> / <span id="pdfTotalPages">1</span></span>
               <button id="pdfNextPage">Next ▶</button>
               <span style="margin-left: 16px;">|</span>
-              <button id="pdfZoomOut">-</button>
-              <span id="pdfZoomLevel">100%</span>
-              <button id="pdfZoomIn">+</button>
+              <button id="pdfZoomOut" style="min-width: 32px;">-</button>
+              <span id="pdfZoomLevel" style="display: inline-block; min-width: 50px; text-align: center;">100%</span>
+              <button id="pdfZoomIn" style="min-width: 32px;">+</button>
             </div>
           </div>
 
-          <!-- RIGHT: Excerpt List Panel (40%) -->
-          <div class="excerpt-list-panel">
-            <!-- Search Bar -->
-            <div class="excerpt-search">
-              <input type="text" id="excerptSearch" placeholder="Search excerpts..." oninput="window.pdfExcerptViewer.handleSearch(this.value)" />
-              <span id="searchResultCount" style="color: #808080; font-size: 13px; margin-left: 8px;"></span>
+          <!-- Horizontal Resizer -->
+          <div class="panel-resizer horizontal-resizer" id="horizontalResizer"></div>
+
+          <!-- RIGHT: Excerpt Detail & Analysis Panel (40%) -->
+        <div id="excerptDetailPanel" class="excerpt-detail-panel">
+          <div class="detail-panel-header">
+            <h3>Qualitative Coding Dashboard</h3>
+            <div class="text-size-controls">
+              <button class="text-size-btn text-size-small" onclick="window.pdfExcerptViewer.decreaseTextSize()" title="Decrease text size">a</button>
+              <button class="text-size-btn text-size-large" onclick="window.pdfExcerptViewer.increaseTextSize()" title="Increase text size">A</button>
+            </div>
+            <button onclick="window.pdfExcerptViewer.hideDetailPanel()">✕</button>
+          </div>
+
+          <div class="detail-panel-content" style="overflow-y: auto; flex: 1;">
+            <!-- Excerpt Text -->
+            <div class="detail-section">
+              <h4>Excerpt Text</h4>
+              <div id="detailExcerptText" class="detail-excerpt-text" style="padding: 12px; background: #111827; border-radius: 4px; line-height: 1.6; color: #e5e7eb;"></div>
             </div>
 
-            <!-- Excerpts List -->
-            <div class="excerpt-list" id="excerptsList">
-              <div class="loading">Loading excerpts...</div>
+            <!-- Variable Info Section -->
+            <div class="detail-section" id="variableInfoSection" style="display: none;">
+              <h4>Variable Information</h4>
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                <label style="color: #9ca3af; font-weight: 600;">Variable:</label>
+                <select id="variableSelector" onchange="window.pdfExcerptViewer.onVariableChanged()" style="flex: 1; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #e5e7eb; border-radius: 4px; font-size: 14px;">
+                  <option value="">Loading variables...</option>
+                </select>
+              </div>
+              <div id="variableInfo" style="padding: 12px; background: #111827; border-radius: 4px; font-size: 13px; color: #9ca3af; display: none;">
+                <div id="variableDefinition" style="margin-bottom: 12px; line-height: 1.6; color: #d1d5db;"></div>
+                <div style="display: flex; gap: 24px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid #374151; margin-bottom: 12px;">
+                  <div><span style="color: #6b7280; font-weight: 600;">Scale:</span> <span id="variableScaleType" style="color: #e5e7eb;"></span></div>
+                  <div><span style="color: #6b7280; font-weight: 600;">Depth:</span> <span id="variableReasoningDepth" style="color: #e5e7eb;"></span></div>
+                </div>
+                <button id="toggleAnchorsBtn" onclick="window.pdfExcerptViewer.toggleAnchors()" style="padding: 6px 12px; background: #374151; border: none; border-radius: 4px; cursor: pointer; color: #e5e7eb; font-size: 12px; margin-bottom: 8px;">
+                  <span id="anchorsToggleIcon">▶</span> Show Anchor Definitions
+                </button>
+                <div id="variableAnchors" style="display: none; padding: 12px; background: #0f1419; border-radius: 4px; border: 1px solid #374151;">
+                  <!-- Dynamically populated -->
+                </div>
+              </div>
             </div>
 
-            <!-- Pagination -->
-            <div class="excerpt-pagination">
-              <button id="excerptPrevBtn" onclick="window.pdfExcerptViewer.prevPage()">◀</button>
-              <span id="excerptPageInfo">Page 1</span>
-              <button id="excerptNextBtn" onclick="window.pdfExcerptViewer.nextPage()">▶</button>
+            <!-- Rating Dashboard (Two Columns) -->
+            <div class="detail-section">
+              <div class="rating-dashboard">
+                <!-- Your Analysis Column -->
+                <div class="rating-column your-analysis">
+                  <h5>👤 Your Analysis</h5>
+                  <div class="rating-field">
+                    <label>Variable:</label>
+                    <div id="humanVariable" class="variable-display">-</div>
+                  </div>
+                  <div class="rating-field" id="scoreField">
+                    <label>Score:</label>
+                    <div class="score-buttons" id="humanScoreButtons">
+                      <!-- Dynamically generated based on variable scale type -->
+                    </div>
+                  </div>
+                  <div class="rating-field">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                      <span>Reasoning / Notes:</span>
+                      <button id="speechToTextBtn" style="padding: 4px 8px; background: #374151; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;" title="Speech to Text">🎤</button>
+                    </label>
+                    <textarea id="detailNotes" class="detail-notes" placeholder="Enter your reasoning and notes..." style="min-height: 150px;"></textarea>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px; color: #6b7280; font-size: 12px; margin-top: 8px;">
+                    <span id="autoSaveStatus">Auto-save enabled</span>
+                  </div>
+                </div>
+
+                <!-- AI Co-Pilot Analysis Column -->
+                <div class="rating-column ai-analysis">
+                  <h5>🤖 AI Co-Pilot Analysis</h5>
+                  <div id="aiCopilotDisplay" class="ai-copilot-display">
+                    <div class="ai-copilot-loading" id="aiCopilotLoading" style="display: none; text-align: center; padding: 40px; color: #10b981;">
+                      <span style="font-size: 24px;">🤖</span>
+                      <div style="margin-top: 8px;">AI is analyzing...</div>
+                    </div>
+                    <div class="ai-copilot-content" id="aiCopilotContent" style="display: none;">
+                      <div class="rating-field">
+                        <label>Variable:</label>
+                        <div id="aiVariable" class="variable-display">-</div>
+                      </div>
+                      <div class="rating-field">
+                        <label>Score:</label>
+                        <div id="aiScore" class="score-display" style="font-size: 18px; font-weight: 600; color: #10b981;">N/A</div>
+                      </div>
+                      <div class="rating-field">
+                        <label>Reasoning / Notes:</label>
+                        <div id="aiReasoning" class="ai-reasoning" style="min-height: 150px; padding: 12px; background: rgba(30, 41, 59, 0.4); border-radius: 4px; line-height: 1.6; color: #d1d5db;">N/A</div>
+                      </div>
+                    </div>
+                    <div class="ai-copilot-error" id="aiCopilotError" style="display: none; color: #ef4444; padding: 20px; text-align: center;">
+                      <span id="aiErrorMessage">Error loading AI analysis</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Excerpt List Section (at bottom of rating panel) -->
+            <div class="detail-section" style="flex: 1; min-height: 200px; display: flex; flex-direction: column;">
+              <h4>Excerpts</h4>
+              <div class="excerpt-list-panel" id="excerptListPanel" style="flex: 1; margin: 0; border: none; background: transparent;">
+                <!-- Search Bar -->
+                <div class="excerpt-search" style="padding: 8px; background: #111827; border-radius: 4px;">
+                  <input type="text" id="excerptSearch" placeholder="Search excerpts..." oninput="window.pdfExcerptViewer.handleSearch(this.value)" style="width: 100%; padding: 6px; background: #1f2937; border: 1px solid #374151; color: #e5e7eb; border-radius: 4px;" />
+                  <span id="searchResultCount" style="color: #808080; font-size: 12px; margin-top: 4px; display: block;"></span>
+                </div>
+
+                <!-- Excerpts List -->
+                <div class="excerpt-list" id="excerptsList" style="flex: 1;">
+                  <div class="loading">Loading excerpts...</div>
+                </div>
+
+                <!-- Pagination -->
+                <div class="excerpt-pagination" style="padding: 8px; background: #111827;">
+                  <button id="excerptPrevBtn" onclick="window.pdfExcerptViewer.prevPage()">◀</button>
+                  <span id="excerptPageInfo">Page 1</span>
+                  <button id="excerptNextBtn" onclick="window.pdfExcerptViewer.nextPage()">▶</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -87,11 +219,16 @@ class PDFExcerptViewer {
     document.body.insertAdjacentHTML('beforeend', modalHtml);
   }
 
-  async show(collectionId) {
+  async show(collectionId, pdfId = null) {
     try {
+      console.log('[PDFExcerptViewer] show() called with collectionId:', collectionId, 'pdfId:', pdfId);
+
       // Load collection metadata
       const collection = await window.api.database.getCollection(collectionId);
+      console.log('[PDFExcerptViewer] getCollection result:', collection);
+
       if (!collection) {
+        console.error('[PDFExcerptViewer] Failed to load collection - getCollection returned null/undefined for collectionId:', collectionId);
         this.showNotification('Failed to load collection', 'error');
         return;
       }
@@ -105,7 +242,17 @@ class PDFExcerptViewer {
         return;
       }
 
-      const pdfs = pdfsResult.pdfs;
+      let pdfs = pdfsResult.pdfs;
+
+      // Filter to specific PDF if pdfId is provided
+      if (pdfId) {
+        pdfs = pdfs.filter(pdf => pdf.id === pdfId);
+        if (pdfs.length === 0) {
+          this.showNotification('PDF not found', 'error');
+          return;
+        }
+      }
+
       this.currentCollection.pdfs = pdfs;
 
       // Update header
@@ -128,9 +275,33 @@ class PDFExcerptViewer {
       // Load first PDF with visual viewer
       await this.switchPDF(pdfs[0].id);
 
+      // Load rating variables for this collection
+      await this.loadVariables();
+
+      // Setup auto-save on textarea
+      setTimeout(() => {
+        const textarea = document.querySelector('#detailNotes');
+        if (textarea) {
+          textarea.addEventListener('input', () => this.triggerAutoSave());
+        }
+
+        // Trigger auto-save when score buttons are clicked
+        const humanScoreButtons = document.querySelector('#humanScoreButtons');
+        if (humanScoreButtons) {
+          humanScoreButtons.addEventListener('click', (e) => {
+            if (e.target.classList.contains('score-btn')) {
+              this.triggerAutoSave();
+            }
+          });
+        }
+      }, 500);
+
       // Show modal
       const modal = this.getElement('pdfExcerptViewerModal');
       if (modal) modal.style.display = 'flex';
+
+      // Apply saved layout state
+      this.applyLayoutState();
 
       // Close on Escape key
       this.escapeHandler = (e) => {
@@ -258,6 +429,10 @@ class PDFExcerptViewer {
 
       console.log('[PDFExcerptViewer] PDF loaded successfully');
 
+      // Set initial zoom to 200%
+      await this.renderer.setZoom(2.0);
+      this.updateZoom();
+
       // Load highlights if highlighter exists
       if (this.highlighter && this.allExcerpts.length > 0) {
         this.highlighter.loadExcerpts(this.allExcerpts);
@@ -265,6 +440,9 @@ class PDFExcerptViewer {
 
       // Setup controls
       this.setupControls();
+
+      // Setup bi-directional linking: listen for highlight clicks
+      this.setupHighlightClickListener();
 
     } catch (error) {
       console.error('[PDFExcerptViewer] Error initializing PDF viewer:', error);
@@ -309,7 +487,7 @@ class PDFExcerptViewer {
       zoomInBtn.onclick = () => {
         if (this.renderer) {
           const scale = this.renderer.getScale() * 1.25;
-          this.renderer.setZoom(Math.min(scale, 2.0));
+          this.renderer.setZoom(Math.min(scale, 4.0));
           this.updateZoom();
         }
       };
@@ -351,6 +529,97 @@ class PDFExcerptViewer {
     }
   }
 
+  /**
+   * Setup listener for highlight clicks (bi-directional linking)
+   */
+  setupHighlightClickListener() {
+    // Remove existing listeners if any
+    if (this.highlightClickHandler) {
+      document.removeEventListener('highlight:clicked', this.highlightClickHandler);
+    }
+    if (this.highlightClearHandler) {
+      document.removeEventListener('highlight:cleared', this.highlightClearHandler);
+    }
+
+    // Create click handler
+    this.highlightClickHandler = (event) => {
+      const excerptId = event.detail.excerptId;
+      console.log('[PDFExcerptViewer] Highlight clicked, scrolling to excerpt:', excerptId);
+
+      // Find the excerpt in our list
+      const excerpt = this.allExcerpts.find(e => e.id === excerptId);
+      if (!excerpt) {
+        console.warn('[PDFExcerptViewer] Excerpt not found:', excerptId);
+        return;
+      }
+
+      // Calculate which page of the excerpt list this excerpt is on
+      const excerptIndex = this.filteredExcerpts.findIndex(e => e.id === excerptId);
+      if (excerptIndex === -1) {
+        console.warn('[PDFExcerptViewer] Excerpt not in filtered list:', excerptId);
+        return;
+      }
+
+      // Navigate to the correct page
+      const targetPage = Math.floor(excerptIndex / this.excerptsPerPage) + 1;
+      if (targetPage !== this.currentPage) {
+        this.currentPage = targetPage;
+        this.renderExcerpts();
+      }
+
+      // Set as active and scroll into view
+      this.activeExcerptId = excerptId;
+
+      // Update highlighter to show active state (green highlight)
+      if (this.highlighter) {
+        this.highlighter.setActiveExcerpt(excerptId);
+      }
+
+      // Show detail panel with excerpt data
+      this.showDetailPanel(excerpt);
+
+      // Wait a bit for render to complete, then scroll
+      setTimeout(() => {
+        // Remove active class from all items first
+        document.querySelectorAll('.excerpt-list-item').forEach(el => {
+          el.classList.remove('active');
+        });
+
+        const element = document.querySelector(`[data-excerpt-id="${excerptId}"]`);
+        if (element) {
+          element.classList.add('active');
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+    };
+
+    // Create clear handler
+    this.highlightClearHandler = () => {
+      console.log('[PDFExcerptViewer] Highlight cleared');
+
+      // Clear active state
+      this.activeExcerptId = null;
+      this.currentExcerpt = null;
+
+      // Remove active class from all excerpt items
+      document.querySelectorAll('.excerpt-list-item').forEach(el => {
+        el.classList.remove('active');
+      });
+
+      // Clear active highlight in PDF if highlighter exists
+      if (this.highlighter) {
+        this.highlighter.clearActiveExcerpt();
+      }
+
+      // Hide detail panel (currently a no-op but kept for future compatibility)
+      this.hideDetailPanel();
+    };
+
+    // Add listeners
+    document.addEventListener('highlight:clicked', this.highlightClickHandler);
+    document.addEventListener('highlight:cleared', this.highlightClearHandler);
+  }
+
   renderExcerpts() {
     const excerptsList = this.getElement('excerptsList');
     if (!excerptsList) return;
@@ -383,6 +652,9 @@ class PDFExcerptViewer {
     }).join('');
 
     this.updatePagination();
+
+    // Apply current text size to newly rendered items
+    this.applyTextSize();
   }
 
   onExcerptClick(excerptId) {
@@ -392,6 +664,7 @@ class PDFExcerptViewer {
 
     // Set as active
     this.activeExcerptId = excerptId;
+    this.currentExcerpt = excerpt;
 
     // Update visual state in list
     document.querySelectorAll('.excerpt-list-item').forEach(el => {
@@ -411,6 +684,221 @@ class PDFExcerptViewer {
     if (this.highlighter) {
       this.highlighter.setActiveExcerpt(excerptId);
     }
+
+    // Show and populate detail panel
+    this.showDetailPanel(excerpt);
+
+    // Trigger AI Co-Pilot rating in parallel (if API is available)
+    this.triggerAICopilotRating(excerpt);
+  }
+
+  /**
+   * Trigger AI Co-Pilot rating for an excerpt
+   * @param {Object} excerpt - The excerpt to rate
+   */
+  async triggerAICopilotRating(excerpt) {
+    // Check if API is available
+    if (!window.api?.ai?.rateSingleExcerpt) {
+      console.warn('[PDFExcerptViewer] AI rating API not available');
+      return;
+    }
+
+    // Check if a variable is selected
+    if (!this.selectedVariable) {
+      this.showAICopilotError('No variable selected. Please select a variable to rate.');
+      return;
+    }
+
+    // Check cache first
+    const cacheKey = `${excerpt.id}_${this.selectedVariable.id}`;
+    if (this.aiRatingCache.has(cacheKey)) {
+      const cachedRating = this.aiRatingCache.get(cacheKey);
+      this.updateAICopilotDisplay(cachedRating);
+      console.log('[PDFExcerptViewer] Using cached AI rating:', cachedRating);
+      return;
+    }
+
+    // Show loading state
+    this.showAICopilotLoading();
+
+    try {
+      // Build research intent from selected variable
+      const researchIntent = `Rate this excerpt on the variable "${this.selectedVariable.label}". ${this.selectedVariable.definition || ''}`;
+
+      // Build PDF context
+      const pdfContext = {
+        title: this.currentPDF?.title || 'PDF Document',
+        page_number: excerpt.page_number,
+        variable: {
+          label: this.selectedVariable.label,
+          definition: this.selectedVariable.definition,
+          scale_type: this.selectedVariable.scale_type,
+          anchors: this.selectedVariable.anchors,
+          reasoning_depth: this.selectedVariable.reasoning_depth
+        }
+      };
+
+      // Call AI rating API
+      const result = await window.api.ai.rateSingleExcerpt({
+        excerptText: excerpt.text_content,
+        pdfContext: pdfContext,
+        researchIntent: researchIntent
+      });
+
+      if (result.success && result.rating) {
+        // Cache the rating
+        this.aiRatingCache.set(cacheKey, result.rating);
+
+        // Store AI rating in excerpt
+        excerpt.aiRating = result.rating;
+
+        // Update display with variable-specific information
+        this.updateAICopilotDisplay(result.rating);
+
+        console.log('[PDFExcerptViewer] AI rating received and cached:', result.rating);
+      } else {
+        this.showAICopilotError(result.error || 'Failed to get AI rating');
+      }
+    } catch (error) {
+      console.error('[PDFExcerptViewer] AI rating error:', error);
+      this.showAICopilotError(error.message || 'Error getting AI rating');
+    }
+  }
+
+  /**
+   * Show and populate the detail panel with excerpt data
+   * @param {Object} excerpt - The excerpt to display
+   */
+  async showDetailPanel(excerpt) {
+    const panel = this.getElement('excerptDetailPanel');
+    if (!panel) return;
+
+    // Populate full text
+    const textEl = this.getElement('detailExcerptText');
+    if (textEl) {
+      textEl.textContent = excerpt.text_content || 'No text available';
+    }
+
+    // Reset AI Co-Pilot display to initial state BEFORE loading human rating
+    // This prevents the AI data from being cleared after it's loaded
+    this.resetAICopilotDisplay();
+
+    // Load existing human rating from database
+    await this.loadHumanRating(excerpt);
+
+    // Panel is now always visible on the right, no need to show/hide
+    // Just apply layout state and text size
+    this.applyLayoutState();
+    this.applyTextSize();
+  }
+
+  /**
+   * Load existing human rating for an excerpt
+   */
+  async loadHumanRating(excerpt) {
+    const notesEl = this.getElement('detailNotes');
+    if (!notesEl) return;
+
+    // Need a selected variable to load rating
+    if (!this.selectedVariable) {
+      // Clear UI
+      this.currentSelectedScore = null;
+      const buttons = document.querySelectorAll('.score-btn');
+      buttons.forEach(btn => btn.classList.remove('selected'));
+      notesEl.value = '';
+      return;
+    }
+
+    try {
+      // Load rating from database
+      const result = await window.api.pdf.getExcerptRating({
+        excerpt_id: excerpt.id,
+        variable_id: this.selectedVariable.id
+      });
+
+      if (result.success && result.data) {
+        // Set selected score and update button states
+        this.selectScore(result.data.score);
+        notesEl.value = result.data.reasoning || '';
+        console.log('[PDFExcerptViewer] Loaded human rating:', result.data);
+      } else {
+        // Clear UI - no rating exists
+        this.currentSelectedScore = null;
+        const buttons = document.querySelectorAll('.score-btn');
+        buttons.forEach(btn => btn.classList.remove('selected'));
+        notesEl.value = '';
+      }
+    } catch (error) {
+      console.error('[PDFExcerptViewer] Error loading human rating:', error);
+      // Clear UI on error
+      this.currentSelectedScore = null;
+      const buttons = document.querySelectorAll('.score-btn');
+      buttons.forEach(btn => btn.classList.remove('selected'));
+      notesEl.value = '';
+    }
+  }
+
+  /**
+   * Hide the detail panel (no-op now, panel is always visible)
+   */
+  hideDetailPanel() {
+    // Panel is now always on the right, no need to hide
+  }
+
+  /**
+   * Select a score (for button-based scoring)
+   */
+  selectScore(score) {
+    this.currentSelectedScore = score;
+
+    // Update button states
+    const buttons = document.querySelectorAll('.score-btn');
+    buttons.forEach(btn => {
+      const btnScore = parseInt(btn.getAttribute('data-score'), 10);
+      if (btnScore === score) {
+        btn.classList.add('selected');
+      } else {
+        btn.classList.remove('selected');
+      }
+    });
+  }
+
+  /**
+   * Save rating (score + notes) for the current active excerpt
+   */
+  async saveRating() {
+    if (!this.activeExcerptId) {
+      this.showNotification('No excerpt selected', 'error');
+      return;
+    }
+
+    const notesEl = this.getElement('detailNotes');
+    if (!notesEl) return;
+
+    const score = this.currentSelectedScore;
+    const notes = notesEl.value.trim();
+
+    // Validate that a score was selected
+    if (!score) {
+      this.showNotification('Please select a score', 'error');
+      return;
+    }
+
+    // Find the excerpt and update rating in memory
+    const excerpt = this.allExcerpts.find(e => e.id === this.activeExcerptId);
+    if (excerpt) {
+      excerpt.humanRating = {
+        score: parseInt(score, 10),
+        notes: notes,
+        timestamp: new Date().toISOString()
+      };
+    }
+
+    // TODO: Save rating to database when backend API is ready
+    // await window.api.pdf.saveExcerptRating(this.activeExcerptId, { score, notes });
+
+    console.log('[PDFExcerptViewer] Rating saved for excerpt:', this.activeExcerptId, { score, notes });
+    this.showNotification('Rating saved successfully', 'success');
   }
 
   updatePagination() {
@@ -529,6 +1017,16 @@ class PDFExcerptViewer {
       this.escapeHandler = null;
     }
 
+    // Remove highlight event handlers
+    if (this.highlightClickHandler) {
+      document.removeEventListener('highlight:clicked', this.highlightClickHandler);
+      this.highlightClickHandler = null;
+    }
+    if (this.highlightClearHandler) {
+      document.removeEventListener('highlight:cleared', this.highlightClearHandler);
+      this.highlightClearHandler = null;
+    }
+
     // Cleanup PDF renderer
     if (this.renderer) {
       this.renderer.destroy && this.renderer.destroy();
@@ -576,6 +1074,664 @@ class PDFExcerptViewer {
       window.toastNotification[type](message);
     } else {
       console.log(`[${type.toUpperCase()}] ${message}`);
+    }
+  }
+
+  /**
+   * Load layout state from localStorage
+   */
+  loadLayoutState() {
+    try {
+      const saved = localStorage.getItem('pdfViewerLayout');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (error) {
+      console.warn('[PDFExcerptViewer] Failed to load layout state:', error);
+    }
+    // Default layout
+    return {
+      pdfPanelWidth: 60,
+      detailPanelWidth: 40
+    };
+  }
+
+  /**
+   * Save layout state to localStorage
+   */
+  saveLayoutState() {
+    try {
+      localStorage.setItem('pdfViewerLayout', JSON.stringify(this.layoutState));
+    } catch (error) {
+      console.warn('[PDFExcerptViewer] Failed to save layout state:', error);
+    }
+  }
+
+  /**
+   * Apply layout state to panels
+   */
+  applyLayoutState() {
+    const pdfPanel = this.getElement('pdfViewerPanel', true);
+    const detailPanel = this.getElement('excerptDetailPanel', true);
+
+    if (pdfPanel) {
+      pdfPanel.style.flex = `0 0 ${this.layoutState.pdfPanelWidth}%`;
+    }
+    if (detailPanel) {
+      detailPanel.style.flex = `0 0 ${this.layoutState.detailPanelWidth}%`;
+    }
+  }
+
+  /**
+   * Setup resizer event listeners
+   */
+  setupResizers() {
+    // Horizontal resizer (between PDF and Rating panels)
+    const horizontalResizer = this.getElement('horizontalResizer', true);
+    if (horizontalResizer) {
+      horizontalResizer.addEventListener('mousedown', (e) => {
+        this.isResizing = true;
+        e.preventDefault();
+      });
+    }
+
+    // Global mouse move and mouse up handlers
+    document.addEventListener('mousemove', (e) => {
+      if (!this.isResizing) return;
+      this.handleHorizontalResize(e);
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (this.isResizing) {
+        this.isResizing = false;
+        this.saveLayoutState();
+      }
+    });
+  }
+
+  /**
+   * Handle horizontal panel resizing (PDF vs Detail panels)
+   */
+  handleHorizontalResize(e) {
+    const mainContainer = this.getElement('pdfExcerptViewerModal', true);
+    if (!mainContainer) return;
+
+    const containerRect = mainContainer.getBoundingClientRect();
+    const offsetX = e.clientX - containerRect.left;
+    const containerWidth = containerRect.width - 32; // Subtract padding
+
+    // Calculate percentage (with bounds)
+    let pdfWidth = (offsetX / containerWidth) * 100;
+    pdfWidth = Math.max(30, Math.min(70, pdfWidth)); // Limit between 30% and 70%
+
+    this.layoutState.pdfPanelWidth = pdfWidth;
+    this.layoutState.detailPanelWidth = 100 - pdfWidth;
+
+    this.applyLayoutState();
+  }
+
+  /**
+   * Load text size preference from localStorage
+   */
+  loadTextSize() {
+    try {
+      const saved = localStorage.getItem('pdfViewerTextSize');
+      return saved ? parseInt(saved, 10) : 14;
+    } catch (error) {
+      return 14; // Default font size
+    }
+  }
+
+  /**
+   * Save text size preference to localStorage
+   */
+  saveTextSize() {
+    try {
+      localStorage.setItem('pdfViewerTextSize', this.detailPanelFontSize.toString());
+    } catch (error) {
+      console.warn('[PDFExcerptViewer] Failed to save text size:', error);
+    }
+  }
+
+  /**
+   * Apply text size to all UI text elements
+   */
+  applyTextSize() {
+    // Detail panel elements
+    const detailText = this.getElement('detailExcerptText', true);
+    const detailNotes = this.getElement('detailNotes', true);
+    const detailMetadata = this.getElement('detailMetadata', true);
+
+    if (detailText) {
+      detailText.style.fontSize = `${this.detailPanelFontSize}px`;
+    }
+    if (detailNotes) {
+      detailNotes.style.fontSize = `${this.detailPanelFontSize}px`;
+    }
+    if (detailMetadata) {
+      detailMetadata.style.fontSize = `${this.detailPanelFontSize}px`;
+    }
+
+    // Excerpt list items
+    const excerptItems = document.querySelectorAll('.excerpt-list-item');
+    excerptItems.forEach(item => {
+      const excerptText = item.querySelector('.excerpt-text');
+      if (excerptText) {
+        excerptText.style.fontSize = `${this.detailPanelFontSize}px`;
+      }
+    });
+  }
+
+  /**
+   * Increase text size in detail panel
+   */
+  increaseTextSize() {
+    if (this.detailPanelFontSize < 24) {
+      this.detailPanelFontSize += 2;
+      this.applyTextSize();
+      this.saveTextSize();
+    }
+  }
+
+  /**
+   * Decrease text size in detail panel
+   */
+  decreaseTextSize() {
+    if (this.detailPanelFontSize > 10) {
+      this.detailPanelFontSize -= 2;
+      this.applyTextSize();
+      this.saveTextSize();
+    }
+  }
+
+  /**
+   * Reset AI Co-Pilot display to initial/loading state
+   */
+  resetAICopilotDisplay() {
+    const loading = this.getElement('aiCopilotLoading', true);
+    const content = this.getElement('aiCopilotContent', true);
+    const error = this.getElement('aiCopilotError', true);
+
+    if (loading) loading.style.display = 'none';
+    if (content) content.style.display = 'none';
+    if (error) error.style.display = 'none';
+  }
+
+  /**
+   * Show AI Co-Pilot loading state
+   */
+  showAICopilotLoading() {
+    const loading = this.getElement('aiCopilotLoading', true);
+    const content = this.getElement('aiCopilotContent', true);
+    const error = this.getElement('aiCopilotError', true);
+
+    if (loading) loading.style.display = 'block';
+    if (content) content.style.display = 'none';
+    if (error) error.style.display = 'none';
+  }
+
+  /**
+   * Update AI Co-Pilot display with rating results
+   * @param {Object} rating - AI rating result { score, reasoning, etc. }
+   */
+  updateAICopilotDisplay(rating) {
+    const loading = this.getElement('aiCopilotLoading', true);
+    const content = this.getElement('aiCopilotContent', true);
+    const error = this.getElement('aiCopilotError', true);
+
+    if (loading) loading.style.display = 'none';
+    if (error) error.style.display = 'none';
+    if (content) content.style.display = 'block';
+
+    // Update variable name
+    const aiVariableEl = this.getElement('aiVariable', true);
+    if (aiVariableEl && this.selectedVariable) {
+      aiVariableEl.textContent = this.selectedVariable.label;
+    }
+
+    // Update score
+    const aiScoreEl = this.getElement('aiScore', true);
+    if (aiScoreEl) {
+      // The rating might have different field names depending on API response
+      const score = rating.score || rating.relevance || 'N/A';
+      aiScoreEl.textContent = score;
+    }
+
+    // Update reasoning
+    const aiReasoningEl = this.getElement('aiReasoning', true);
+    if (aiReasoningEl) {
+      aiReasoningEl.textContent = rating.reasoning || rating.analysis || 'No reasoning provided';
+    }
+  }
+
+  /**
+   * Show AI Co-Pilot error state
+   * @param {string} errorMessage - Error message to display
+   */
+  showAICopilotError(errorMessage) {
+    const loading = this.getElement('aiCopilotLoading', true);
+    const content = this.getElement('aiCopilotContent', true);
+    const error = this.getElement('aiCopilotError', true);
+    const errorMessageEl = this.getElement('aiErrorMessage', true);
+
+    if (loading) loading.style.display = 'none';
+    if (content) content.style.display = 'none';
+    if (error) error.style.display = 'block';
+
+    if (errorMessageEl) {
+      errorMessageEl.textContent = errorMessage || 'Error loading AI analysis';
+    }
+  }
+
+  // ============================================
+  // RATING VARIABLES METHODS
+  // ============================================
+
+  /**
+   * Load rating variables for the current collection
+   */
+  async loadVariables() {
+    if (!this.currentCollection) return;
+
+    try {
+      // Load global variables for PDF genre
+      const result = await window.api.pdf.getGlobalRatingVariables();
+      if (result.success && result.data) {
+        // Filter by PDF genre (or 'both')
+        this.availableVariables = result.data.filter(v =>
+          v.genre === 'pdf' || v.genre === 'both'
+        );
+        this.populateVariableSelector();
+      }
+    } catch (error) {
+      console.error('Error loading variables:', error);
+    }
+  }
+
+  /**
+   * Populate the variable selector dropdown
+   */
+  populateVariableSelector() {
+    const selector = document.querySelector('#variableSelector');
+    if (!selector) return;
+
+    if (this.availableVariables.length === 0) {
+      selector.innerHTML = '<option value="">No variables defined - use Collections Hub to create</option>';
+      selector.disabled = true;
+      return;
+    }
+
+    selector.innerHTML = this.availableVariables.map(v =>
+      `<option value="${v.id}">${v.label}</option>`
+    ).join('');
+    selector.disabled = false;
+
+    // Select first variable by default
+    if (this.availableVariables.length > 0 && !this.selectedVariable) {
+      this.selectedVariable = this.availableVariables[0];
+      selector.value = this.selectedVariable.id;
+      this.onVariableChanged();
+    }
+  }
+
+  /**
+   * Handle variable selection change
+   */
+  onVariableChanged() {
+    const selector = document.querySelector('#variableSelector');
+    if (!selector) return;
+
+    const variableId = parseInt(selector.value);
+    this.selectedVariable = this.availableVariables.find(v => v.id === variableId);
+
+    if (this.selectedVariable) {
+      // Show variable info section
+      const infoSection = document.querySelector('#variableInfoSection');
+      if (infoSection) {
+        infoSection.style.display = 'block';
+      }
+
+      // Show variable info card
+      const infoCard = document.querySelector('#variableInfo');
+      const defEl = document.querySelector('#variableDefinition');
+      const scaleTypeEl = document.querySelector('#variableScaleType');
+      const reasoningDepthEl = document.querySelector('#variableReasoningDepth');
+
+      if (infoCard) {
+        infoCard.style.display = 'block';
+      }
+
+      // Update human variable display to mirror AI
+      const humanVariableEl = document.querySelector('#humanVariable');
+      if (humanVariableEl) {
+        humanVariableEl.textContent = this.selectedVariable.label;
+      }
+
+      if (defEl) {
+        defEl.textContent = this.selectedVariable.definition || 'No definition provided';
+      }
+
+      if (scaleTypeEl) {
+        const scaleLabels = {
+          'binary': 'Binary (0/1)',
+          '3point': '3-Point (1-3)',
+          '4point': '4-Point (1-4)',
+          '5point': '5-Point (1-5)',
+          '7point': '7-Point (1-7)',
+          '10point': '10-Point (1-10)',
+          '100point': '100-Point (0-100)'
+        };
+        scaleTypeEl.textContent = scaleLabels[this.selectedVariable.scale_type] || this.selectedVariable.scale_type;
+      }
+
+      if (reasoningDepthEl) {
+        const depthLabels = {
+          'brief': 'Brief (1-2 sentences)',
+          'moderate': 'Moderate (3-5 sentences)',
+          'lengthy': 'Lengthy (6+ sentences)'
+        };
+        reasoningDepthEl.textContent = depthLabels[this.selectedVariable.reasoning_depth] || this.selectedVariable.reasoning_depth;
+      }
+
+      // Update score buttons based on scale type
+      this.renderScoreButtons();
+
+      // Populate anchors
+      this.populateAnchors();
+
+      // Set reasoning depth from variable (not user-selectable anymore)
+      this.selectedDepth = this.selectedVariable.reasoning_depth || 'brief';
+
+      // Re-trigger AI rating if an excerpt is currently being viewed
+      if (this.currentExcerpt) {
+        this.triggerAICopilotRating(this.currentExcerpt);
+      }
+    }
+  }
+
+  /**
+   * Populate anchor definitions
+   */
+  populateAnchors() {
+    const anchorsContainer = document.querySelector('#variableAnchors');
+    if (!anchorsContainer || !this.selectedVariable || !this.selectedVariable.anchors) return;
+
+    const anchors = this.selectedVariable.anchors;
+    const entries = Object.entries(anchors);
+
+    if (entries.length === 0) {
+      anchorsContainer.innerHTML = '<p style="color: #6b7280; font-style: italic;">No anchor definitions available</p>';
+      return;
+    }
+
+    anchorsContainer.innerHTML = entries.map(([score, definition]) => `
+      <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #374151; last-child:border-bottom-none;">
+        <div style="font-weight: 600; color: #10b981; margin-bottom: 4px;">Score ${score}:</div>
+        <div style="color: #d1d5db; line-height: 1.5;">${definition}</div>
+      </div>
+    `).join('');
+  }
+
+  /**
+   * Toggle anchor definitions visibility
+   */
+  toggleAnchors() {
+    const anchorsContainer = document.querySelector('#variableAnchors');
+    const toggleIcon = document.querySelector('#anchorsToggleIcon');
+    const toggleBtn = document.querySelector('#toggleAnchorsBtn');
+
+    if (!anchorsContainer || !toggleIcon || !toggleBtn) return;
+
+    const isVisible = anchorsContainer.style.display !== 'none';
+
+    if (isVisible) {
+      anchorsContainer.style.display = 'none';
+      toggleIcon.textContent = '▶';
+      toggleBtn.innerHTML = '<span id="anchorsToggleIcon">▶</span> Show Anchor Definitions';
+    } else {
+      anchorsContainer.style.display = 'block';
+      toggleIcon.textContent = '▼';
+      toggleBtn.innerHTML = '<span id="anchorsToggleIcon">▼</span> Hide Anchor Definitions';
+    }
+  }
+
+  /**
+   * Render score buttons based on selected variable's scale type
+   */
+  renderScoreButtons() {
+    const container = document.querySelector('#humanScoreButtons');
+    if (!container || !this.selectedVariable) return;
+
+    const scaleConfigs = {
+      'binary': [0, 1],
+      '3point': [1, 2, 3],
+      '4point': [1, 2, 3, 4],
+      '5point': [1, 2, 3, 4, 5],
+      '7point': [1, 2, 3, 4, 5, 6, 7],
+      '10point': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      '100point': 'slider'
+    };
+
+    const points = scaleConfigs[this.selectedVariable.scale_type];
+
+    if (points === 'slider') {
+      // Render slider for 100-point scale
+      container.innerHTML = `
+        <input type="range" min="0" max="100" value="50" id="scoreSlider"
+          style="width: 100%; margin: 8px 0;"
+          oninput="window.pdfExcerptViewer.onSliderChange(this.value)">
+        <div style="display: flex; justify-content: space-between; font-size: 12px; color: #9ca3af;">
+          <span>0</span>
+          <span id="sliderValue" style="font-size: 16px; font-weight: bold; color: #e5e7eb;">50</span>
+          <span>100</span>
+        </div>
+      `;
+    } else if (Array.isArray(points)) {
+      // Render buttons
+      container.innerHTML = points.map(point => {
+        const anchor = this.selectedVariable.anchors && this.selectedVariable.anchors[point];
+        return `<button class="score-btn" data-score="${point}"
+          onclick="window.pdfExcerptViewer.selectScore(${point})"
+          ${anchor ? `title="${anchor}"` : ''}>${point}</button>`;
+      }).join('');
+    }
+  }
+
+  /**
+   * Handle slider change for 100-point scale
+   */
+  onSliderChange(value) {
+    const valueEl = document.querySelector('#sliderValue');
+    if (valueEl) {
+      valueEl.textContent = value;
+    }
+    this.currentSelectedScore = parseInt(value);
+    this.triggerAutoSave();
+  }
+
+  // ============================================
+  // SPEECH-TO-TEXT METHODS
+  // ============================================
+
+  /**
+   * Setup speech recognition
+   */
+  setupSpeechRecognition() {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      console.warn('Speech recognition not supported');
+      return;
+    }
+
+    try {
+      this.recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      this.recognition.continuous = true;
+      this.recognition.interimResults = true;
+
+      this.recognition.onresult = (event) => {
+        const textarea = document.querySelector('#detailNotes');
+        if (!textarea) return;
+
+        const transcript = Array.from(event.results)
+          .map(result => result[0].transcript)
+          .join('');
+
+        textarea.value = transcript;
+        this.triggerAutoSave();
+      };
+
+      this.recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        this.stopRecording();
+        this.showNotification('Speech recognition error: ' + event.error, 'error');
+      };
+
+      this.recognition.onend = () => {
+        this.isRecording = false;
+        this.updateRecordingButton();
+      };
+
+      // Setup button click handler
+      setTimeout(() => {
+        const btn = document.querySelector('#speechToTextBtn');
+        if (btn) {
+          btn.addEventListener('click', () => this.toggleRecording());
+        }
+      }, 500);
+
+    } catch (error) {
+      console.error('Failed to setup speech recognition:', error);
+    }
+  }
+
+  /**
+   * Toggle speech-to-text recording
+   */
+  toggleRecording() {
+    if (this.isRecording) {
+      this.stopRecording();
+    } else {
+      this.startRecording();
+    }
+  }
+
+  /**
+   * Start recording
+   */
+  startRecording() {
+    if (!this.recognition) {
+      this.showNotification('Speech recognition not available in this browser', 'error');
+      return;
+    }
+
+    try {
+      this.recognition.start();
+      this.isRecording = true;
+      this.updateRecordingButton();
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      this.showNotification('Failed to start recording', 'error');
+    }
+  }
+
+  /**
+   * Stop recording
+   */
+  stopRecording() {
+    if (this.recognition && this.isRecording) {
+      this.recognition.stop();
+      this.isRecording = false;
+      this.updateRecordingButton();
+    }
+  }
+
+  /**
+   * Update recording button appearance
+   */
+  updateRecordingButton() {
+    const btn = document.querySelector('#speechToTextBtn');
+    if (!btn) return;
+
+    if (this.isRecording) {
+      btn.textContent = '🔴';
+      btn.style.background = '#ef4444';
+      btn.title = 'Stop Recording';
+    } else {
+      btn.textContent = '🎤';
+      btn.style.background = '#374151';
+      btn.title = 'Speech to Text';
+    }
+  }
+
+  // ============================================
+  // AUTO-SAVE METHODS
+  // ============================================
+
+  /**
+   * Trigger auto-save with debounce
+   */
+  triggerAutoSave() {
+    // Clear existing timeout
+    if (this.autoSaveTimeout) {
+      clearTimeout(this.autoSaveTimeout);
+    }
+
+    // Set new timeout for 1 second
+    this.autoSaveTimeout = setTimeout(() => {
+      this.autoSaveRating();
+    }, 1000);
+
+    // Update status
+    this.updateAutoSaveStatus('Saving...');
+  }
+
+  /**
+   * Auto-save rating
+   */
+  async autoSaveRating() {
+    if (!this.activeExcerptId || !this.selectedVariable) {
+      return;
+    }
+
+    const notesEl = document.querySelector('#detailNotes');
+    const score = this.currentSelectedScore;
+    const notes = notesEl ? notesEl.value.trim() : '';
+
+    // Only save if score is selected
+    if (!score && score !== 0) {
+      this.updateAutoSaveStatus('Auto-save enabled');
+      return;
+    }
+
+    try {
+      const result = await window.api.pdf.saveExcerptRating({
+        excerpt_id: this.activeExcerptId,
+        variable_id: this.selectedVariable.id,
+        score: score,
+        reasoning: notes,
+        reasoning_depth: this.selectedDepth
+      });
+
+      if (result.success) {
+        this.updateAutoSaveStatus('✓ Saved');
+        setTimeout(() => {
+          this.updateAutoSaveStatus('Auto-save enabled');
+        }, 2000);
+      } else {
+        this.updateAutoSaveStatus('Save failed');
+      }
+    } catch (error) {
+      console.error('Auto-save error:', error);
+      this.updateAutoSaveStatus('Save failed');
+    }
+  }
+
+  /**
+   * Update auto-save status message
+   */
+  updateAutoSaveStatus(message) {
+    const statusEl = document.querySelector('#autoSaveStatus');
+    if (statusEl) {
+      statusEl.textContent = message;
     }
   }
 }

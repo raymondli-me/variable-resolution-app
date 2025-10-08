@@ -14,11 +14,23 @@ class CollectionsHub {
       return;
     }
     this.collections = [];
+    this.mergedCollections = [];
+    this.currentView = 'grid'; // 'grid' or 'list'
+    this.setupEventListeners();
     this.init();
+  }
+
+  setupEventListeners() {
+    // Listen for collection created events and refresh
+    window.addEventListener('collectionCreated', (e) => {
+      console.log('[CollectionsHub] Collection created event received:', e.detail);
+      this.loadCollections().then(() => this.render());
+    });
   }
 
   async init() {
     await this.loadCollections();
+    await this.loadMergedCollections();
     this.render();
   }
 
@@ -36,6 +48,16 @@ class CollectionsHub {
     } catch (error) {
       console.error('Error loading collections:', error);
       this.collections = [];
+    }
+  }
+
+  async loadMergedCollections() {
+    try {
+      const merges = await window.api.database.getAllMerges();
+      this.mergedCollections = merges || [];
+    } catch (error) {
+      console.error('Error loading merged collections:', error);
+      this.mergedCollections = [];
     }
   }
 
@@ -58,6 +80,43 @@ class CollectionsHub {
         };
       }
     }
+  }
+
+  getCollectionType(collection) {
+    // Determine collection type: 'base', 'merged', or 'derived'
+
+    // Check if it's a merged collection (has merge_id or is from mergedCollections array)
+    if (collection.merge_id || collection.source_collections) {
+      return 'merged';
+    }
+
+    // Check if it's a derived collection (has parent_collection_id or derivation_info)
+    if (collection.parent_collection_id || collection.derivation_info) {
+      return 'derived';
+    }
+
+    // Default to base collection (original data source)
+    return 'base';
+  }
+
+  getGenre(collection) {
+    // Determine collection genre: 'youtube' or 'pdf'
+    try {
+      if (collection.settings) {
+        const settings = typeof collection.settings === 'string'
+          ? JSON.parse(collection.settings)
+          : collection.settings;
+
+        if (settings.source === 'pdf' || settings.type === 'pdf') {
+          return 'pdf';
+        }
+      }
+    } catch (e) {
+      // If parsing fails, default to YouTube
+    }
+
+    // Default to YouTube for video collections
+    return 'youtube';
   }
 
   getGenreIcon(collection) {
@@ -113,7 +172,7 @@ class CollectionsHub {
     return videoCount === 1 ? '1 Video' : `${videoCount} Videos`;
   }
 
-  handleViewClick(collectionId) {
+  async handleViewClick(collectionId) {
     // Find the collection object
     const collection = this.collections.find(c => c.id === parseInt(collectionId));
     if (!collection) {
@@ -139,17 +198,48 @@ class CollectionsHub {
 
     // Route to the appropriate viewer
     if (isPdf) {
-      if (window.pdfExcerptViewer) {
-        window.pdfExcerptViewer.show(collectionId);
-      } else {
-        console.error('PDF Excerpt Viewer not available');
+      // For PDF collections, check how many PDFs exist
+      try {
+        const result = await window.api.pdf.list(collectionId);
+        const pdfCount = result.success && result.pdfs ? result.pdfs.length : 0;
+
+        if (pdfCount > 1) {
+          // Multi-PDF collection → show gallery viewer
+          if (window.pdfGalleryViewer) {
+            window.pdfGalleryViewer.show(collectionId);
+          } else {
+            console.error('PDF Gallery Viewer not available');
+          }
+        } else if (pdfCount === 1) {
+          // Single PDF → show excerpt viewer directly
+          if (window.pdfExcerptViewer) {
+            window.pdfExcerptViewer.show(collectionId);
+          } else {
+            console.error('PDF Excerpt Viewer not available');
+          }
+        } else {
+          // No PDFs found
+          console.warn('No PDFs found in this collection');
+          if (window.pdfExcerptViewer) {
+            window.pdfExcerptViewer.show(collectionId);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking PDF count:', error);
+        // Fallback to excerpt viewer
+        if (window.pdfExcerptViewer) {
+          window.pdfExcerptViewer.show(collectionId);
+        }
       }
     } else {
-      // Default to YouTube/video collection viewer
-      if (window.collectionViewer) {
+      // Default to Gallery Viewer for YouTube/video collections
+      if (window.galleryViewer) {
+        window.galleryViewer.show(collectionId);
+      } else if (window.collectionViewer) {
+        // Fallback to old viewer if gallery viewer not available
         window.collectionViewer.show(collectionId);
       } else {
-        console.error('Collection Viewer not available');
+        console.error('Gallery Viewer not available');
       }
     }
   }
@@ -163,6 +253,10 @@ class CollectionsHub {
     menu.className = 'collection-context-menu';
     menu.dataset.collectionId = collectionId;
 
+    // Find the collection to check if it's a PDF collection
+    const collection = this.collections.find(c => c.id === collectionId);
+    const isPDFCollection = collection && this.getGenre(collection) === 'pdf';
+
     // Menu items
     const menuItems = [
       { label: 'Rate Collection', action: 'rate', icon: '⭐' },
@@ -170,9 +264,15 @@ class CollectionsHub {
       { label: 'Export', action: 'export', icon: '📤' },
       { label: 'Duplicate', action: 'duplicate', icon: '📋' },
       { label: 'Subsample', action: 'subsample', icon: '🎲' },
-      { label: 'Filter', action: 'filter', icon: '🔍' },
-      { label: 'Delete', action: 'delete', icon: '🗑️', danger: true }
+      { label: 'Filter', action: 'filter', icon: '🔍' }
     ];
+
+    // Add "Manage Variables" option for PDF collections
+    if (isPDFCollection) {
+      menuItems.splice(1, 0, { label: 'Manage Variables', action: 'manage-variables', icon: '📝' });
+    }
+
+    menuItems.push({ label: 'Delete', action: 'delete', icon: '🗑️', danger: true });
 
     menuItems.forEach(item => {
       const menuItem = document.createElement('button');
@@ -217,6 +317,9 @@ class CollectionsHub {
         break;
       case 'bws':
         await this.showCreateBwsModal(collectionId);
+        break;
+      case 'manage-variables':
+        await this.showManageVariablesModal(collectionId);
         break;
       case 'export':
         await this.exportCollection(collectionId);
@@ -361,7 +464,9 @@ class CollectionsHub {
       derivation_info: c.derivation_info
     })));
 
-    if (this.collections.length === 0) {
+    const totalItems = this.collections.length + this.mergedCollections.length;
+
+    if (totalItems === 0) {
       this.container.innerHTML = `
         <div class="hub-empty-state">
           <div class="empty-icon">📚</div>
@@ -372,40 +477,134 @@ class CollectionsHub {
       return;
     }
 
-    const cardsHTML = this.collections.map(collection => `
-      <div class="collection-card" data-collection-id="${collection.id}">
-        <div class="card-header">
-          <span class="card-genre-icon">${this.getGenreIcon(collection)}</span>
-          <button class="card-menu-btn" data-action="menu" data-id="${collection.id}">⋯</button>
-        </div>
-        <div class="card-body">
-          <h3 class="card-title">${this.escapeHtml(collection.search_term)}</h3>
-          <div class="card-stats">
-            <span class="stat-item">${this.getItemStats(collection)}</span>
+    // Render regular collection cards
+    const regularCardsHTML = this.collections.map(collection => {
+      const collectionType = this.getCollectionType(collection);
+      const collectionGenre = this.getGenre(collection);
+      const genreLabel = collectionGenre === 'pdf' ? 'PDF' : 'VIDEO';
+      const typeLabel = collectionType.toUpperCase();
+
+      return `
+        <div class="collection-card genre-${collectionGenre} type-${collectionType}" data-collection-id="${collection.id}" data-action="view">
+          <div class="card-header">
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <span class="card-genre-badge">${genreLabel}</span>
+              <span class="card-type-badge">${typeLabel}</span>
+            </div>
+            <button class="card-menu-btn" data-action="menu" data-id="${collection.id}">⋯</button>
           </div>
-          <div class="card-date">Created ${this.formatDate(collection.created_at)}</div>
+          <div class="card-body">
+            <h3 class="card-title">${this.escapeHtml(collection.search_term)}</h3>
+            <div class="card-stats">
+              <span class="stat-item">${this.getItemStats(collection)}</span>
+            </div>
+            <div class="card-date">Created ${this.formatDate(collection.created_at)}</div>
+          </div>
+          <div class="card-enrichments" data-action="toggle-enrichments" data-id="${collection.id}">
+            ${this.renderEnrichmentsSummary(collection)}
+          </div>
         </div>
-        <div class="card-enrichments" data-action="toggle-enrichments" data-id="${collection.id}">
-          ${this.renderEnrichmentsSummary(collection)}
-        </div>
-        <div class="card-footer">
-          <button class="card-view-btn" data-action="view" data-id="${collection.id}">View</button>
-        </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
+
+    // Render merged collection cards
+    const mergedCardsHTML = this.mergedCollections.map(merge => this.renderMergedCard(merge)).join('');
 
     this.container.innerHTML = `
       <div class="hub-header">
-        <h2 class="hub-title">Collections</h2>
-        <p class="hub-subtitle">Browse and manage your data collections</p>
+        <div>
+          <h2 class="hub-title">Collections</h2>
+          <p class="hub-subtitle">Browse and manage your data collections</p>
+        </div>
+        <div style="display: flex; gap: 0.75rem; align-items: center;">
+          <button class="btn-create-merge" id="create-collection-btn-hub" title="Create New Collection">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            New Collection
+          </button>
+          <button class="btn-create-merge" id="create-merge-btn-hub" title="Create Merge" style="opacity: 0.8;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"></path>
+              <polyline points="12 22 12 12"></polyline>
+              <polyline points="7 9 12 12 17 9"></polyline>
+            </svg>
+            Merge
+          </button>
+          <button class="btn-create-merge" id="manage-variables-btn-hub" title="Manage Variables" style="opacity: 0.8;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"></path>
+              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+            Manage Variables
+          </button>
+          <!-- View toggle temporarily disabled - list view not implemented yet -->
+          <div class="view-toggle-container" style="display: none;">
+            <button class="view-toggle-btn ${this.currentView === 'grid' ? 'active' : ''}" data-view="grid" title="Grid View">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
-      <div class="collection-grid">
-        ${cardsHTML}
+      <div class="collection-grid" id="collection-grid">
+        ${regularCardsHTML}
+        ${mergedCardsHTML}
       </div>
     `;
 
     // Attach event listeners to buttons
     this.attachEventListeners();
+  }
+
+  renderMergedCard(merge) {
+    const sourceCount = merge.collection_count || merge.source_collections?.length || 0;
+    let totalVideos = 0;
+    let totalComments = 0;
+
+    if (merge.source_collections) {
+      merge.source_collections.forEach(c => {
+        totalVideos += c.video_count || 0;
+        totalComments += c.comment_count || 0;
+      });
+    }
+
+    const sourceNames = merge.source_collections
+      ? merge.source_collections.slice(0, 2).map(c => c.search_term).join(', ')
+      : '';
+    const moreText = sourceCount > 2 ? ` +${sourceCount - 2} more` : '';
+
+    const collectionType = this.getCollectionType(merge);
+    const collectionGenre = this.getGenre(merge);
+    const genreLabel = collectionGenre === 'pdf' ? 'PDF' : 'VIDEO';
+    const typeLabel = collectionType.toUpperCase();
+
+    return `
+      <div class="collection-card genre-${collectionGenre} type-${collectionType}" data-merge-id="${merge.id}" data-action="view-merge">
+        <div class="card-header">
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span class="card-genre-badge">${genreLabel}</span>
+            <span class="card-type-badge">${typeLabel}</span>
+          </div>
+          <button class="card-menu-btn" data-action="menu-merge" data-id="${merge.id}">⋯</button>
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">${this.escapeHtml(merge.name)}</h3>
+          <div class="card-stats">
+            <span class="stat-item">${totalVideos} Videos</span>
+          </div>
+          <div class="card-date">Created ${this.formatDate(merge.created_at)}</div>
+        </div>
+        <div class="card-enrichments" data-action="toggle-enrichments" data-id="${merge.id}">
+          <span style="color: #718096;">No enrichments</span>
+        </div>
+      </div>
+    `;
   }
 
   renderEnrichmentsSummary(collection) {
@@ -433,12 +632,69 @@ class CollectionsHub {
   }
 
   attachEventListeners() {
-    // View button clicks
-    this.container.querySelectorAll('[data-action="view"]').forEach(btn => {
+    // Create New Collection button
+    const createCollectionBtn = document.getElementById('create-collection-btn-hub');
+    if (createCollectionBtn) {
+      createCollectionBtn.addEventListener('click', () => {
+        if (window.folderBrowser && window.folderBrowser.showNewCollectionModal) {
+          window.folderBrowser.showNewCollectionModal();
+        } else {
+          console.error('Folder browser or showNewCollectionModal not available');
+        }
+      });
+    }
+
+    // Create Merge button
+    const createMergeBtn = document.getElementById('create-merge-btn-hub');
+    if (createMergeBtn) {
+      createMergeBtn.addEventListener('click', () => {
+        if (window.mergeManager) {
+          window.mergeManager.openCreateModal();
+        }
+      });
+    }
+
+    // Manage Variables button
+    const manageVariablesBtn = document.getElementById('manage-variables-btn-hub');
+    if (manageVariablesBtn) {
+      manageVariablesBtn.addEventListener('click', () => {
+        console.log('[CollectionsHub] Manage Variables button clicked');
+        this.showGlobalManageVariablesModal();
+      });
+    } else {
+      console.warn('[CollectionsHub] Manage Variables button not found');
+    }
+
+    // View toggle button clicks
+    this.container.querySelectorAll('.view-toggle-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const collectionId = btn.dataset.id;
+        const view = btn.dataset.view;
+        this.switchView(view);
+      });
+    });
+
+    // Card clicks for regular collections (entire card is clickable)
+    this.container.querySelectorAll('.collection-card[data-collection-id]').forEach(card => {
+      card.addEventListener('click', (e) => {
+        // Don't trigger if clicking on menu button or enrichments
+        if (e.target.closest('[data-action="menu"]') || e.target.closest('[data-action="toggle-enrichments"]')) {
+          return;
+        }
+        const collectionId = card.dataset.collectionId;
         this.handleViewClick(collectionId);
+      });
+    });
+
+    // Card clicks for merged collections (entire card is clickable)
+    this.container.querySelectorAll('.collection-card[data-merge-id]').forEach(card => {
+      card.addEventListener('click', (e) => {
+        // Don't trigger if clicking on menu button or enrichments
+        if (e.target.closest('[data-action="menu-merge"]') || e.target.closest('[data-action="toggle-enrichments"]')) {
+          return;
+        }
+        const mergeId = card.dataset.mergeId;
+        this.handleViewMergeClick(mergeId);
       });
     });
 
@@ -451,6 +707,15 @@ class CollectionsHub {
       });
     });
 
+    // Menu button clicks (merged collections)
+    this.container.querySelectorAll('[data-action="menu-merge"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const mergeId = btn.dataset.id;
+        this.handleMergeMenuClick(mergeId, e);
+      });
+    });
+
     // Enrichments toggle clicks
     this.container.querySelectorAll('[data-action="toggle-enrichments"]').forEach(elem => {
       elem.addEventListener('click', (e) => {
@@ -458,6 +723,111 @@ class CollectionsHub {
         const collectionId = elem.dataset.id;
         this.toggleEnrichments(collectionId, elem);
       });
+    });
+  }
+
+  handleViewMergeClick(mergeId) {
+    // Browse content of the merge using the collection viewer
+    if (window.mergeManager) {
+      window.mergeManager.browseContent(parseInt(mergeId));
+    } else if (window.collectionViewer) {
+      window.collectionViewer.showMerge(parseInt(mergeId));
+    }
+  }
+
+  handleMergeMenuClick(mergeId, event) {
+    // Close any existing context menu
+    this.closeContextMenu();
+
+    // Create context menu for merged collection
+    const menu = document.createElement('div');
+    menu.className = 'collection-context-menu';
+    menu.dataset.mergeId = mergeId;
+
+    const menuItems = [
+      { label: 'View Details', action: 'view-details', icon: '👁️' },
+      { label: 'Browse Content', action: 'browse', icon: '📂' },
+      { label: 'Export', action: 'export', icon: '📤' },
+      { label: 'Delete Merge', action: 'delete', icon: '🗑️', danger: true }
+    ];
+
+    menuItems.forEach(item => {
+      const menuItem = document.createElement('button');
+      menuItem.className = `context-menu-item${item.danger ? ' danger' : ''}`;
+      menuItem.innerHTML = `<span class="menu-icon">${item.icon}</span><span>${item.label}</span>`;
+      menuItem.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.handleMergeContextMenuAction(item.action, mergeId);
+      });
+      menu.appendChild(menuItem);
+    });
+
+    document.body.appendChild(menu);
+    const buttonRect = event.target.getBoundingClientRect();
+    menu.style.top = `${buttonRect.bottom + 5}px`;
+    menu.style.left = `${buttonRect.right - menu.offsetWidth}px`;
+
+    setTimeout(() => {
+      document.addEventListener('click', this.closeContextMenuHandler, { once: true });
+    }, 0);
+  }
+
+  async handleMergeContextMenuAction(action, mergeId) {
+    this.closeContextMenu();
+
+    switch (action) {
+      case 'view-details':
+        if (window.mergeManager) {
+          window.mergeManager.viewMerge(parseInt(mergeId));
+        }
+        break;
+      case 'browse':
+        this.handleViewMergeClick(mergeId);
+        break;
+      case 'export':
+        if (window.mergeManager) {
+          window.mergeManager.exportMerge(parseInt(mergeId));
+        }
+        break;
+      case 'delete':
+        if (window.mergeManager) {
+          if (confirm('Delete this merged collection? This cannot be undone.')) {
+            await window.api.database.deleteMerge(parseInt(mergeId));
+            this.showSuccess('Merged collection deleted');
+            await this.loadMergedCollections();
+            this.render();
+          }
+        }
+        break;
+    }
+  }
+
+  switchView(view) {
+    if (view === this.currentView) return;
+
+    this.currentView = view;
+
+    // Get references to both views
+    const gridView = this.container;
+    const listView = document.querySelector('.folder-browser-container');
+
+    if (view === 'grid') {
+      // Show Grid View, hide List View
+      gridView.style.display = 'block';
+      if (listView) listView.style.display = 'none';
+    } else if (view === 'list') {
+      // Hide Grid View, show List View
+      gridView.style.display = 'none';
+      if (listView) listView.style.display = 'block';
+    }
+
+    // Update toggle button states
+    this.container.querySelectorAll('.view-toggle-btn').forEach(btn => {
+      if (btn.dataset.view === view) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
     });
   }
 
@@ -952,6 +1322,684 @@ class CollectionsHub {
     });
   }
 
+  async showManageVariablesModal(collectionId) {
+    const collection = this.collections.find(c => c.id === collectionId);
+    if (!collection) return;
+
+    // Load existing variables
+    const variables = await window.api.pdf.getRatingVariables(collectionId);
+
+    return new Promise((resolve) => {
+      const modal = document.createElement('div');
+      modal.className = 'fullscreen-modal';
+      modal.innerHTML = `
+        <div class="modal-content" style="max-width: 900px; max-height: 90vh;">
+          <div class="modal-header">
+            <h3>Manage Rating Variables - ${this.escapeHtml(collection.search_term)}</h3>
+            <button class="close-btn">&times;</button>
+          </div>
+          <div class="modal-body" style="max-height: calc(90vh - 120px); overflow-y: auto;">
+            <p style="margin-bottom: 16px; color: #9ca3af;">
+              Define custom rating variables for qualitative coding of PDF excerpts.
+            </p>
+
+            <!-- Existing Variables List -->
+            <div id="variables-list" style="margin-bottom: 24px;">
+              ${variables.length > 0 ? this.renderVariablesList(variables) : '<p style="color: #6b7280; text-align: center; padding: 24px;">No variables defined yet. Create your first variable below.</p>'}
+            </div>
+
+            <!-- Create New Variable Form -->
+            <div style="background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 20px; margin-top: 16px;">
+              <h4 style="margin-bottom: 16px; color: #f3f4f6;">Create New Variable</h4>
+
+              <div style="display: grid; gap: 16px;">
+                <!-- Variable Label -->
+                <div>
+                  <label style="display: block; margin-bottom: 6px; color: #e5e7eb; font-size: 14px;">Variable Label *</label>
+                  <input type="text" id="variable-label" placeholder="e.g., Stigma Level, Emotional Valence"
+                    style="width: 100%; padding: 8px; border: 1px solid #374151; background: #111827; color: #f3f4f6; border-radius: 4px;">
+                </div>
+
+                <!-- Scale Type -->
+                <div>
+                  <label style="display: block; margin-bottom: 6px; color: #e5e7eb; font-size: 14px;">Scale Type *</label>
+                  <select id="scale-type" onchange="window.collectionsHub.updateAnchorFields()"
+                    style="width: 100%; padding: 8px; border: 1px solid #374151; background: #111827; color: #f3f4f6; border-radius: 4px;">
+                    <option value="">-- Select Scale --</option>
+                    <option value="binary">Binary (0/1)</option>
+                    <option value="3point">3-Point Scale</option>
+                    <option value="4point">4-Point Scale</option>
+                    <option value="5point">5-Point Scale</option>
+                    <option value="7point">7-Point Scale</option>
+                    <option value="10point">10-Point Scale</option>
+                    <option value="100point">100-Point Scale</option>
+                  </select>
+                </div>
+
+                <!-- Variable Definition -->
+                <div>
+                  <label style="display: block; margin-bottom: 6px; color: #e5e7eb; font-size: 14px;">Variable Definition</label>
+                  <textarea id="variable-definition" rows="3" placeholder="What does this variable measure? (optional)"
+                    style="width: 100%; padding: 8px; border: 1px solid #374151; background: #111827; color: #f3f4f6; border-radius: 4px; resize: vertical;"></textarea>
+                  <button id="ai-suggest-btn" style="margin-top: 8px; padding: 6px 12px; background: #8b5cf6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">
+                    🤖 Ask AI to Suggest Definition & Anchors
+                  </button>
+                </div>
+
+                <!-- Dynamic Scale Anchors -->
+                <div id="scale-anchors" style="display: none;">
+                  <label style="display: block; margin-bottom: 6px; color: #e5e7eb; font-size: 14px;">Scale Anchors</label>
+                  <div id="anchors-container" style="display: grid; gap: 8px;">
+                    <!-- Dynamically generated anchor fields will go here -->
+                  </div>
+                </div>
+
+                <!-- Reasoning Depth Preference -->
+                <div>
+                  <label style="display: block; margin-bottom: 6px; color: #e5e7eb; font-size: 14px;">Default Reasoning Depth</label>
+                  <select id="reasoning-depth" style="width: 100%; padding: 8px; border: 1px solid #374151; background: #111827; color: #f3f4f6; border-radius: 4px;">
+                    <option value="brief">Brief (1-2 sentences)</option>
+                    <option value="moderate">Moderate (3-5 sentences)</option>
+                    <option value="lengthy">Lengthy (6+ sentences, for scale development)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer" style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;">
+            <button class="btn btn-cancel">Close</button>
+            <button class="btn btn-primary" id="create-variable-btn">Create Variable</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      const cleanup = () => {
+        modal.remove();
+      };
+
+      // Close button
+      modal.querySelector('.close-btn').addEventListener('click', () => {
+        cleanup();
+        resolve(null);
+      });
+
+      // Cancel button
+      modal.querySelector('.btn-cancel').addEventListener('click', () => {
+        cleanup();
+        resolve(null);
+      });
+
+      // AI Suggest button
+      modal.querySelector('#ai-suggest-btn').addEventListener('click', async () => {
+        const label = modal.querySelector('#variable-label').value.trim();
+        const scaleType = modal.querySelector('#scale-type').value;
+
+        if (!label) {
+          this.showError('Please enter a variable label first');
+          return;
+        }
+
+        if (!scaleType) {
+          this.showError('Please select a scale type first');
+          return;
+        }
+
+        try {
+          const btn = modal.querySelector('#ai-suggest-btn');
+          btn.disabled = true;
+          btn.textContent = '🤖 Generating suggestions...';
+
+          const result = await window.api.ai.suggestVariableDefinition({ label, scaleType });
+
+          if (result.success && result.data) {
+            // Fill in the definition
+            modal.querySelector('#variable-definition').value = result.data.definition || '';
+
+            // Fill in the anchors
+            if (result.data.anchors) {
+              const anchorsContainer = modal.querySelector('#anchors-container');
+              Object.keys(result.data.anchors).forEach(key => {
+                const input = anchorsContainer.querySelector(`input[data-anchor="${key}"]`);
+                if (input) {
+                  input.value = result.data.anchors[key];
+                }
+              });
+            }
+
+            this.showSuccess('AI suggestions applied');
+          } else {
+            this.showError(result.error || 'Failed to generate suggestions');
+          }
+
+          btn.disabled = false;
+          btn.textContent = '🤖 Ask AI to Suggest Definition & Anchors';
+        } catch (error) {
+          console.error('Error getting AI suggestions:', error);
+          this.showError('Error getting AI suggestions');
+          const btn = modal.querySelector('#ai-suggest-btn');
+          btn.disabled = false;
+          btn.textContent = '🤖 Ask AI to Suggest Definition & Anchors';
+        }
+      });
+
+      // Create Variable button
+      modal.querySelector('#create-variable-btn').addEventListener('click', async () => {
+        const label = modal.querySelector('#variable-label').value.trim();
+        const scaleType = modal.querySelector('#scale-type').value;
+        const definition = modal.querySelector('#variable-definition').value.trim();
+        const reasoningDepth = modal.querySelector('#reasoning-depth').value;
+
+        if (!label) {
+          this.showError('Please enter a variable label');
+          return;
+        }
+
+        if (!scaleType) {
+          this.showError('Please select a scale type');
+          return;
+        }
+
+        // Collect anchors
+        const anchors = {};
+        const anchorInputs = modal.querySelectorAll('#anchors-container input[data-anchor]');
+        anchorInputs.forEach(input => {
+          const key = input.dataset.anchor;
+          const value = input.value.trim();
+          if (value) {
+            anchors[key] = value;
+          }
+        });
+
+        try {
+          const result = await window.api.pdf.createRatingVariable({
+            collection_id: collectionId,
+            label,
+            definition,
+            scale_type: scaleType,
+            anchors,
+            reasoning_depth: reasoningDepth
+          });
+
+          if (result.success) {
+            this.showSuccess(`Variable "${label}" created successfully`);
+
+            // Refresh the variables list
+            const updatedVariables = await window.api.pdf.getRatingVariables(collectionId);
+            const listContainer = modal.querySelector('#variables-list');
+            listContainer.innerHTML = this.renderVariablesList(updatedVariables);
+
+            // Clear form
+            modal.querySelector('#variable-label').value = '';
+            modal.querySelector('#scale-type').value = '';
+            modal.querySelector('#variable-definition').value = '';
+            modal.querySelector('#scale-anchors').style.display = 'none';
+          } else {
+            this.showError(result.error || 'Failed to create variable');
+          }
+        } catch (error) {
+          console.error('Error creating variable:', error);
+          this.showError('Error creating variable');
+        }
+      });
+
+      // Click outside to close
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          cleanup();
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  async showGlobalManageVariablesModal() {
+    console.log('[CollectionsHub] showGlobalManageVariablesModal called');
+
+    // Load all existing global variables
+    let variables = [];
+    try {
+      console.log('[CollectionsHub] Fetching global variables...');
+      const result = await window.api.pdf.getGlobalRatingVariables();
+      console.log('[CollectionsHub] Global variables result:', result);
+      if (result && result.success) {
+        variables = result.data || [];
+      }
+    } catch (error) {
+      console.error('[CollectionsHub] Error loading global variables:', error);
+    }
+
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+      <div class="modal-content" style="max-width: 1000px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h2>📝 Global Variable Management</h2>
+          <button class="close-btn" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #9ca3af;">&times;</button>
+        </div>
+        <div class="modal-body" style="max-height: calc(90vh - 120px); overflow-y: auto;">
+          <p style="margin-bottom: 16px; color: #9ca3af;">
+            Define custom rating variables once and apply them to collections by genre (PDF or YouTube).
+          </p>
+
+          <!-- Existing Variables List -->
+          <div id="global-variables-list" style="margin-bottom: 24px;">
+            ${variables.length > 0 ? this.renderGlobalVariablesList(variables) : '<p style="color: #6b7280; text-align: center; padding: 24px; background: #1f2937; border-radius: 8px;">No global variables defined yet. Create your first variable below.</p>'}
+          </div>
+
+          <!-- Create New Variable Form -->
+          <div style="background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 20px; margin-top: 16px;">
+            <h4 style="margin-bottom: 16px; color: #f3f4f6;">Create New Variable</h4>
+
+            <div style="display: grid; gap: 16px;">
+              <!-- Variable Label -->
+              <div>
+                <label style="display: block; margin-bottom: 6px; color: #e5e7eb; font-size: 14px;">Variable Label *</label>
+                <input type="text" id="global-variable-label" placeholder="e.g., Stigma Level, Emotional Valence"
+                  style="width: 100%; padding: 8px; border: 1px solid #374151; background: #111827; color: #f3f4f6; border-radius: 4px;">
+              </div>
+
+              <!-- Genre Selection -->
+              <div>
+                <label style="display: block; margin-bottom: 6px; color: #e5e7eb; font-size: 14px;">Genre *</label>
+                <select id="global-variable-genre"
+                  style="width: 100%; padding: 8px; border: 1px solid #374151; background: #111827; color: #f3f4f6; border-radius: 4px;">
+                  <option value="">-- Select Genre --</option>
+                  <option value="pdf">PDF Collections</option>
+                  <option value="youtube">YouTube Collections</option>
+                  <option value="both">Both (Universal)</option>
+                </select>
+                <small style="display: block; margin-top: 4px; color: #6b7280; font-size: 12px;">
+                  Which type of collections should use this variable?
+                </small>
+              </div>
+
+              <!-- Scale Type -->
+              <div>
+                <label style="display: block; margin-bottom: 6px; color: #e5e7eb; font-size: 14px;">Scale Type *</label>
+                <select id="global-scale-type" onchange="window.collectionsHub.updateGlobalAnchorFields()"
+                  style="width: 100%; padding: 8px; border: 1px solid #374151; background: #111827; color: #f3f4f6; border-radius: 4px;">
+                  <option value="">-- Select Scale --</option>
+                  <option value="binary">Binary (0/1)</option>
+                  <option value="3point">3-Point Scale</option>
+                  <option value="4point">4-Point Scale</option>
+                  <option value="5point">5-Point Scale</option>
+                  <option value="7point">7-Point Scale</option>
+                  <option value="10point">10-Point Scale</option>
+                  <option value="100point">100-Point Scale</option>
+                </select>
+              </div>
+
+              <!-- Variable Definition -->
+              <div>
+                <label style="display: block; margin-bottom: 6px; color: #e5e7eb; font-size: 14px;">Variable Definition</label>
+                <textarea id="global-variable-definition" rows="3" placeholder="What does this variable measure? (optional)"
+                  style="width: 100%; padding: 8px; border: 1px solid #374151; background: #111827; color: #f3f4f6; border-radius: 4px; resize: vertical;"></textarea>
+                <button id="global-ai-suggest-btn" style="margin-top: 8px; padding: 6px 12px; background: #8b5cf6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">
+                  🤖 Ask AI to Suggest Definition & Anchors
+                </button>
+              </div>
+
+              <!-- Dynamic Scale Anchors -->
+              <div id="global-scale-anchors" style="display: none;">
+                <label style="display: block; margin-bottom: 6px; color: #e5e7eb; font-size: 14px;">Scale Anchors</label>
+                <div id="global-anchors-container" style="display: grid; gap: 8px;">
+                  <!-- Dynamically generated anchor fields will go here -->
+                </div>
+              </div>
+
+              <!-- Reasoning Depth Preference -->
+              <div>
+                <label style="display: block; margin-bottom: 6px; color: #e5e7eb; font-size: 14px;">Default Reasoning Depth</label>
+                <select id="global-reasoning-depth" style="width: 100%; padding: 8px; border: 1px solid #374151; background: #111827; color: #f3f4f6; border-radius: 4px;">
+                  <option value="brief">Brief (1-2 sentences)</option>
+                  <option value="moderate">Moderate (3-5 sentences)</option>
+                  <option value="lengthy">Lengthy (6+ sentences, for scale development)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; padding-top: 16px; border-top: 1px solid #374151;">
+          <button class="btn" style="padding: 8px 16px; background: #374151; color: white; border: none; border-radius: 4px; cursor: pointer;">Close</button>
+          <button class="btn btn-primary" id="create-global-variable-btn" style="padding: 8px 16px; background: #8b5cf6; color: white; border: none; border-radius: 4px; cursor: pointer;">Create Variable</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    console.log('[CollectionsHub] Modal appended to DOM, should be visible now');
+
+    const cleanup = () => {
+      console.log('[CollectionsHub] Closing modal');
+      modal.remove();
+    };
+
+    // Close button (X in header)
+    const closeBtn = modal.querySelector('.close-btn');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', cleanup);
+    }
+
+    // Cancel/Close button in footer
+    const cancelBtn = modal.querySelector('.btn');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', cleanup);
+    }
+
+    // AI Suggest button
+    const aiSuggestBtn = modal.querySelector('#global-ai-suggest-btn');
+    if (aiSuggestBtn) {
+      aiSuggestBtn.addEventListener('click', async () => {
+        const label = modal.querySelector('#global-variable-label').value.trim();
+        const scaleType = modal.querySelector('#global-scale-type').value;
+
+        if (!label) {
+          this.showError('Please enter a variable label first');
+          return;
+        }
+
+        if (!scaleType) {
+          this.showError('Please select a scale type first');
+          return;
+        }
+
+        // Check if AI API is available
+        if (!window.api?.ai?.suggestVariableDefinition) {
+          this.showError('AI suggestions not available. Please configure Gemini API key in Settings.');
+          return;
+        }
+
+        try {
+          const btn = modal.querySelector('#global-ai-suggest-btn');
+          btn.disabled = true;
+          btn.textContent = '🤖 Generating suggestions...';
+
+          const result = await window.api.ai.suggestVariableDefinition({ label, scaleType });
+
+          if (result.success && result.data) {
+            // Fill in the definition
+            modal.querySelector('#global-variable-definition').value = result.data.definition || '';
+
+            // Fill in the anchors
+            if (result.data.anchors) {
+              const anchorsContainer = modal.querySelector('#global-anchors-container');
+              Object.keys(result.data.anchors).forEach(key => {
+                const input = anchorsContainer.querySelector(`input[data-anchor="${key}"]`);
+                if (input) {
+                  input.value = result.data.anchors[key];
+                }
+              });
+            }
+
+            this.showSuccess('AI suggestions applied');
+          } else {
+            this.showError(result.error || 'Failed to generate suggestions');
+          }
+
+          btn.disabled = false;
+          btn.textContent = '🤖 Ask AI to Suggest Definition & Anchors';
+        } catch (error) {
+          console.error('Error getting AI suggestions:', error);
+          this.showError('AI feature unavailable. Check that Gemini API is configured.');
+          const btn = modal.querySelector('#global-ai-suggest-btn');
+          btn.disabled = false;
+          btn.textContent = '🤖 Ask AI to Suggest Definition & Anchors';
+        }
+      });
+    }
+
+    // Create Variable button
+    modal.querySelector('#create-global-variable-btn').addEventListener('click', async () => {
+      const label = modal.querySelector('#global-variable-label').value.trim();
+      const genre = modal.querySelector('#global-variable-genre').value;
+      const scaleType = modal.querySelector('#global-scale-type').value;
+      const definition = modal.querySelector('#global-variable-definition').value.trim();
+      const reasoningDepth = modal.querySelector('#global-reasoning-depth').value;
+
+      if (!label) {
+        this.showError('Please enter a variable label');
+        return;
+      }
+
+      if (!genre) {
+        this.showError('Please select a genre');
+        return;
+      }
+
+      if (!scaleType) {
+        this.showError('Please select a scale type');
+        return;
+      }
+
+      // Collect anchors
+      const anchors = {};
+      const anchorInputs = modal.querySelectorAll('#global-anchors-container input[data-anchor]');
+      anchorInputs.forEach(input => {
+        const key = input.dataset.anchor;
+        const value = input.value.trim();
+        if (value) {
+          anchors[key] = value;
+        }
+      });
+
+      try {
+        const result = await window.api.pdf.createGlobalRatingVariable({
+          label,
+          genre,
+          definition,
+          scale_type: scaleType,
+          anchors,
+          reasoning_depth: reasoningDepth
+        });
+
+        if (result.success) {
+          this.showSuccess(`Variable "${label}" created successfully`);
+
+          // Refresh the variables list
+          const updatedResult = await window.api.pdf.getGlobalRatingVariables();
+          const updatedVariables = updatedResult.success ? updatedResult.data : [];
+          const listContainer = modal.querySelector('#global-variables-list');
+          listContainer.innerHTML = this.renderGlobalVariablesList(updatedVariables);
+
+          // Clear form
+          modal.querySelector('#global-variable-label').value = '';
+          modal.querySelector('#global-variable-genre').value = '';
+          modal.querySelector('#global-scale-type').value = '';
+          modal.querySelector('#global-variable-definition').value = '';
+          modal.querySelector('#global-scale-anchors').style.display = 'none';
+        } else {
+          this.showError(result.error || 'Failed to create variable');
+        }
+      } catch (error) {
+        console.error('Error creating variable:', error);
+        this.showError('Error creating variable');
+      }
+    });
+
+    // Click outside to close
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        cleanup();
+      }
+    });
+  }
+
+  renderGlobalVariablesList(variables) {
+    if (!variables || variables.length === 0) {
+      return '<p style="color: #6b7280; text-align: center; padding: 24px; background: #1f2937; border-radius: 8px;">No global variables defined yet.</p>';
+    }
+
+    return `
+      <div style="display: grid; gap: 12px;">
+        ${variables.map(v => `
+          <div style="background: #111827; border: 1px solid #374151; border-radius: 6px; padding: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+              <div style="flex: 1;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                  <h5 style="margin: 0; color: #f3f4f6;">${this.escapeHtml(v.label)}</h5>
+                  <span style="padding: 2px 8px; background: ${v.genre === 'pdf' ? '#7c3aed' : v.genre === 'youtube' ? '#ef4444' : '#10b981'}; color: white; border-radius: 4px; font-size: 11px; font-weight: 600;">
+                    ${v.genre === 'pdf' ? '📄 PDF' : v.genre === 'youtube' ? '📹 YouTube' : '🌐 Universal'}
+                  </span>
+                </div>
+                <p style="margin: 0 0 8px 0; color: #9ca3af; font-size: 13px;">${this.escapeHtml(v.definition || 'No definition')}</p>
+                <div style="display: flex; gap: 12px; font-size: 12px; color: #6b7280;">
+                  <span>Scale: ${this.escapeHtml(v.scale_type)}</span>
+                  <span>•</span>
+                  <span>Depth: ${this.escapeHtml(v.reasoning_depth)}</span>
+                </div>
+              </div>
+              <button onclick="window.collectionsHub.deleteGlobalVariable(${v.id}, '${this.escapeHtml(v.label)}')"
+                style="padding: 6px 12px; background: #7f1d1d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                Delete
+              </button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  updateGlobalAnchorFields() {
+    const scaleType = document.querySelector('#global-scale-type')?.value;
+    const anchorsSection = document.querySelector('#global-scale-anchors');
+    const anchorsContainer = document.querySelector('#global-anchors-container');
+
+    if (!scaleType || !anchorsSection || !anchorsContainer) return;
+
+    // Scale type configurations
+    const scaleConfigs = {
+      'binary': [0, 1],
+      '3point': [1, 2, 3],
+      '4point': [1, 2, 3, 4],
+      '5point': [1, 2, 3, 4, 5],
+      '7point': [1, 2, 3, 4, 5, 6, 7],
+      '10point': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      '100point': [0, 100]  // Only endpoints for 100-point
+    };
+
+    const points = scaleConfigs[scaleType];
+    if (!points) {
+      anchorsSection.style.display = 'none';
+      return;
+    }
+
+    anchorsSection.style.display = 'block';
+    anchorsContainer.innerHTML = points.map(point => `
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <label style="min-width: 40px; color: #e5e7eb; font-size: 14px;">${point}:</label>
+        <input type="text" data-anchor="${point}" placeholder="Define what ${point} means..."
+          style="flex: 1; padding: 6px 8px; border: 1px solid #374151; background: #111827; color: #f3f4f6; border-radius: 4px; font-size: 13px;">
+      </div>
+    `).join('');
+  }
+
+  async deleteGlobalVariable(variableId, variableLabel) {
+    if (!confirm(`Are you sure you want to delete the global variable "${variableLabel}"? This will affect all collections using this variable.`)) {
+      return;
+    }
+
+    try {
+      const result = await window.api.pdf.deleteGlobalRatingVariable(variableId);
+      if (result.success) {
+        this.showSuccess(`Variable "${variableLabel}" deleted`);
+        // Re-open the modal to refresh
+        await this.showGlobalManageVariablesModal();
+      } else {
+        this.showError(result.error || 'Failed to delete variable');
+      }
+    } catch (error) {
+      console.error('Error deleting variable:', error);
+      this.showError('Error deleting variable');
+    }
+  }
+
+  renderVariablesList(variables) {
+    if (!variables || variables.length === 0) {
+      return '<p style="color: #6b7280; text-align: center; padding: 24px;">No variables defined yet.</p>';
+    }
+
+    return `
+      <div style="display: grid; gap: 12px;">
+        ${variables.map(v => `
+          <div style="background: #111827; border: 1px solid #374151; border-radius: 6px; padding: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+              <div style="flex: 1;">
+                <h5 style="margin: 0 0 8px 0; color: #f3f4f6;">${this.escapeHtml(v.label)}</h5>
+                <p style="margin: 0 0 8px 0; color: #9ca3af; font-size: 13px;">${this.escapeHtml(v.definition || 'No definition')}</p>
+                <div style="display: flex; gap: 12px; font-size: 12px; color: #6b7280;">
+                  <span>Scale: ${this.escapeHtml(v.scale_type)}</span>
+                  <span>•</span>
+                  <span>Depth: ${this.escapeHtml(v.reasoning_depth)}</span>
+                </div>
+              </div>
+              <button onclick="window.collectionsHub.deleteVariable(${v.id}, '${this.escapeHtml(v.label)}')"
+                style="padding: 6px 12px; background: #7f1d1d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                Delete
+              </button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  updateAnchorFields() {
+    const scaleType = document.querySelector('#scale-type')?.value;
+    const anchorsSection = document.querySelector('#scale-anchors');
+    const anchorsContainer = document.querySelector('#anchors-container');
+
+    if (!scaleType || !anchorsSection || !anchorsContainer) return;
+
+    // Scale type configurations
+    const scaleConfigs = {
+      'binary': [0, 1],
+      '3point': [1, 2, 3],
+      '4point': [1, 2, 3, 4],
+      '5point': [1, 2, 3, 4, 5],
+      '7point': [1, 2, 3, 4, 5, 6, 7],
+      '10point': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      '100point': [0, 100]  // Only endpoints for 100-point
+    };
+
+    const points = scaleConfigs[scaleType];
+    if (!points) {
+      anchorsSection.style.display = 'none';
+      return;
+    }
+
+    anchorsSection.style.display = 'block';
+    anchorsContainer.innerHTML = points.map(point => `
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <label style="min-width: 40px; color: #e5e7eb; font-size: 14px;">${point}:</label>
+        <input type="text" data-anchor="${point}" placeholder="Define what ${point} means..."
+          style="flex: 1; padding: 6px 8px; border: 1px solid #374151; background: #111827; color: #f3f4f6; border-radius: 4px; font-size: 13px;">
+      </div>
+    `).join('');
+  }
+
+  async deleteVariable(variableId, variableLabel) {
+    if (!confirm(`Are you sure you want to delete the variable "${variableLabel}"? This will also delete all ratings for this variable.`)) {
+      return;
+    }
+
+    try {
+      const result = await window.api.pdf.deleteRatingVariable(variableId);
+      if (result.success) {
+        this.showSuccess(`Variable "${variableLabel}" deleted`);
+        // The list will be refreshed when the modal is reopened
+        location.reload(); // Simple way to refresh - could be improved
+      } else {
+        this.showError(result.error || 'Failed to delete variable');
+      }
+    } catch (error) {
+      console.error('Error deleting variable:', error);
+      this.showError('Error deleting variable');
+    }
+  }
+
   showSuccess(message) {
     console.log('✓', message);
     if (window.toastNotification) {
@@ -976,9 +2024,9 @@ class CollectionsHub {
 // Auto-initialize when the DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
-    new CollectionsHub();
+    window.collectionsHub = new CollectionsHub();
   });
 } else {
   // DOM is already ready
-  new CollectionsHub();
+  window.collectionsHub = new CollectionsHub();
 }

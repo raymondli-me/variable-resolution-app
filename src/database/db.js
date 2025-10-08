@@ -213,7 +213,52 @@ class Database {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (target_collection_id) REFERENCES collections(id) ON DELETE CASCADE,
         FOREIGN KEY (target_folder_id) REFERENCES folders(id) ON DELETE SET NULL
-      )`
+      )`,
+
+      // Rating Variables table - for custom user-defined coding variables
+      `CREATE TABLE IF NOT EXISTS rating_variables (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        collection_id INTEGER NOT NULL,
+        label TEXT NOT NULL,
+        definition TEXT,
+        scale_type TEXT NOT NULL,
+        anchors TEXT,
+        reasoning_depth TEXT DEFAULT 'brief',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE
+      )`,
+
+      // Global Rating Variables table - for centralized, reusable coding variables
+      `CREATE TABLE IF NOT EXISTS global_rating_variables (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        label TEXT NOT NULL,
+        genre TEXT NOT NULL,
+        definition TEXT,
+        scale_type TEXT NOT NULL,
+        anchors TEXT,
+        reasoning_depth TEXT DEFAULT 'brief',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      // Excerpt Ratings table - for human ratings of PDF excerpts
+      `CREATE TABLE IF NOT EXISTS excerpt_ratings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        excerpt_id INTEGER NOT NULL,
+        variable_id INTEGER NOT NULL,
+        score INTEGER NOT NULL,
+        reasoning TEXT,
+        reasoning_depth TEXT DEFAULT 'brief',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (excerpt_id) REFERENCES pdf_excerpts(id) ON DELETE CASCADE,
+        FOREIGN KEY (variable_id) REFERENCES rating_variables(id) ON DELETE CASCADE,
+        UNIQUE(excerpt_id, variable_id)
+      )`,
+
+      // Indexes for rating tables
+      `CREATE INDEX IF NOT EXISTS idx_rating_variables_collection ON rating_variables(collection_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_excerpt_ratings_excerpt ON excerpt_ratings(excerpt_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_excerpt_ratings_variable ON excerpt_ratings(variable_id)`
     ];
 
     for (const query of queries) {
@@ -1910,6 +1955,265 @@ class Database {
     `, [...values, mergeId]);
 
     console.log(`[Database] Updated merge ${mergeId}`);
+  }
+
+  // ============================================
+  // RATING VARIABLES METHODS
+  // ============================================
+
+  /**
+   * Create a new rating variable for a collection
+   */
+  async createRatingVariable(variableData) {
+    const { collection_id, label, definition, scale_type, anchors, reasoning_depth } = variableData;
+
+    const result = await this.run(`
+      INSERT INTO rating_variables (
+        collection_id, label, definition, scale_type, anchors, reasoning_depth
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `, [
+      collection_id,
+      label,
+      definition || null,
+      scale_type,
+      JSON.stringify(anchors || {}),
+      reasoning_depth || 'brief'
+    ]);
+
+    return result.id;
+  }
+
+  /**
+   * Get all rating variables for a collection
+   */
+  async getRatingVariables(collectionId) {
+    const variables = await this.all(`
+      SELECT * FROM rating_variables
+      WHERE collection_id = ?
+      ORDER BY created_at DESC
+    `, [collectionId]);
+
+    // Parse anchors JSON
+    return variables.map(v => ({
+      ...v,
+      anchors: v.anchors ? JSON.parse(v.anchors) : {}
+    }));
+  }
+
+  /**
+   * Get a specific rating variable
+   */
+  async getRatingVariable(variableId) {
+    const variable = await this.get(`
+      SELECT * FROM rating_variables WHERE id = ?
+    `, [variableId]);
+
+    if (variable && variable.anchors) {
+      variable.anchors = JSON.parse(variable.anchors);
+    }
+
+    return variable;
+  }
+
+  /**
+   * Update a rating variable
+   */
+  async updateRatingVariable(variableId, updates) {
+    const allowedFields = ['label', 'definition', 'scale_type', 'anchors', 'reasoning_depth'];
+    const fields = Object.keys(updates).filter(k => allowedFields.includes(k));
+
+    if (fields.length === 0) return;
+
+    const setClause = fields.map(f => `${f} = ?`).join(', ');
+    const values = fields.map(f => {
+      if (f === 'anchors') return JSON.stringify(updates[f]);
+      return updates[f];
+    });
+
+    await this.run(`
+      UPDATE rating_variables SET ${setClause} WHERE id = ?
+    `, [...values, variableId]);
+  }
+
+  /**
+   * Delete a rating variable
+   */
+  async deleteRatingVariable(variableId) {
+    await this.run('DELETE FROM rating_variables WHERE id = ?', [variableId]);
+  }
+
+  // ============================================
+  // GLOBAL RATING VARIABLES METHODS
+  // ============================================
+
+  /**
+   * Create a new global rating variable
+   */
+  async createGlobalRatingVariable(variableData) {
+    const { label, genre, definition, scale_type, anchors, reasoning_depth } = variableData;
+
+    const result = await this.run(`
+      INSERT INTO global_rating_variables (
+        label, genre, definition, scale_type, anchors, reasoning_depth
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `, [
+      label,
+      genre,
+      definition,
+      scale_type,
+      JSON.stringify(anchors),
+      reasoning_depth
+    ]);
+
+    return result.lastID;
+  }
+
+  /**
+   * Get all global rating variables
+   */
+  async getGlobalRatingVariables() {
+    const variables = await this.all(`
+      SELECT * FROM global_rating_variables
+      ORDER BY created_at DESC
+    `);
+
+    // Parse JSON anchors
+    return variables.map(v => ({
+      ...v,
+      anchors: v.anchors ? JSON.parse(v.anchors) : {}
+    }));
+  }
+
+  /**
+   * Get global rating variables by genre
+   */
+  async getGlobalRatingVariablesByGenre(genre) {
+    const variables = await this.all(`
+      SELECT * FROM global_rating_variables
+      WHERE genre = ? OR genre = 'both'
+      ORDER BY created_at DESC
+    `, [genre]);
+
+    // Parse JSON anchors
+    return variables.map(v => ({
+      ...v,
+      anchors: v.anchors ? JSON.parse(v.anchors) : {}
+    }));
+  }
+
+  /**
+   * Delete a global rating variable
+   */
+  async deleteGlobalRatingVariable(variableId) {
+    await this.run('DELETE FROM global_rating_variables WHERE id = ?', [variableId]);
+  }
+
+  // ============================================
+  // EXCERPT RATINGS METHODS
+  // ============================================
+
+  /**
+   * Save or update an excerpt rating
+   */
+  async saveExcerptRating(ratingData) {
+    const { excerpt_id, variable_id, score, reasoning, reasoning_depth } = ratingData;
+
+    const result = await this.run(`
+      INSERT INTO excerpt_ratings (
+        excerpt_id, variable_id, score, reasoning, reasoning_depth, updated_at
+      ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(excerpt_id, variable_id)
+      DO UPDATE SET
+        score = excluded.score,
+        reasoning = excluded.reasoning,
+        reasoning_depth = excluded.reasoning_depth,
+        updated_at = CURRENT_TIMESTAMP
+    `, [excerpt_id, variable_id, score, reasoning || null, reasoning_depth || 'brief']);
+
+    return result.id;
+  }
+
+  /**
+   * Get ratings for a specific excerpt
+   */
+  async getExcerptRatings(excerptId) {
+    return await this.all(`
+      SELECT
+        er.*,
+        rv.label as variable_label,
+        rv.scale_type,
+        rv.anchors
+      FROM excerpt_ratings er
+      JOIN rating_variables rv ON er.variable_id = rv.id
+      WHERE er.excerpt_id = ?
+      ORDER BY er.created_at DESC
+    `, [excerptId]);
+  }
+
+  /**
+   * Get rating for a specific excerpt and variable
+   */
+  async getExcerptRating(excerptId, variableId) {
+    const rating = await this.get(`
+      SELECT
+        er.*,
+        rv.label as variable_label,
+        rv.scale_type,
+        rv.anchors
+      FROM excerpt_ratings er
+      JOIN rating_variables rv ON er.variable_id = rv.id
+      WHERE er.excerpt_id = ? AND er.variable_id = ?
+    `, [excerptId, variableId]);
+
+    if (rating && rating.anchors) {
+      rating.anchors = JSON.parse(rating.anchors);
+    }
+
+    return rating;
+  }
+
+  /**
+   * Get all ratings for a variable across all excerpts
+   */
+  async getRatingsByVariable(variableId) {
+    return await this.all(`
+      SELECT
+        er.*,
+        pe.text_content as excerpt_text,
+        pe.page_number,
+        pdf.title as pdf_title
+      FROM excerpt_ratings er
+      JOIN pdf_excerpts pe ON er.excerpt_id = pe.id
+      JOIN pdfs pdf ON pe.pdf_id = pdf.id
+      WHERE er.variable_id = ?
+      ORDER BY er.created_at DESC
+    `, [variableId]);
+  }
+
+  /**
+   * Delete an excerpt rating
+   */
+  async deleteExcerptRating(excerptId, variableId) {
+    await this.run(`
+      DELETE FROM excerpt_ratings
+      WHERE excerpt_id = ? AND variable_id = ?
+    `, [excerptId, variableId]);
+  }
+
+  /**
+   * Get rating statistics for a variable
+   */
+  async getVariableRatingStats(variableId) {
+    return await this.get(`
+      SELECT
+        COUNT(*) as total_ratings,
+        AVG(score) as avg_score,
+        MIN(score) as min_score,
+        MAX(score) as max_score,
+        COUNT(DISTINCT excerpt_id) as total_excerpts_rated
+      FROM excerpt_ratings
+      WHERE variable_id = ?
+    `, [variableId]);
   }
 
   close() {

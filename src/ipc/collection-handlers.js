@@ -237,7 +237,7 @@ function registerCollectionHandlers(getDatabase) {
   // COLLECTION TRANSFORMATION HANDLERS
   // ============================================
 
-  // Duplicate collection
+  // Duplicate collection (genre-aware: supports both video and PDF collections)
   ipcMain.handle('collections:duplicate', async (event, params) => {
     try {
       const db = await getDatabase();
@@ -248,48 +248,120 @@ function registerCollectionHandlers(getDatabase) {
         return { success: false, error: 'Source collection not found' };
       }
 
-      // Get all videos from source
-      const videos = await db.all('SELECT * FROM videos WHERE collection_id = ?', [params.sourceId]);
+      // Parse settings to determine collection type
+      const settings = typeof sourceCollection.settings === 'string'
+        ? JSON.parse(sourceCollection.settings)
+        : sourceCollection.settings || {};
+
+      const collectionType = settings.type || 'video'; // Default to video for backwards compatibility
 
       // Create new collection
-      const newCollectionId = await db.createCollection(params.newName, sourceCollection.settings || {});
+      const newCollectionId = await db.createCollection(params.newName, settings);
 
-      // Copy videos
-      for (const video of videos) {
-        await db.run(`
-          INSERT INTO videos (
-            collection_id, id, title, channel_title, view_count, like_count,
-            comment_count, published_at, duration, thumbnails, local_path
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-          newCollectionId, video.id, video.title, video.channel_title,
-          video.view_count, video.like_count, video.comment_count, video.published_at,
-          video.duration, video.thumbnails, video.local_path
-        ]);
-      }
+      if (collectionType === 'pdf') {
+        // PDF collection: copy PDFs and excerpts
+        const pdfs = await db.all('SELECT * FROM pdfs WHERE collection_id = ?', [params.sourceId]);
 
-      // Copy comments if requested
-      if (params.includeComments) {
-        const comments = await db.all('SELECT * FROM comments WHERE collection_id = ?', [params.sourceId]);
-        for (const comment of comments) {
+        // Map old PDF IDs to new PDF IDs
+        const pdfIdMap = {};
+
+        // Copy PDFs
+        for (const pdf of pdfs) {
+          const result = await db.run(`
+            INSERT INTO pdfs (
+              collection_id, file_path, title, author, num_pages, file_size, metadata
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          `, [
+            newCollectionId, pdf.file_path, pdf.title, pdf.author,
+            pdf.num_pages, pdf.file_size, pdf.metadata
+          ]);
+          pdfIdMap[pdf.id] = result.id;
+        }
+
+        // Copy excerpts
+        const excerpts = await db.all(`
+          SELECT * FROM pdf_excerpts
+          WHERE pdf_id IN (SELECT id FROM pdfs WHERE collection_id = ?)
+        `, [params.sourceId]);
+
+        for (const excerpt of excerpts) {
+          const newPdfId = pdfIdMap[excerpt.pdf_id];
+          if (!newPdfId) continue;
+
           await db.run(`
-            INSERT INTO comments (
-              collection_id, video_id, comment_id, author, text, like_count, published_at, parent_id
+            INSERT INTO pdf_excerpts (
+              pdf_id, collection_id, excerpt_number, page_number,
+              text_content, char_start, char_end, bbox
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           `, [
-            newCollectionId, comment.video_id, comment.comment_id, comment.author,
-            comment.text, comment.like_count, comment.published_at, comment.parent_id
+            newPdfId, newCollectionId, excerpt.excerpt_number, excerpt.page_number,
+            excerpt.text_content, excerpt.char_start, excerpt.char_end, excerpt.bbox
+          ]);
+
+          const newExcerptId = (await db.get('SELECT last_insert_rowid() as id')).id;
+
+          // Copy ratings if requested
+          if (params.includeRatings !== false) {
+            // Copy human ratings
+            const humanRatings = await db.all('SELECT * FROM excerpt_ratings WHERE excerpt_id = ?', [excerpt.id]);
+            for (const rating of humanRatings) {
+              await db.run(`
+                INSERT INTO excerpt_ratings (excerpt_id, variable_id, score, reasoning, reasoning_depth, source, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              `, [newExcerptId, rating.variable_id, rating.score, rating.reasoning, rating.reasoning_depth, rating.source, rating.created_at, rating.updated_at]);
+            }
+
+            // Copy AI ratings
+            const aiRatings = await db.all('SELECT * FROM ai_excerpt_ratings WHERE excerpt_id = ?', [excerpt.id]);
+            for (const rating of aiRatings) {
+              await db.run(`
+                INSERT INTO ai_excerpt_ratings (excerpt_id, variable_id, score, reasoning, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+              `, [newExcerptId, rating.variable_id, rating.score, rating.reasoning, rating.created_at, rating.updated_at]);
+            }
+          }
+        }
+
+      } else {
+        // Video collection: copy videos and comments (original behavior)
+        const videos = await db.all('SELECT * FROM videos WHERE collection_id = ?', [params.sourceId]);
+
+        for (const video of videos) {
+          await db.run(`
+            INSERT INTO videos (
+              collection_id, id, title, channel_title, view_count, like_count,
+              comment_count, published_at, duration, thumbnails, local_path
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            newCollectionId, video.id, video.title, video.channel_title,
+            video.view_count, video.like_count, video.comment_count, video.published_at,
+            video.duration, video.thumbnails, video.local_path
           ]);
         }
-      }
 
-      // Update video/comment counts
-      await db.run(`
-        UPDATE collections
-        SET video_count = (SELECT COUNT(*) FROM videos WHERE collection_id = ?),
-            comment_count = (SELECT COUNT(*) FROM comments WHERE collection_id = ?)
-        WHERE id = ?
-      `, [newCollectionId, newCollectionId, newCollectionId]);
+        // Copy comments if requested
+        if (params.includeComments) {
+          const comments = await db.all('SELECT * FROM comments WHERE collection_id = ?', [params.sourceId]);
+          for (const comment of comments) {
+            await db.run(`
+              INSERT INTO comments (
+                collection_id, video_id, comment_id, author, text, like_count, published_at, parent_id
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+              newCollectionId, comment.video_id, comment.comment_id, comment.author,
+              comment.text, comment.like_count, comment.published_at, comment.parent_id
+            ]);
+          }
+        }
+
+        // Update video/comment counts
+        await db.run(`
+          UPDATE collections
+          SET video_count = (SELECT COUNT(*) FROM videos WHERE collection_id = ?),
+              comment_count = (SELECT COUNT(*) FROM comments WHERE collection_id = ?)
+          WHERE id = ?
+        `, [newCollectionId, newCollectionId, newCollectionId]);
+      }
 
       return { success: true, collectionId: newCollectionId };
     } catch (error) {
@@ -480,6 +552,9 @@ function registerCollectionHandlers(getDatabase) {
     try {
       const db = await getDatabase();
 
+      console.log('[FILTER DEBUG] === Start Filter Request ===');
+      console.log('[FILTER DEBUG] params.filters:', JSON.stringify(params.filters, null, 2));
+
       // Get source collection
       const sourceCollection = await db.getCollection(params.sourceId);
       if (!sourceCollection) {
@@ -497,6 +572,8 @@ function registerCollectionHandlers(getDatabase) {
         // Default to video collection
       }
 
+      console.log('[FILTER DEBUG] isPdfCollection:', isPdfCollection);
+
       let filteredItems;
       let matchCount = 0;
 
@@ -504,6 +581,9 @@ function registerCollectionHandlers(getDatabase) {
         // PDF Collection Filtering
         let query = 'SELECT DISTINCT pe.* FROM pdf_excerpts pe WHERE pe.pdf_id IN (SELECT id FROM pdfs WHERE collection_id = ?)';
         let queryParams = [params.sourceId];
+
+        console.log('[FILTER DEBUG] Initial query:', query);
+        console.log('[FILTER DEBUG] Initial queryParams:', queryParams);
 
         // Page range filter
         if (params.filters.pageStart) {
@@ -529,6 +609,8 @@ function registerCollectionHandlers(getDatabase) {
 
         // Variable-based filtering
         if (params.filters.variableFilters && params.filters.variableFilters.length > 0) {
+          console.log('[FILTER DEBUG] Processing variableFilters:', params.filters.variableFilters.length, 'filters');
+
           for (const vf of params.filters.variableFilters) {
             const varId = vf.variableId;
             const ratingType = vf.ratingType || 'any';
@@ -536,10 +618,12 @@ function registerCollectionHandlers(getDatabase) {
             const maxScore = vf.maxScore;
             const status = vf.status || 'all';
 
+            console.log('[FILTER DEBUG] Processing filter:', { varId, ratingType, minScore, maxScore, status });
+
             if (status === 'unrated') {
               // Only excerpts WITHOUT ratings for this variable
               query += ` AND pe.id NOT IN (
-                SELECT excerpt_id FROM pdf_excerpt_ratings WHERE variable_id = ?
+                SELECT excerpt_id FROM excerpt_ratings WHERE variable_id = ?
                 UNION
                 SELECT excerpt_id FROM ai_excerpt_ratings WHERE variable_id = ?
               )`;
@@ -550,15 +634,15 @@ function registerCollectionHandlers(getDatabase) {
                 query += ` AND pe.id IN (SELECT excerpt_id FROM ai_excerpt_ratings WHERE variable_id = ?)`;
                 queryParams.push(varId);
               } else if (ratingType === 'human') {
-                query += ` AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ratings WHERE variable_id = ?)`;
+                query += ` AND pe.id IN (SELECT excerpt_id FROM excerpt_ratings WHERE variable_id = ?)`;
                 queryParams.push(varId);
               } else if (ratingType === 'both') {
-                query += ` AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ratings WHERE variable_id = ?)
+                query += ` AND pe.id IN (SELECT excerpt_id FROM excerpt_ratings WHERE variable_id = ?)
                           AND pe.id IN (SELECT excerpt_id FROM ai_excerpt_ratings WHERE variable_id = ?)`;
                 queryParams.push(varId, varId);
               } else {
                 // 'any' - has either AI or human rating
-                query += ` AND (pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ratings WHERE variable_id = ?)
+                query += ` AND (pe.id IN (SELECT excerpt_id FROM excerpt_ratings WHERE variable_id = ?)
                            OR pe.id IN (SELECT excerpt_id FROM ai_excerpt_ratings WHERE variable_id = ?))`;
                 queryParams.push(varId, varId);
               }
@@ -566,7 +650,29 @@ function registerCollectionHandlers(getDatabase) {
 
             // Score range filtering (applies only if status is not 'unrated')
             if (status !== 'unrated' && (minScore !== null || maxScore !== null)) {
-              if (ratingType === 'ai' || ratingType === 'any') {
+              if (ratingType === 'any') {
+                // For 'any', use OR logic: excerpt must have EITHER AI rating OR human rating meeting criteria
+                const conditions = [];
+                if (minScore !== null && maxScore !== null) {
+                  conditions.push(`pe.id IN (SELECT excerpt_id FROM ai_excerpt_ratings WHERE variable_id = ? AND CAST(score AS REAL) >= ? AND CAST(score AS REAL) <= ?)`);
+                  queryParams.push(varId, minScore, maxScore);
+                  conditions.push(`pe.id IN (SELECT excerpt_id FROM excerpt_ratings WHERE variable_id = ? AND CAST(score AS REAL) >= ? AND CAST(score AS REAL) <= ?)`);
+                  queryParams.push(varId, minScore, maxScore);
+                } else if (minScore !== null) {
+                  conditions.push(`pe.id IN (SELECT excerpt_id FROM ai_excerpt_ratings WHERE variable_id = ? AND CAST(score AS REAL) >= ?)`);
+                  queryParams.push(varId, minScore);
+                  conditions.push(`pe.id IN (SELECT excerpt_id FROM excerpt_ratings WHERE variable_id = ? AND CAST(score AS REAL) >= ?)`);
+                  queryParams.push(varId, minScore);
+                } else if (maxScore !== null) {
+                  conditions.push(`pe.id IN (SELECT excerpt_id FROM ai_excerpt_ratings WHERE variable_id = ? AND CAST(score AS REAL) <= ?)`);
+                  queryParams.push(varId, maxScore);
+                  conditions.push(`pe.id IN (SELECT excerpt_id FROM excerpt_ratings WHERE variable_id = ? AND CAST(score AS REAL) <= ?)`);
+                  queryParams.push(varId, maxScore);
+                }
+                if (conditions.length > 0) {
+                  query += ` AND (${conditions.join(' OR ')})`;
+                }
+              } else if (ratingType === 'ai') {
                 if (minScore !== null) {
                   query += ` AND pe.id IN (SELECT excerpt_id FROM ai_excerpt_ratings WHERE variable_id = ? AND CAST(score AS REAL) >= ?)`;
                   queryParams.push(varId, minScore);
@@ -575,14 +681,13 @@ function registerCollectionHandlers(getDatabase) {
                   query += ` AND pe.id IN (SELECT excerpt_id FROM ai_excerpt_ratings WHERE variable_id = ? AND CAST(score AS REAL) <= ?)`;
                   queryParams.push(varId, maxScore);
                 }
-              }
-              if (ratingType === 'human' || ratingType === 'any') {
+              } else if (ratingType === 'human') {
                 if (minScore !== null) {
-                  query += ` AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ratings WHERE variable_id = ? AND CAST(score AS REAL) >= ?)`;
+                  query += ` AND pe.id IN (SELECT excerpt_id FROM excerpt_ratings WHERE variable_id = ? AND CAST(score AS REAL) >= ?)`;
                   queryParams.push(varId, minScore);
                 }
                 if (maxScore !== null) {
-                  query += ` AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ratings WHERE variable_id = ? AND CAST(score AS REAL) <= ?)`;
+                  query += ` AND pe.id IN (SELECT excerpt_id FROM excerpt_ratings WHERE variable_id = ? AND CAST(score AS REAL) <= ?)`;
                   queryParams.push(varId, maxScore);
                 }
               }
@@ -590,8 +695,30 @@ function registerCollectionHandlers(getDatabase) {
           }
         }
 
+        console.log('[FILTER DEBUG] === Final Query ===');
+        console.log('[FILTER DEBUG] Query:', query);
+        console.log('[FILTER DEBUG] QueryParams:', queryParams);
+
+        // Debug: Check what's actually in the database
+        const debugPdfs = await db.all('SELECT id, collection_id FROM pdfs WHERE collection_id = ?', [params.sourceId]);
+        console.log('[FILTER DEBUG] PDFs in collection:', debugPdfs);
+
+        const debugExcerpts = await db.all('SELECT id, pdf_id, collection_id FROM pdf_excerpts WHERE collection_id = ? LIMIT 5', [params.sourceId]);
+        console.log('[FILTER DEBUG] Sample excerpts:', debugExcerpts);
+
+        if (params.filters.variableFilters && params.filters.variableFilters.length > 0) {
+          const varId = params.filters.variableFilters[0].variableId;
+          const debugAiRatings = await db.all('SELECT excerpt_id, variable_id, score FROM ai_excerpt_ratings WHERE variable_id = ? LIMIT 5', [varId]);
+          console.log('[FILTER DEBUG] Sample AI ratings for variable', varId, ':', debugAiRatings);
+
+          const debugHumanRatings = await db.all('SELECT excerpt_id, variable_id, score FROM excerpt_ratings WHERE variable_id = ? LIMIT 5', [varId]);
+          console.log('[FILTER DEBUG] Sample human ratings for variable', varId, ':', debugHumanRatings);
+        }
+
         filteredItems = await db.all(query, queryParams);
         matchCount = filteredItems.length;
+
+        console.log('[FILTER DEBUG] Query result: Found', matchCount, 'items');
 
         if (filteredItems.length === 0) {
           return { success: false, error: 'No excerpts match the filter criteria' };
@@ -613,33 +740,43 @@ function registerCollectionHandlers(getDatabase) {
         // Get unique PDF IDs
         const pdfIds = [...new Set(filteredItems.map(e => e.pdf_id))];
 
-        // Copy PDFs
+        // Map old PDF IDs to new PDF IDs
+        const pdfIdMap = {};
+
+        // Copy PDFs (let SQLite auto-generate new IDs)
         for (const pdfId of pdfIds) {
           const pdf = await db.get('SELECT * FROM pdfs WHERE id = ?', [pdfId]);
           if (pdf) {
-            await db.run(`
-              INSERT INTO pdfs (id, collection_id, title, file_path, page_count, created_at, updated_at, thumbnail_path, metadata)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `, [pdf.id, newCollectionId, pdf.title, pdf.file_path, pdf.page_count, pdf.created_at, pdf.updated_at, pdf.thumbnail_path, pdf.metadata]);
+            const result = await db.run(`
+              INSERT INTO pdfs (collection_id, file_path, title, author, num_pages, file_size, metadata)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+            `, [newCollectionId, pdf.file_path, pdf.title, pdf.author, pdf.num_pages, pdf.file_size, pdf.metadata]);
+            pdfIdMap[pdfId] = result.id;
           }
         }
 
         // Copy excerpts
         for (const excerpt of filteredItems) {
+          const newPdfId = pdfIdMap[excerpt.pdf_id];
+          if (!newPdfId) {
+            console.error('[FILTER] No mapping found for pdf_id', excerpt.pdf_id);
+            continue;
+          }
+
           await db.run(`
-            INSERT INTO pdf_excerpts (pdf_id, page_number, excerpt_number, text_content, bounding_box, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-          `, [excerpt.pdf_id, excerpt.page_number, excerpt.excerpt_number, excerpt.text_content, excerpt.bounding_box, excerpt.created_at]);
+            INSERT INTO pdf_excerpts (pdf_id, collection_id, excerpt_number, page_number, text_content, char_start, char_end, bbox)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `, [newPdfId, newCollectionId, excerpt.excerpt_number, excerpt.page_number, excerpt.text_content, excerpt.char_start, excerpt.char_end, excerpt.bbox]);
 
           const newExcerptId = await db.get('SELECT last_insert_rowid() as id');
 
           // Copy human ratings
-          const humanRatings = await db.all('SELECT * FROM pdf_excerpt_ratings WHERE excerpt_id = ?', [excerpt.id]);
+          const humanRatings = await db.all('SELECT * FROM excerpt_ratings WHERE excerpt_id = ?', [excerpt.id]);
           for (const rating of humanRatings) {
             await db.run(`
-              INSERT INTO pdf_excerpt_ratings (excerpt_id, variable_id, score, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?)
-            `, [newExcerptId.id, rating.variable_id, rating.score, rating.created_at, rating.updated_at]);
+              INSERT INTO excerpt_ratings (excerpt_id, variable_id, score, reasoning, reasoning_depth, source, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `, [newExcerptId.id, rating.variable_id, rating.score, rating.reasoning, rating.reasoning_depth, rating.source, rating.created_at, rating.updated_at]);
           }
 
           // Copy AI ratings

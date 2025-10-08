@@ -56,9 +56,32 @@ class Database {
     }
   }
 
+  /**
+   * Add variable_type column to global_rating_variables table if it doesn't exist
+   */
+  async addVariableTypeColumnIfNeeded() {
+    try {
+      // Check if column exists
+      const columns = await this.all(`PRAGMA table_info(global_rating_variables)`);
+
+      const hasVariableTypeColumn = columns.some(col => col.name === 'variable_type');
+
+      if (!hasVariableTypeColumn) {
+        console.log('[Database] Adding variable_type column to global_rating_variables table');
+        await this.run(`ALTER TABLE global_rating_variables ADD COLUMN variable_type TEXT DEFAULT 'rating'`);
+        console.log('[Database] variable_type column added successfully');
+      }
+    } catch (error) {
+      // Table might not exist yet, which is fine
+      console.log('[Database] Global rating variables table does not exist yet (will be created)');
+    }
+  }
+
   async createTables() {
     // First, add source column to excerpt_ratings if it doesn't exist
     await this.addSourceColumnIfNeeded();
+    // Add variable_type column to global_rating_variables if it doesn't exist
+    await this.addVariableTypeColumnIfNeeded();
 
     const queries = [
       // Collections table
@@ -259,7 +282,8 @@ class Database {
         label TEXT NOT NULL,
         genre TEXT NOT NULL,
         definition TEXT,
-        scale_type TEXT NOT NULL,
+        variable_type TEXT DEFAULT 'rating',
+        scale_type TEXT,
         anchors TEXT,
         reasoning_depth TEXT DEFAULT 'brief',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -2176,16 +2200,17 @@ class Database {
    * Create a new global rating variable
    */
   async createGlobalRatingVariable(variableData) {
-    const { label, genre, definition, scale_type, anchors, reasoning_depth } = variableData;
+    const { label, genre, definition, variable_type, scale_type, anchors, reasoning_depth } = variableData;
 
     const result = await this.run(`
       INSERT INTO global_rating_variables (
-        label, genre, definition, scale_type, anchors, reasoning_depth
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        label, genre, definition, variable_type, scale_type, anchors, reasoning_depth
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `, [
       label,
       genre,
       definition,
+      variable_type || 'rating',  // Default to 'rating' for backward compatibility
       scale_type,
       JSON.stringify(anchors),
       reasoning_depth

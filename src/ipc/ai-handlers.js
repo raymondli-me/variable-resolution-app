@@ -174,7 +174,7 @@ Please provide your rating as JSON:
   });
 
   // AI Variable Definition Suggester
-  ipcMain.handle('ai:suggestVariableDefinition', async (event, { label, scaleType }) => {
+  ipcMain.handle('ai:suggestVariableDefinition', async (event, { label, scaleType, variableType }) => {
     try {
       const { GoogleGenerativeAI } = require('@google/generative-ai');
 
@@ -190,21 +190,44 @@ Please provide your rating as JSON:
       const genAI = new GoogleGenerativeAI(decryptedKey);
       const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-      // Build scale description
-      const scaleDescriptions = {
-        'binary': 'binary (0/1)',
-        '3point': '3-point scale (1=Low, 2=Medium, 3=High)',
-        '4point': '4-point scale (1-4)',
-        '5point': '5-point scale (1-5)',
-        '7point': '7-point scale (1-7)',
-        '10point': '10-point scale (1-10)',
-        '100point': '100-point scale (0-100)'
-      };
+      let prompt;
 
-      const scaleDesc = scaleDescriptions[scaleType] || scaleType;
+      if (variableType === 'bws') {
+        // BWS (Best-Worst Scaling) prompt
+        prompt = `You are a research methods expert helping define a Best-Worst Scaling (BWS) variable.
 
-      // Create prompt
-      const prompt = `You are a research methods expert helping define a qualitative coding variable.
+Variable Label: "${label}"
+Variable Type: Best-Worst Scaling (BWS)
+
+Please provide:
+1. A clear, academic definition of this variable (2-3 sentences that operationalize what this variable measures)
+2. Anchor descriptions for "best" and "worst" that clearly define the extremes
+
+Format your response as JSON:
+{
+  "definition": "...",
+  "anchors": {
+    "best": "Description of what represents the BEST/highest quality/most positive on this dimension",
+    "worst": "Description of what represents the WORST/lowest quality/most negative on this dimension"
+  }
+}
+
+Make the anchors specific and actionable so raters can reliably identify the best and worst items in a comparison set.`;
+      } else {
+        // Rating scale prompt
+        const scaleDescriptions = {
+          'binary': 'binary (0/1)',
+          '3point': '3-point scale (1=Low, 2=Medium, 3=High)',
+          '4point': '4-point scale (1-4)',
+          '5point': '5-point scale (1-5)',
+          '7point': '7-point scale (1-7)',
+          '10point': '10-point scale (1-10)',
+          '100point': '100-point scale (0-100)'
+        };
+
+        const scaleDesc = scaleDescriptions[scaleType] || scaleType;
+
+        prompt = `You are a research methods expert helping define a qualitative coding variable.
 
 Variable Label: "${label}"
 Scale Type: ${scaleDesc}
@@ -226,6 +249,7 @@ Format your response as JSON:
 For binary scales, use keys "0" and "1".
 For 100-point scales, only provide anchors for "0" and "100" (endpoints).
 Make the anchors specific and actionable so raters can reliably distinguish between levels.`;
+      }
 
       const result = await model.generateContent(prompt);
       const responseText = result.response.text();

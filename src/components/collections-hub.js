@@ -1766,8 +1766,22 @@ class CollectionsHub {
                 </small>
               </div>
 
-              <!-- Scale Type -->
+              <!-- Variable Type -->
               <div>
+                <label style="display: block; margin-bottom: 6px; color: #e5e7eb; font-size: 14px;">Variable Type *</label>
+                <select id="global-variable-type" onchange="window.collectionsHub.updateGlobalVariableType()"
+                  style="width: 100%; padding: 8px; border: 1px solid #374151; background: #111827; color: #f3f4f6; border-radius: 4px;">
+                  <option value="">-- Select Type --</option>
+                  <option value="rating">Rating (Numeric Scale)</option>
+                  <option value="bws">BWS (Best-Worst Scaling)</option>
+                </select>
+                <small style="display: block; margin-top: 4px; color: #6b7280; font-size: 12px;">
+                  Choose between traditional rating scales or Best-Worst Scaling comparisons
+                </small>
+              </div>
+
+              <!-- Scale Type (for Rating variables) -->
+              <div id="global-scale-type-container" style="display: none;">
                 <label style="display: block; margin-bottom: 6px; color: #e5e7eb; font-size: 14px;">Scale Type *</label>
                 <select id="global-scale-type" onchange="window.collectionsHub.updateGlobalAnchorFields()"
                   style="width: 100%; padding: 8px; border: 1px solid #374151; background: #111827; color: #f3f4f6; border-radius: 4px;">
@@ -1780,6 +1794,26 @@ class CollectionsHub {
                   <option value="10point">10-Point Scale</option>
                   <option value="100point">100-Point Scale</option>
                 </select>
+              </div>
+
+              <!-- BWS Anchors (for BWS variables) -->
+              <div id="global-bws-anchors-container" style="display: none;">
+                <div style="margin-bottom: 12px;">
+                  <label style="display: block; margin-bottom: 6px; color: #e5e7eb; font-size: 14px;">Anchor for Best *</label>
+                  <input type="text" id="global-bws-anchor-best" placeholder="e.g., Extremely Positive, Highest Quality"
+                    style="width: 100%; padding: 8px; border: 1px solid #374151; background: #111827; color: #f3f4f6; border-radius: 4px;">
+                  <small style="display: block; margin-top: 4px; color: #6b7280; font-size: 12px;">
+                    Label for the "best" item in a comparison set
+                  </small>
+                </div>
+                <div>
+                  <label style="display: block; margin-bottom: 6px; color: #e5e7eb; font-size: 14px;">Anchor for Worst *</label>
+                  <input type="text" id="global-bws-anchor-worst" placeholder="e.g., Extremely Negative, Lowest Quality"
+                    style="width: 100%; padding: 8px; border: 1px solid #374151; background: #111827; color: #f3f4f6; border-radius: 4px;">
+                  <small style="display: block; margin-top: 4px; color: #6b7280; font-size: 12px;">
+                    Label for the "worst" item in a comparison set
+                  </small>
+                </div>
               </div>
 
               <!-- Variable Definition -->
@@ -1844,6 +1878,7 @@ class CollectionsHub {
     if (aiSuggestBtn) {
       aiSuggestBtn.addEventListener('click', async () => {
         const label = modal.querySelector('#global-variable-label').value.trim();
+        const variableType = modal.querySelector('#global-variable-type').value;
         const scaleType = modal.querySelector('#global-scale-type').value;
 
         if (!label) {
@@ -1851,7 +1886,13 @@ class CollectionsHub {
           return;
         }
 
-        if (!scaleType) {
+        if (!variableType) {
+          this.showError('Please select a variable type first');
+          return;
+        }
+
+        // Only check for scale type if it's a rating variable
+        if (variableType === 'rating' && !scaleType) {
           this.showError('Please select a scale type first');
           return;
         }
@@ -1867,21 +1908,36 @@ class CollectionsHub {
           btn.disabled = true;
           btn.textContent = '🤖 Generating suggestions...';
 
-          const result = await window.api.ai.suggestVariableDefinition({ label, scaleType });
+          const result = await window.api.ai.suggestVariableDefinition({
+            label,
+            scaleType: variableType === 'rating' ? scaleType : null,
+            variableType
+          });
 
           if (result.success && result.data) {
             // Fill in the definition
             modal.querySelector('#global-variable-definition').value = result.data.definition || '';
 
-            // Fill in the anchors
+            // Fill in the anchors based on variable type
             if (result.data.anchors) {
-              const anchorsContainer = modal.querySelector('#global-anchors-container');
-              Object.keys(result.data.anchors).forEach(key => {
-                const input = anchorsContainer.querySelector(`input[data-anchor="${key}"]`);
-                if (input) {
-                  input.value = result.data.anchors[key];
+              if (variableType === 'rating') {
+                // Fill in numeric scale anchors
+                const anchorsContainer = modal.querySelector('#global-anchors-container');
+                Object.keys(result.data.anchors).forEach(key => {
+                  const input = anchorsContainer.querySelector(`input[data-anchor="${key}"]`);
+                  if (input) {
+                    input.value = result.data.anchors[key];
+                  }
+                });
+              } else if (variableType === 'bws') {
+                // Fill in BWS best/worst anchors
+                if (result.data.anchors.best) {
+                  modal.querySelector('#global-bws-anchor-best').value = result.data.anchors.best;
                 }
-              });
+                if (result.data.anchors.worst) {
+                  modal.querySelector('#global-bws-anchor-worst').value = result.data.anchors.worst;
+                }
+              }
             }
 
             this.showSuccess('AI suggestions applied');
@@ -1905,7 +1961,7 @@ class CollectionsHub {
     modal.querySelector('#create-global-variable-btn').addEventListener('click', async () => {
       const label = modal.querySelector('#global-variable-label').value.trim();
       const genre = modal.querySelector('#global-variable-genre').value;
-      const scaleType = modal.querySelector('#global-scale-type').value;
+      const variableType = modal.querySelector('#global-variable-type').value;
       const definition = modal.querySelector('#global-variable-definition').value.trim();
       const reasoningDepth = modal.querySelector('#global-reasoning-depth').value;
 
@@ -1919,27 +1975,60 @@ class CollectionsHub {
         return;
       }
 
-      if (!scaleType) {
-        this.showError('Please select a scale type');
+      if (!variableType) {
+        this.showError('Please select a variable type');
         return;
       }
 
-      // Collect anchors
+      let scaleType;
       const anchors = {};
-      const anchorInputs = modal.querySelectorAll('#global-anchors-container input[data-anchor]');
-      anchorInputs.forEach(input => {
-        const key = input.dataset.anchor;
-        const value = input.value.trim();
-        if (value) {
-          anchors[key] = value;
+
+      if (variableType === 'rating') {
+        // For rating variables, collect scale type and anchors
+        scaleType = modal.querySelector('#global-scale-type').value;
+
+        if (!scaleType) {
+          this.showError('Please select a scale type');
+          return;
         }
-      });
+
+        // Collect numeric scale anchors
+        const anchorInputs = modal.querySelectorAll('#global-anchors-container input[data-anchor]');
+        anchorInputs.forEach(input => {
+          const key = input.dataset.anchor;
+          const value = input.value.trim();
+          if (value) {
+            anchors[key] = value;
+          }
+        });
+      } else if (variableType === 'bws') {
+        // For BWS variables, set scale_type to 'bws'
+        scaleType = 'bws';
+
+        // Collect best/worst anchors
+        const bestAnchor = modal.querySelector('#global-bws-anchor-best').value.trim();
+        const worstAnchor = modal.querySelector('#global-bws-anchor-worst').value.trim();
+
+        if (!bestAnchor) {
+          this.showError('Please enter an anchor for "Best"');
+          return;
+        }
+
+        if (!worstAnchor) {
+          this.showError('Please enter an anchor for "Worst"');
+          return;
+        }
+
+        anchors.best = bestAnchor;
+        anchors.worst = worstAnchor;
+      }
 
       try {
         const result = await window.api.pdf.createGlobalRatingVariable({
           label,
           genre,
           definition,
+          variable_type: variableType,
           scale_type: scaleType,
           anchors,
           reasoning_depth: reasoningDepth
@@ -1957,9 +2046,14 @@ class CollectionsHub {
           // Clear form
           modal.querySelector('#global-variable-label').value = '';
           modal.querySelector('#global-variable-genre').value = '';
+          modal.querySelector('#global-variable-type').value = '';
           modal.querySelector('#global-scale-type').value = '';
           modal.querySelector('#global-variable-definition').value = '';
+          modal.querySelector('#global-bws-anchor-best').value = '';
+          modal.querySelector('#global-bws-anchor-worst').value = '';
           modal.querySelector('#global-scale-anchors').style.display = 'none';
+          modal.querySelector('#global-scale-type-container').style.display = 'none';
+          modal.querySelector('#global-bws-anchors-container').style.display = 'none';
         } else {
           this.showError(result.error || 'Failed to create variable');
         }
@@ -2010,6 +2104,33 @@ class CollectionsHub {
         `).join('')}
       </div>
     `;
+  }
+
+  updateGlobalVariableType() {
+    const variableType = document.querySelector('#global-variable-type')?.value;
+    const scaleTypeContainer = document.querySelector('#global-scale-type-container');
+    const bwsAnchorsContainer = document.querySelector('#global-bws-anchors-container');
+    const scaleAnchorsSection = document.querySelector('#global-scale-anchors');
+
+    if (!variableType) {
+      // Hide both if no type selected
+      if (scaleTypeContainer) scaleTypeContainer.style.display = 'none';
+      if (bwsAnchorsContainer) bwsAnchorsContainer.style.display = 'none';
+      if (scaleAnchorsSection) scaleAnchorsSection.style.display = 'none';
+      return;
+    }
+
+    if (variableType === 'rating') {
+      // Show rating fields, hide BWS fields
+      if (scaleTypeContainer) scaleTypeContainer.style.display = 'block';
+      if (bwsAnchorsContainer) bwsAnchorsContainer.style.display = 'none';
+      if (scaleAnchorsSection) scaleAnchorsSection.style.display = 'none';
+    } else if (variableType === 'bws') {
+      // Show BWS fields, hide rating fields
+      if (scaleTypeContainer) scaleTypeContainer.style.display = 'none';
+      if (bwsAnchorsContainer) bwsAnchorsContainer.style.display = 'block';
+      if (scaleAnchorsSection) scaleAnchorsSection.style.display = 'none';
+    }
   }
 
   updateGlobalAnchorFields() {

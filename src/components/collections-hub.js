@@ -1023,9 +1023,10 @@ class CollectionsHub {
       // Get collection info
       const collection = this.collections.find(c => c.id === parseInt(collectionId));
       const collectionName = collection ? collection.search_term : `Collection #${collectionId}`;
+      const collectionGenre = collection ? this.getGenre(collection) : 'youtube';
 
       // Show modal to gather filter parameters
-      const params = await this.showFilterModal(collectionName);
+      const params = await this.showFilterModal(collectionName, collectionGenre);
       if (!params) return; // User canceled
 
       // Call filter API
@@ -1036,7 +1037,7 @@ class CollectionsHub {
       });
 
       if (result.success) {
-        this.showSuccess(`Filtered collection created successfully! ${result.matchCount} videos matched.`);
+        this.showSuccess(`Filtered collection created successfully! ${result.matchCount} items matched.`);
         // Refresh the collections list
         await this.loadCollections();
         this.render();
@@ -1207,15 +1208,76 @@ class CollectionsHub {
     });
   }
 
-  showFilterModal(sourceName) {
+  showFilterModal(sourceName, genre = 'youtube') {
     return new Promise((resolve) => {
       const modal = document.createElement('div');
       modal.className = 'modal-overlay';
       modal.style.display = 'flex';
+
+      // Generate genre-specific filter fields
+      let filterFieldsHtml = '';
+
+      if (genre === 'pdf') {
+        // PDF-specific filter options
+        filterFieldsHtml = `
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; margin-bottom: 4px; color: #d1d5db;">Page Range (optional)</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="number" id="filter-page-start" min="1" placeholder="From page"
+                style="flex: 1; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
+              <input type="number" id="filter-page-end" min="1" placeholder="To page"
+                style="flex: 1; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
+            </div>
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; margin-bottom: 4px; color: #d1d5db;">Minimum Excerpt Length (words)</label>
+            <input type="number" id="filter-min-excerpt-length" min="0" value="0"
+              style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; margin-bottom: 4px; color: #d1d5db;">Keyword in Excerpt Text (optional)</label>
+            <input type="text" id="filter-text-keyword" placeholder="Search within excerpts..."
+              style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
+          </div>
+        `;
+      } else {
+        // Video-specific filter options (YouTube)
+        filterFieldsHtml = `
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; margin-bottom: 4px; color: #d1d5db;">Minimum Views</label>
+            <input type="number" id="filter-min-views" min="0" value="0"
+              style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; margin-bottom: 4px; color: #d1d5db;">Minimum Comments</label>
+            <input type="number" id="filter-min-comments" min="0" value="0"
+              style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; margin-bottom: 4px; color: #d1d5db;">Title Keyword (optional)</label>
+            <input type="text" id="filter-keyword" placeholder="Search in title..."
+              style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; margin-bottom: 4px; color: #d1d5db;">Date Range</label>
+            <select id="filter-date-range"
+              style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
+              <option value="all">All time</option>
+              <option value="today">Today</option>
+              <option value="week">Past week</option>
+              <option value="month">Past month</option>
+              <option value="year">Past year</option>
+            </select>
+          </div>
+        `;
+      }
+
+      const genreLabel = genre === 'pdf' ? '📄 PDF' : '📹 Video';
+
       modal.innerHTML = `
         <div class="modal-content" style="max-width: 500px;">
           <div class="modal-header">
-            <h3>Filter Collection</h3>
+            <h3>Filter Collection <span style="font-size: 0.85em; color: #9ca3af;">(${genreLabel})</span></h3>
             <button class="close-btn">&times;</button>
           </div>
           <div class="modal-body">
@@ -1227,32 +1289,7 @@ class CollectionsHub {
               <input type="text" id="filter-name" value="Filtered ${this.escapeHtml(sourceName)}"
                 style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
             </div>
-            <div style="margin-bottom: 12px;">
-              <label style="display: block; margin-bottom: 4px; color: #d1d5db;">Minimum Views</label>
-              <input type="number" id="filter-min-views" min="0" value="0"
-                style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
-            </div>
-            <div style="margin-bottom: 12px;">
-              <label style="display: block; margin-bottom: 4px; color: #d1d5db;">Minimum Comments</label>
-              <input type="number" id="filter-min-comments" min="0" value="0"
-                style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
-            </div>
-            <div style="margin-bottom: 12px;">
-              <label style="display: block; margin-bottom: 4px; color: #d1d5db;">Title Keyword (optional)</label>
-              <input type="text" id="filter-keyword" placeholder="Search in title..."
-                style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
-            </div>
-            <div style="margin-bottom: 12px;">
-              <label style="display: block; margin-bottom: 4px; color: #d1d5db;">Date Range</label>
-              <select id="filter-date-range"
-                style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
-                <option value="all">All time</option>
-                <option value="today">Today</option>
-                <option value="week">Past week</option>
-                <option value="month">Past month</option>
-                <option value="year">Past year</option>
-              </select>
-            </div>
+            ${filterFieldsHtml}
           </div>
           <div class="modal-footer" style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;">
             <button class="btn btn-cancel">Cancel</button>
@@ -1263,10 +1300,6 @@ class CollectionsHub {
 
       document.body.appendChild(modal);
       const nameInput = modal.querySelector('#filter-name');
-      const minViewsInput = modal.querySelector('#filter-min-views');
-      const minCommentsInput = modal.querySelector('#filter-min-comments');
-      const keywordInput = modal.querySelector('#filter-keyword');
-      const dateRangeSelect = modal.querySelector('#filter-date-range');
 
       nameInput.focus();
       nameInput.select();
@@ -1275,25 +1308,46 @@ class CollectionsHub {
 
       const submit = () => {
         const newName = nameInput.value.trim();
-        const minViews = parseInt(minViewsInput.value) || 0;
-        const minComments = parseInt(minCommentsInput.value) || 0;
-        const titleKeyword = keywordInput.value.trim();
-        const dateRange = dateRangeSelect.value;
 
         if (!newName) {
           alert('Please provide a collection name');
           return;
         }
 
-        cleanup();
-        resolve({
-          newName,
-          filters: {
+        let filters = {};
+
+        if (genre === 'pdf') {
+          // Collect PDF-specific filters
+          const pageStart = modal.querySelector('#filter-page-start')?.value;
+          const pageEnd = modal.querySelector('#filter-page-end')?.value;
+          const minExcerptLength = parseInt(modal.querySelector('#filter-min-excerpt-length')?.value) || 0;
+          const textKeyword = modal.querySelector('#filter-text-keyword')?.value.trim();
+
+          filters = {
+            pageStart: pageStart ? parseInt(pageStart) : null,
+            pageEnd: pageEnd ? parseInt(pageEnd) : null,
+            minExcerptLength,
+            textKeyword
+          };
+        } else {
+          // Collect video-specific filters
+          const minViews = parseInt(modal.querySelector('#filter-min-views')?.value) || 0;
+          const minComments = parseInt(modal.querySelector('#filter-min-comments')?.value) || 0;
+          const titleKeyword = modal.querySelector('#filter-keyword')?.value.trim();
+          const dateRange = modal.querySelector('#filter-date-range')?.value;
+
+          filters = {
             minViews,
             minComments,
             titleKeyword,
             dateRange
-          }
+          };
+        }
+
+        cleanup();
+        resolve({
+          newName,
+          filters
         });
       };
 

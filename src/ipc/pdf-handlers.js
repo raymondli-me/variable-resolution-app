@@ -408,6 +408,25 @@ function registerPDFHandlers(getDatabase) {
     }
   });
 
+  ipcMain.handle('pdf:getAIExcerptRatingHistory', async (event, { excerptId, variableId }) => {
+    try {
+      const db = require('../database/db');
+      const history = await db.getAIExcerptRatingHistory(excerptId, variableId);
+
+      return {
+        success: true,
+        data: history
+      };
+
+    } catch (error) {
+      console.error('Get AI excerpt rating history error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
   ipcMain.handle('pdf:getRatingsByVariable', async (event, variableId) => {
     try {
       const db = require('../database/db');

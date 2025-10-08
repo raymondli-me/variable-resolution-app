@@ -155,7 +155,12 @@ class PDFExcerptViewer {
 
                 <!-- AI Co-Pilot Analysis Column -->
                 <div class="rating-column ai-analysis">
-                  <h5>🤖 AI Co-Pilot Analysis</h5>
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color, #334155);">
+                    <h5 style="margin: 0;">🤖 AI Co-Pilot Analysis</h5>
+                    <button id="rerateBtn" onclick="window.pdfExcerptViewer.rerateWithAI()" style="padding: 6px 12px; background: #10b981; border: none; border-radius: 4px; color: white; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;" title="Generate a new AI rating">
+                      <span style="font-size: 14px;">🔄</span> Re-rate
+                    </button>
+                  </div>
                   <div id="aiCopilotDisplay" class="ai-copilot-display">
                     <div class="ai-copilot-loading" id="aiCopilotLoading" style="display: none; text-align: center; padding: 40px; color: #10b981;">
                       <span style="font-size: 24px;">🤖</span>
@@ -1920,6 +1925,65 @@ class PDFExcerptViewer {
     this.progressUpdateTimeout = setTimeout(() => {
       this.updateRatingProgress();
     }, 500);
+  }
+
+  // ============================================
+  // RE-RATE METHODS
+  // ============================================
+
+  /**
+   * Re-trigger AI rating for current excerpt
+   */
+  async rerateWithAI() {
+    if (!this.currentExcerpt) {
+      this.showNotification('No excerpt selected', 'error');
+      return;
+    }
+
+    if (!this.selectedVariable) {
+      this.showNotification('No variable selected', 'error');
+      return;
+    }
+
+    console.log('[PDFExcerptViewer] Re-rating excerpt with AI');
+
+    // Clear cache for this excerpt/variable pair
+    const cacheKey = `${this.currentExcerpt.id}_${this.selectedVariable.id}`;
+    this.aiRatingCache.delete(cacheKey);
+
+    // Show loading state
+    this.showAICopilotLoading();
+
+    // Trigger new AI rating
+    await this.triggerAICopilotRating(this.currentExcerpt);
+
+    this.showNotification('AI is generating a new rating...', 'info');
+  }
+
+  /**
+   * View AI rating history for current excerpt
+   */
+  async viewAIRatingHistory() {
+    if (!this.currentExcerpt || !this.selectedVariable) {
+      return;
+    }
+
+    try {
+      const result = await window.api.pdf.getAIExcerptRatingHistory({
+        excerpt_id: this.currentExcerpt.id,
+        variable_id: this.selectedVariable.id
+      });
+
+      if (result.success && result.data && result.data.length > 0) {
+        console.log(`[PDFExcerptViewer] AI rating history (${result.data.length} ratings):`, result.data);
+        // Could display this in a modal or expand the AI section to show history
+        this.showNotification(`${result.data.length} AI rating(s) in history`, 'info');
+      } else {
+        console.log('[PDFExcerptViewer] No AI rating history found');
+      }
+    } catch (error) {
+      console.error('[PDFExcerptViewer] Error fetching AI rating history:', error);
+    }
   }
 }
 

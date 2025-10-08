@@ -282,6 +282,7 @@ class Database {
       )`,
 
       // AI Excerpt Ratings table - for AI-generated ratings of PDF excerpts
+      // Note: No UNIQUE constraint - allows multiple AI ratings for comparison/history
       `CREATE TABLE IF NOT EXISTS ai_excerpt_ratings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         excerpt_id INTEGER NOT NULL,
@@ -291,8 +292,7 @@ class Database {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (excerpt_id) REFERENCES pdf_excerpts(id) ON DELETE CASCADE,
-        FOREIGN KEY (variable_id) REFERENCES rating_variables(id) ON DELETE CASCADE,
-        UNIQUE(excerpt_id, variable_id)
+        FOREIGN KEY (variable_id) REFERENCES rating_variables(id) ON DELETE CASCADE
       )`,
 
       // Indexes for rating tables
@@ -2089,33 +2089,42 @@ class Database {
   // ============================================
 
   /**
-   * Save or update an AI excerpt rating
+   * Save a new AI excerpt rating (allows multiple ratings for history)
    */
   async saveAIExcerptRating(ratingData) {
     const { excerpt_id, variable_id, score, reasoning } = ratingData;
 
     const result = await this.run(`
       INSERT INTO ai_excerpt_ratings (
-        excerpt_id, variable_id, score, reasoning, updated_at
-      ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(excerpt_id, variable_id)
-      DO UPDATE SET
-        score = excluded.score,
-        reasoning = excluded.reasoning,
-        updated_at = CURRENT_TIMESTAMP
+        excerpt_id, variable_id, score, reasoning, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `, [excerpt_id, variable_id, score, reasoning || null]);
 
     return result.id;
   }
 
   /**
-   * Get AI rating for a specific excerpt and variable
+   * Get latest AI rating for a specific excerpt and variable
    */
   async getAIExcerptRating(excerptId, variableId) {
     return await this.get(`
       SELECT *
       FROM ai_excerpt_ratings
       WHERE excerpt_id = ? AND variable_id = ?
+      ORDER BY created_at DESC
+      LIMIT 1
+    `, [excerptId, variableId]);
+  }
+
+  /**
+   * Get all AI ratings for a specific excerpt and variable (history)
+   */
+  async getAIExcerptRatingHistory(excerptId, variableId) {
+    return await this.all(`
+      SELECT *
+      FROM ai_excerpt_ratings
+      WHERE excerpt_id = ? AND variable_id = ?
+      ORDER BY created_at DESC
     `, [excerptId, variableId]);
   }
 

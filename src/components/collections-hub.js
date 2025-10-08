@@ -1025,8 +1025,19 @@ class CollectionsHub {
       const collectionName = collection ? collection.search_term : `Collection #${collectionId}`;
       const collectionGenre = collection ? this.getGenre(collection) : 'youtube';
 
+      // Load rating variables if PDF collection
+      let variables = [];
+      if (collectionGenre === 'pdf') {
+        try {
+          const varsResult = await window.api.pdf.getRatingVariables(collectionId);
+          variables = varsResult || [];
+        } catch (error) {
+          console.error('Error loading variables:', error);
+        }
+      }
+
       // Show modal to gather filter parameters
-      const params = await this.showFilterModal(collectionName, collectionGenre);
+      const params = await this.showFilterModal(collectionName, collectionGenre, variables);
       if (!params) return; // User canceled
 
       // Call filter API
@@ -1208,7 +1219,7 @@ class CollectionsHub {
     });
   }
 
-  showFilterModal(sourceName, genre = 'youtube') {
+  showFilterModal(sourceName, genre = 'youtube', variables = []) {
     return new Promise((resolve) => {
       const modal = document.createElement('div');
       modal.className = 'modal-overlay';
@@ -1240,6 +1251,55 @@ class CollectionsHub {
               style="width: 100%; padding: 8px; border: 1px solid #374151; background: #1f2937; color: #f3f4f6; border-radius: 4px;">
           </div>
         `;
+
+        // Add variable-based filtering if variables exist
+        if (variables && variables.length > 0) {
+          filterFieldsHtml += `
+            <div style="margin: 20px 0; border-top: 1px solid #374151; padding-top: 16px;">
+              <h4 style="margin: 0 0 12px 0; color: #f3f4f6; font-size: 14px; font-weight: 600;">Filter by Rating Variables</h4>
+              <div id="variable-filters-container">
+                ${variables.map(v => `
+                  <div style="background: #111827; border: 1px solid #374151; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                      <input type="checkbox" id="enable-var-${v.id}" onchange="document.getElementById('var-filters-${v.id}').style.display = this.checked ? 'block' : 'none';" style="cursor: pointer;">
+                      <label for="enable-var-${v.id}" style="color: #e5e7eb; font-weight: 600; cursor: pointer;">${this.escapeHtml(v.label)}</label>
+                      <span style="padding: 2px 6px; background: #374151; color: #9ca3af; border-radius: 3px; font-size: 11px;">${this.escapeHtml(v.scale_type)}</span>
+                    </div>
+                    <div id="var-filters-${v.id}" style="display: none; padding-left: 24px;">
+                      <div style="display: grid; gap: 8px;">
+                        <div>
+                          <label style="display: block; margin-bottom: 4px; color: #9ca3af; font-size: 12px;">Rating Type</label>
+                          <select id="var-${v.id}-rating-type" style="width: 100%; padding: 6px; border: 1px solid #374151; background: #0f172a; color: #f3f4f6; border-radius: 4px; font-size: 13px;">
+                            <option value="any">Any (AI or Human)</option>
+                            <option value="ai">AI Ratings Only</option>
+                            <option value="human">Human Ratings Only</option>
+                            <option value="both">Both AI and Human</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style="display: block; margin-bottom: 4px; color: #9ca3af; font-size: 12px;">Score Range</label>
+                          <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="number" id="var-${v.id}-min" placeholder="Min" style="flex: 1; padding: 6px; border: 1px solid #374151; background: #0f172a; color: #f3f4f6; border-radius: 4px; font-size: 13px;">
+                            <span style="color: #6b7280;">to</span>
+                            <input type="number" id="var-${v.id}-max" placeholder="Max" style="flex: 1; padding: 6px; border: 1px solid #374151; background: #0f172a; color: #f3f4f6; border-radius: 4px; font-size: 13px;">
+                          </div>
+                        </div>
+                        <div>
+                          <label style="display: block; margin-bottom: 4px; color: #9ca3af; font-size: 12px;">Rating Status</label>
+                          <select id="var-${v.id}-status" style="width: 100%; padding: 6px; border: 1px solid #374151; background: #0f172a; color: #f3f4f6; border-radius: 4px; font-size: 13px;">
+                            <option value="all">All excerpts</option>
+                            <option value="rated">Only rated excerpts</option>
+                            <option value="unrated">Only unrated excerpts</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }
       } else {
         // Video-specific filter options (YouTube)
         filterFieldsHtml = `
@@ -1275,12 +1335,12 @@ class CollectionsHub {
       const genreLabel = genre === 'pdf' ? '📄 PDF' : '📹 Video';
 
       modal.innerHTML = `
-        <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-content" style="max-width: 600px; max-height: 90vh; display: flex; flex-direction: column;">
           <div class="modal-header">
             <h3>Filter Collection <span style="font-size: 0.85em; color: #9ca3af;">(${genreLabel})</span></h3>
             <button class="close-btn">&times;</button>
           </div>
-          <div class="modal-body">
+          <div class="modal-body" style="flex: 1; overflow-y: auto; max-height: calc(90vh - 140px);">
             <p style="margin-bottom: 16px; color: #9ca3af;">
               Creating a filtered collection from <strong>${this.escapeHtml(sourceName)}</strong>
             </p>
@@ -1291,7 +1351,7 @@ class CollectionsHub {
             </div>
             ${filterFieldsHtml}
           </div>
-          <div class="modal-footer" style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;">
+          <div class="modal-footer" style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; border-top: 1px solid #374151; padding-top: 16px;">
             <button class="btn btn-cancel">Cancel</button>
             <button class="btn btn-primary">Create Filtered Collection</button>
           </div>
@@ -1329,6 +1389,31 @@ class CollectionsHub {
             minExcerptLength,
             textKeyword
           };
+
+          // Collect variable-based filters
+          const variableFilters = [];
+          variables.forEach(v => {
+            const enableCheckbox = modal.querySelector(`#enable-var-${v.id}`);
+            if (enableCheckbox && enableCheckbox.checked) {
+              const ratingType = modal.querySelector(`#var-${v.id}-rating-type`)?.value;
+              const minScore = modal.querySelector(`#var-${v.id}-min`)?.value;
+              const maxScore = modal.querySelector(`#var-${v.id}-max`)?.value;
+              const status = modal.querySelector(`#var-${v.id}-status`)?.value;
+
+              variableFilters.push({
+                variableId: v.id,
+                variableLabel: v.label,
+                ratingType: ratingType || 'any',
+                minScore: minScore ? parseFloat(minScore) : null,
+                maxScore: maxScore ? parseFloat(maxScore) : null,
+                status: status || 'all'
+              });
+            }
+          });
+
+          if (variableFilters.length > 0) {
+            filters.variableFilters = variableFilters;
+          }
         } else {
           // Collect video-specific filters
           const minViews = parseInt(modal.querySelector('#filter-min-views')?.value) || 0;

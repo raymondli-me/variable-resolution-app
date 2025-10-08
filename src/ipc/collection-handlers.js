@@ -486,107 +486,277 @@ function registerCollectionHandlers(getDatabase) {
         return { success: false, error: 'Source collection not found' };
       }
 
-      // Build filter query
-      let query = 'SELECT * FROM videos WHERE collection_id = ?';
-      let queryParams = [params.sourceId];
-
-      if (params.filters.minViews > 0) {
-        query += ' AND CAST(view_count AS INTEGER) >= ?';
-        queryParams.push(params.filters.minViews);
+      // Determine collection genre
+      let isPdfCollection = false;
+      try {
+        const settings = typeof sourceCollection.settings === 'string'
+          ? JSON.parse(sourceCollection.settings)
+          : sourceCollection.settings;
+        isPdfCollection = settings.source === 'pdf' || settings.type === 'pdf';
+      } catch (e) {
+        // Default to video collection
       }
 
-      if (params.filters.minComments > 0) {
-        query += ' AND CAST(comment_count AS INTEGER) >= ?';
-        queryParams.push(params.filters.minComments);
-      }
+      let filteredItems;
+      let matchCount = 0;
 
-      if (params.filters.titleKeyword) {
-        query += ' AND title LIKE ?';
-        queryParams.push(`%${params.filters.titleKeyword}%`);
-      }
+      if (isPdfCollection) {
+        // PDF Collection Filtering
+        let query = 'SELECT DISTINCT pe.* FROM pdf_excerpts pe WHERE pe.pdf_id IN (SELECT id FROM pdfs WHERE collection_id = ?)';
+        let queryParams = [params.sourceId];
 
-      // Date range filter
-      if (params.filters.dateRange && params.filters.dateRange !== 'all') {
-        const now = new Date();
-        let dateThreshold;
-
-        switch (params.filters.dateRange) {
-          case 'today':
-            dateThreshold = new Date(now.setHours(0, 0, 0, 0));
-            break;
-          case 'week':
-            dateThreshold = new Date(now.setDate(now.getDate() - 7));
-            break;
-          case 'month':
-            dateThreshold = new Date(now.setMonth(now.getMonth() - 1));
-            break;
-          case 'year':
-            dateThreshold = new Date(now.setFullYear(now.getFullYear() - 1));
-            break;
+        // Page range filter
+        if (params.filters.pageStart) {
+          query += ' AND pe.page_number >= ?';
+          queryParams.push(params.filters.pageStart);
+        }
+        if (params.filters.pageEnd) {
+          query += ' AND pe.page_number <= ?';
+          queryParams.push(params.filters.pageEnd);
         }
 
-        if (dateThreshold) {
-          query += ' AND publish_date >= ?';
-          queryParams.push(dateThreshold.toISOString());
+        // Minimum excerpt length filter
+        if (params.filters.minExcerptLength > 0) {
+          query += ' AND LENGTH(pe.text_content) >= ?';
+          queryParams.push(params.filters.minExcerptLength);
         }
-      }
 
-      // Get filtered videos
-      const filteredVideos = await db.all(query, queryParams);
+        // Text keyword filter
+        if (params.filters.textKeyword) {
+          query += ' AND pe.text_content LIKE ?';
+          queryParams.push(`%${params.filters.textKeyword}%`);
+        }
 
-      if (filteredVideos.length === 0) {
-        return { success: false, error: 'No videos match the filter criteria' };
-      }
+        // Variable-based filtering
+        if (params.filters.variableFilters && params.filters.variableFilters.length > 0) {
+          for (const vf of params.filters.variableFilters) {
+            const varId = vf.variableId;
+            const ratingType = vf.ratingType || 'any';
+            const minScore = vf.minScore;
+            const maxScore = vf.maxScore;
+            const status = vf.status || 'all';
 
-      // Create new collection with lineage tracking
-      const derivationInfo = {
-        method: 'filter',
-        parameters: params.filters
-      };
-      const newCollectionId = await db.createCollection(
-        params.newName,
-        sourceCollection.settings || {},
-        null, // report
-        params.sourceId, // parentCollectionId
-        derivationInfo
-      );
+            if (status === 'unrated') {
+              // Only excerpts WITHOUT ratings for this variable
+              query += ` AND pe.id NOT IN (
+                SELECT excerpt_id FROM pdf_excerpt_ratings WHERE variable_id = ?
+                UNION
+                SELECT excerpt_id FROM pdf_excerpt_ai_ratings WHERE variable_id = ?
+              )`;
+              queryParams.push(varId, varId);
+            } else if (status === 'rated') {
+              // Only excerpts WITH ratings (AI or human or both based on ratingType)
+              if (ratingType === 'ai') {
+                query += ` AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ai_ratings WHERE variable_id = ?)`;
+                queryParams.push(varId);
+              } else if (ratingType === 'human') {
+                query += ` AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ratings WHERE variable_id = ?)`;
+                queryParams.push(varId);
+              } else if (ratingType === 'both') {
+                query += ` AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ratings WHERE variable_id = ?)
+                          AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ai_ratings WHERE variable_id = ?)`;
+                queryParams.push(varId, varId);
+              } else {
+                // 'any' - has either AI or human rating
+                query += ` AND (pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ratings WHERE variable_id = ?)
+                           OR pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ai_ratings WHERE variable_id = ?))`;
+                queryParams.push(varId, varId);
+              }
+            }
 
-      // Copy filtered videos
-      for (const video of filteredVideos) {
-        await db.run(`
-          INSERT INTO videos (
-            collection_id, id, title, channel_title, view_count, like_count,
-            comment_count, published_at, duration, thumbnails, local_path
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-          newCollectionId, video.id, video.title, video.channel_title,
-          video.view_count, video.like_count, video.comment_count, video.published_at,
-          video.duration, video.thumbnails, video.local_path
-        ]);
+            // Score range filtering (applies only if status is not 'unrated')
+            if (status !== 'unrated' && (minScore !== null || maxScore !== null)) {
+              if (ratingType === 'ai' || ratingType === 'any') {
+                if (minScore !== null) {
+                  query += ` AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ai_ratings WHERE variable_id = ? AND CAST(score AS REAL) >= ?)`;
+                  queryParams.push(varId, minScore);
+                }
+                if (maxScore !== null) {
+                  query += ` AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ai_ratings WHERE variable_id = ? AND CAST(score AS REAL) <= ?)`;
+                  queryParams.push(varId, maxScore);
+                }
+              }
+              if (ratingType === 'human' || ratingType === 'any') {
+                if (minScore !== null) {
+                  query += ` AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ratings WHERE variable_id = ? AND CAST(score AS REAL) >= ?)`;
+                  queryParams.push(varId, minScore);
+                }
+                if (maxScore !== null) {
+                  query += ` AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ratings WHERE variable_id = ? AND CAST(score AS REAL) <= ?)`;
+                  queryParams.push(varId, maxScore);
+                }
+              }
+            }
+          }
+        }
 
-        // Copy comments for this video
-        const comments = await db.all('SELECT * FROM comments WHERE collection_id = ? AND video_id = ?', [params.sourceId, video.id]);
-        for (const comment of comments) {
+        filteredItems = await db.all(query, queryParams);
+        matchCount = filteredItems.length;
+
+        if (filteredItems.length === 0) {
+          return { success: false, error: 'No excerpts match the filter criteria' };
+        }
+
+        // Create new collection
+        const derivationInfo = {
+          method: 'filter',
+          parameters: params.filters
+        };
+        const newCollectionId = await db.createCollection(
+          params.newName,
+          sourceCollection.settings || {},
+          null,
+          params.sourceId,
+          derivationInfo
+        );
+
+        // Get unique PDF IDs
+        const pdfIds = [...new Set(filteredItems.map(e => e.pdf_id))];
+
+        // Copy PDFs
+        for (const pdfId of pdfIds) {
+          const pdf = await db.get('SELECT * FROM pdfs WHERE id = ?', [pdfId]);
+          if (pdf) {
+            await db.run(`
+              INSERT INTO pdfs (id, collection_id, title, file_path, page_count, created_at, updated_at, thumbnail_path, metadata)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [pdf.id, newCollectionId, pdf.title, pdf.file_path, pdf.page_count, pdf.created_at, pdf.updated_at, pdf.thumbnail_path, pdf.metadata]);
+          }
+        }
+
+        // Copy excerpts
+        for (const excerpt of filteredItems) {
           await db.run(`
-            INSERT INTO comments (
-              collection_id, video_id, comment_id, author, text, like_count, published_at, parent_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `, [
-            newCollectionId, comment.video_id, comment.comment_id, comment.author,
-            comment.text, comment.like_count, comment.published_at, comment.parent_id
-          ]);
+            INSERT INTO pdf_excerpts (pdf_id, page_number, excerpt_number, text_content, bounding_box, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `, [excerpt.pdf_id, excerpt.page_number, excerpt.excerpt_number, excerpt.text_content, excerpt.bounding_box, excerpt.created_at]);
+
+          const newExcerptId = await db.get('SELECT last_insert_rowid() as id');
+
+          // Copy human ratings
+          const humanRatings = await db.all('SELECT * FROM pdf_excerpt_ratings WHERE excerpt_id = ?', [excerpt.id]);
+          for (const rating of humanRatings) {
+            await db.run(`
+              INSERT INTO pdf_excerpt_ratings (excerpt_id, variable_id, score, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?)
+            `, [newExcerptId.id, rating.variable_id, rating.score, rating.created_at, rating.updated_at]);
+          }
+
+          // Copy AI ratings
+          const aiRatings = await db.all('SELECT * FROM pdf_excerpt_ai_ratings WHERE excerpt_id = ?', [excerpt.id]);
+          for (const rating of aiRatings) {
+            await db.run(`
+              INSERT INTO pdf_excerpt_ai_ratings (excerpt_id, variable_id, score, reasoning, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?)
+            `, [newExcerptId.id, rating.variable_id, rating.score, rating.reasoning, rating.created_at, rating.updated_at]);
+          }
         }
+
+        // Update excerpt count
+        await db.run(`
+          UPDATE collections
+          SET excerpt_count = (SELECT COUNT(*) FROM pdf_excerpts pe JOIN pdfs p ON pe.pdf_id = p.id WHERE p.collection_id = ?)
+          WHERE id = ?
+        `, [newCollectionId, newCollectionId]);
+
+      } else {
+        // Video Collection Filtering (existing logic)
+        let query = 'SELECT * FROM videos WHERE collection_id = ?';
+        let queryParams = [params.sourceId];
+
+        if (params.filters.minViews > 0) {
+          query += ' AND CAST(view_count AS INTEGER) >= ?';
+          queryParams.push(params.filters.minViews);
+        }
+
+        if (params.filters.minComments > 0) {
+          query += ' AND CAST(comment_count AS INTEGER) >= ?';
+          queryParams.push(params.filters.minComments);
+        }
+
+        if (params.filters.titleKeyword) {
+          query += ' AND title LIKE ?';
+          queryParams.push(`%${params.filters.titleKeyword}%`);
+        }
+
+        if (params.filters.dateRange && params.filters.dateRange !== 'all') {
+          const now = new Date();
+          let dateThreshold;
+
+          switch (params.filters.dateRange) {
+            case 'today':
+              dateThreshold = new Date(now.setHours(0, 0, 0, 0));
+              break;
+            case 'week':
+              dateThreshold = new Date(now.setDate(now.getDate() - 7));
+              break;
+            case 'month':
+              dateThreshold = new Date(now.setMonth(now.getMonth() - 1));
+              break;
+            case 'year':
+              dateThreshold = new Date(now.setFullYear(now.getFullYear() - 1));
+              break;
+          }
+
+          if (dateThreshold) {
+            query += ' AND publish_date >= ?';
+            queryParams.push(dateThreshold.toISOString());
+          }
+        }
+
+        filteredItems = await db.all(query, queryParams);
+        matchCount = filteredItems.length;
+
+        if (filteredItems.length === 0) {
+          return { success: false, error: 'No videos match the filter criteria' };
+        }
+
+        const derivationInfo = {
+          method: 'filter',
+          parameters: params.filters
+        };
+        const newCollectionId = await db.createCollection(
+          params.newName,
+          sourceCollection.settings || {},
+          null,
+          params.sourceId,
+          derivationInfo
+        );
+
+        for (const video of filteredItems) {
+          await db.run(`
+            INSERT INTO videos (
+              collection_id, id, title, channel_title, view_count, like_count,
+              comment_count, published_at, duration, thumbnails, local_path
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            newCollectionId, video.id, video.title, video.channel_title,
+            video.view_count, video.like_count, video.comment_count, video.published_at,
+            video.duration, video.thumbnails, video.local_path
+          ]);
+
+          const comments = await db.all('SELECT * FROM comments WHERE collection_id = ? AND video_id = ?', [params.sourceId, video.id]);
+          for (const comment of comments) {
+            await db.run(`
+              INSERT INTO comments (
+                collection_id, video_id, comment_id, author, text, like_count, published_at, parent_id
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+              newCollectionId, comment.video_id, comment.comment_id, comment.author,
+              comment.text, comment.like_count, comment.published_at, comment.parent_id
+            ]);
+          }
+        }
+
+        await db.run(`
+          UPDATE collections
+          SET video_count = (SELECT COUNT(*) FROM videos WHERE collection_id = ?),
+              comment_count = (SELECT COUNT(*) FROM comments WHERE collection_id = ?)
+          WHERE id = ?
+        `, [newCollectionId, newCollectionId, newCollectionId]);
       }
 
-      // Update counts
-      await db.run(`
-        UPDATE collections
-        SET video_count = (SELECT COUNT(*) FROM videos WHERE collection_id = ?),
-            comment_count = (SELECT COUNT(*) FROM comments WHERE collection_id = ?)
-        WHERE id = ?
-      `, [newCollectionId, newCollectionId, newCollectionId]);
-
-      return { success: true, collectionId: newCollectionId, matchCount: filteredVideos.length };
+      return { success: true, collectionId: await db.get('SELECT last_insert_rowid() as id').then(r => r.id), matchCount };
     } catch (error) {
       console.error('[IPC] Error filtering collection:', error);
       return { success: false, error: error.message };

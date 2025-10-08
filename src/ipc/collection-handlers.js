@@ -541,25 +541,25 @@ function registerCollectionHandlers(getDatabase) {
               query += ` AND pe.id NOT IN (
                 SELECT excerpt_id FROM pdf_excerpt_ratings WHERE variable_id = ?
                 UNION
-                SELECT excerpt_id FROM pdf_excerpt_ai_ratings WHERE variable_id = ?
+                SELECT excerpt_id FROM ai_excerpt_ratings WHERE variable_id = ?
               )`;
               queryParams.push(varId, varId);
             } else if (status === 'rated') {
               // Only excerpts WITH ratings (AI or human or both based on ratingType)
               if (ratingType === 'ai') {
-                query += ` AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ai_ratings WHERE variable_id = ?)`;
+                query += ` AND pe.id IN (SELECT excerpt_id FROM ai_excerpt_ratings WHERE variable_id = ?)`;
                 queryParams.push(varId);
               } else if (ratingType === 'human') {
                 query += ` AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ratings WHERE variable_id = ?)`;
                 queryParams.push(varId);
               } else if (ratingType === 'both') {
                 query += ` AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ratings WHERE variable_id = ?)
-                          AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ai_ratings WHERE variable_id = ?)`;
+                          AND pe.id IN (SELECT excerpt_id FROM ai_excerpt_ratings WHERE variable_id = ?)`;
                 queryParams.push(varId, varId);
               } else {
                 // 'any' - has either AI or human rating
                 query += ` AND (pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ratings WHERE variable_id = ?)
-                           OR pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ai_ratings WHERE variable_id = ?))`;
+                           OR pe.id IN (SELECT excerpt_id FROM ai_excerpt_ratings WHERE variable_id = ?))`;
                 queryParams.push(varId, varId);
               }
             }
@@ -568,11 +568,11 @@ function registerCollectionHandlers(getDatabase) {
             if (status !== 'unrated' && (minScore !== null || maxScore !== null)) {
               if (ratingType === 'ai' || ratingType === 'any') {
                 if (minScore !== null) {
-                  query += ` AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ai_ratings WHERE variable_id = ? AND CAST(score AS REAL) >= ?)`;
+                  query += ` AND pe.id IN (SELECT excerpt_id FROM ai_excerpt_ratings WHERE variable_id = ? AND CAST(score AS REAL) >= ?)`;
                   queryParams.push(varId, minScore);
                 }
                 if (maxScore !== null) {
-                  query += ` AND pe.id IN (SELECT excerpt_id FROM pdf_excerpt_ai_ratings WHERE variable_id = ? AND CAST(score AS REAL) <= ?)`;
+                  query += ` AND pe.id IN (SELECT excerpt_id FROM ai_excerpt_ratings WHERE variable_id = ? AND CAST(score AS REAL) <= ?)`;
                   queryParams.push(varId, maxScore);
                 }
               }
@@ -643,10 +643,10 @@ function registerCollectionHandlers(getDatabase) {
           }
 
           // Copy AI ratings
-          const aiRatings = await db.all('SELECT * FROM pdf_excerpt_ai_ratings WHERE excerpt_id = ?', [excerpt.id]);
+          const aiRatings = await db.all('SELECT * FROM ai_excerpt_ratings WHERE excerpt_id = ?', [excerpt.id]);
           for (const rating of aiRatings) {
             await db.run(`
-              INSERT INTO pdf_excerpt_ai_ratings (excerpt_id, variable_id, score, reasoning, created_at, updated_at)
+              INSERT INTO ai_excerpt_ratings (excerpt_id, variable_id, score, reasoning, created_at, updated_at)
               VALUES (?, ?, ?, ?, ?, ?)
             `, [newExcerptId.id, rating.variable_id, rating.score, rating.reasoning, rating.created_at, rating.updated_at]);
           }

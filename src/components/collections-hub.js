@@ -257,20 +257,27 @@ class CollectionsHub {
     const collection = this.collections.find(c => c.id === collectionId);
     const isPDFCollection = collection && this.getGenre(collection) === 'pdf';
 
-    // Menu items
+    // Menu items - base items that appear for all collections
     const menuItems = [
       { label: 'Rate Collection', action: 'rate', icon: '⭐' },
-      { label: 'BWS Experiment', action: 'bws', icon: '📊' },
+    ];
+
+    // Add genre-specific BWS options
+    if (isPDFCollection) {
+      menuItems.push({ label: 'Manage Variables', action: 'manage-variables', icon: '📝' });
+      menuItems.push({ label: 'BWS Experiment (PDF)', action: 'bws-pdf', icon: '📊' });
+    } else {
+      // Video collection - keep old BWS for later revival
+      menuItems.push({ label: 'BWS Experiment (Video)', action: 'bws-video', icon: '📊', disabled: true });
+    }
+
+    // Add remaining common options
+    menuItems.push(
       { label: 'Export', action: 'export', icon: '📤' },
       { label: 'Duplicate', action: 'duplicate', icon: '📋' },
       { label: 'Subsample', action: 'subsample', icon: '🎲' },
       { label: 'Filter', action: 'filter', icon: '🔍' }
-    ];
-
-    // Add "Manage Variables" option for PDF collections
-    if (isPDFCollection) {
-      menuItems.splice(1, 0, { label: 'Manage Variables', action: 'manage-variables', icon: '📝' });
-    }
+    );
 
     menuItems.push({ label: 'Delete', action: 'delete', icon: '🗑️', danger: true });
 
@@ -278,10 +285,19 @@ class CollectionsHub {
       const menuItem = document.createElement('button');
       menuItem.className = `context-menu-item${item.danger ? ' danger' : ''}`;
       menuItem.innerHTML = `<span class="menu-icon">${item.icon}</span><span>${item.label}</span>`;
-      menuItem.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.handleContextMenuAction(item.action, collectionId);
-      });
+
+      if (item.disabled) {
+        menuItem.disabled = true;
+        menuItem.style.opacity = '0.5';
+        menuItem.style.cursor = 'not-allowed';
+        menuItem.title = 'Coming soon - Video BWS will be available in a future update';
+      } else {
+        menuItem.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.handleContextMenuAction(item.action, collectionId);
+        });
+      }
+
       menu.appendChild(menuItem);
     });
 
@@ -315,7 +331,11 @@ class CollectionsHub {
       case 'rate':
         await this.showCreateRatingProjectModal(collectionId);
         break;
-      case 'bws':
+      case 'bws-pdf':
+        await this.showCreatePDFBwsModal(collectionId);
+        break;
+      case 'bws-video':
+        // Old video BWS - will be revived later
         await this.showCreateBwsModal(collectionId);
         break;
       case 'manage-variables':
@@ -453,6 +473,27 @@ class CollectionsHub {
     } catch (error) {
       console.error('Error showing BWS modal:', error);
     }
+  }
+
+  async showCreatePDFBwsModal(collectionId) {
+    console.log('[CollectionsHub] Creating PDF BWS Experiment for collection:', collectionId);
+
+    // For now, just log the configuration
+    // TODO: Implement the full PDF BWS workflow with:
+    // 1. Select BWS variable (from global_rating_variables where variable_type='bws')
+    // 2. Configure experiment (name, research intent)
+    // 3. Generate tuples of 4 PDF excerpts
+    // 4. Launch the 4-excerpt comparison interface
+
+    const collection = this.collections.find(c => c.id === collectionId);
+    console.log('[CollectionsHub] Collection for PDF BWS:', {
+      id: collection?.id,
+      name: collection?.search_term,
+      genre: this.getGenre(collection)
+    });
+
+    // Placeholder: Show success message
+    this.showSuccess('PDF BWS Experiment setup coming soon! Collection: ' + collection?.search_term);
   }
 
   render() {

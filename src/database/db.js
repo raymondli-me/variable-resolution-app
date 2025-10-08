@@ -2261,35 +2261,60 @@ class Database {
 
   /**
    * Get ratings for a specific excerpt
+   * Handles both collection-specific and global variables
    */
   async getExcerptRatings(excerptId) {
-    return await this.all(`
+    // Get all ratings and join with appropriate variable table
+    const ratings = await this.all(`
       SELECT
         er.*,
-        rv.label as variable_label,
-        rv.scale_type,
-        rv.anchors
+        COALESCE(grv.label, rv.label) as variable_label,
+        COALESCE(grv.scale_type, rv.scale_type) as scale_type,
+        COALESCE(grv.anchors, rv.anchors) as anchors
       FROM excerpt_ratings er
-      JOIN rating_variables rv ON er.variable_id = rv.id
+      LEFT JOIN global_rating_variables grv ON er.variable_id = grv.id
+      LEFT JOIN rating_variables rv ON er.variable_id = rv.id
       WHERE er.excerpt_id = ?
       ORDER BY er.created_at DESC
     `, [excerptId]);
+
+    // Parse anchors JSON for each rating
+    return ratings.map(r => ({
+      ...r,
+      anchors: r.anchors ? JSON.parse(r.anchors) : {}
+    }));
   }
 
   /**
    * Get rating for a specific excerpt and variable
+   * Handles both collection-specific and global variables
    */
   async getExcerptRating(excerptId, variableId) {
-    const rating = await this.get(`
+    // Try global variables first (most common case for PDF viewer)
+    let rating = await this.get(`
       SELECT
         er.*,
-        rv.label as variable_label,
-        rv.scale_type,
-        rv.anchors
+        grv.label as variable_label,
+        grv.scale_type,
+        grv.anchors
       FROM excerpt_ratings er
-      JOIN rating_variables rv ON er.variable_id = rv.id
+      JOIN global_rating_variables grv ON er.variable_id = grv.id
       WHERE er.excerpt_id = ? AND er.variable_id = ?
     `, [excerptId, variableId]);
+
+    // If not found, try collection-specific variables
+    if (!rating) {
+      rating = await this.get(`
+        SELECT
+          er.*,
+          rv.label as variable_label,
+          rv.scale_type,
+          rv.anchors
+        FROM excerpt_ratings er
+        JOIN rating_variables rv ON er.variable_id = rv.id
+        WHERE er.excerpt_id = ? AND er.variable_id = ?
+      `, [excerptId, variableId]);
+    }
 
     if (rating && rating.anchors) {
       rating.anchors = JSON.parse(rating.anchors);

@@ -18,8 +18,8 @@ class PDFExcerptViewer {
 
     // Layout state
     this.layoutState = this.loadLayoutState();
-    this.isResizing = false;
-    this.currentResizer = null;
+    this.isResizingHorizontal = false;
+    this.isResizingVertical = false;
 
     // Text size state
     this.detailPanelFontSize = this.loadTextSize();
@@ -182,8 +182,11 @@ class PDFExcerptViewer {
               </div>
             </div>
 
+            <!-- Vertical Resizer between Rating Dashboard and Excerpts -->
+            <div class="panel-resizer vertical-resizer" id="verticalResizer"></div>
+
             <!-- Excerpt List Section (at bottom of rating panel) -->
-            <div class="detail-section" style="flex: 1; min-height: 200px; display: flex; flex-direction: column;">
+            <div class="detail-section" id="excerptListSection" style="flex: 1; min-height: 200px; display: flex; flex-direction: column;">
               <h4>Excerpts</h4>
               <div class="excerpt-list-panel" id="excerptListPanel" style="flex: 1; margin: 0; border: none; background: transparent;">
                 <!-- Search Bar -->
@@ -569,6 +572,7 @@ class PDFExcerptViewer {
 
       // Set as active and scroll into view
       this.activeExcerptId = excerptId;
+      this.currentExcerpt = excerpt;
 
       // Update highlighter to show active state (green highlight)
       if (this.highlighter) {
@@ -577,6 +581,9 @@ class PDFExcerptViewer {
 
       // Show detail panel with excerpt data
       this.showDetailPanel(excerpt);
+
+      // Trigger AI Co-Pilot rating in parallel (same as onExcerptClick)
+      this.triggerAICopilotRating(excerpt);
 
       // Wait a bit for render to complete, then scroll
       setTimeout(() => {
@@ -1092,7 +1099,9 @@ class PDFExcerptViewer {
     // Default layout
     return {
       pdfPanelWidth: 60,
-      detailPanelWidth: 40
+      detailPanelWidth: 40,
+      ratingAreaHeight: 60,  // Rating dashboard takes 60% of detail panel content
+      excerptListHeight: 40   // Excerpt list takes 40% of detail panel content
     };
   }
 
@@ -1120,6 +1129,9 @@ class PDFExcerptViewer {
     if (detailPanel) {
       detailPanel.style.flex = `0 0 ${this.layoutState.detailPanelWidth}%`;
     }
+
+    // Also apply vertical layout
+    this.applyVerticalLayout();
   }
 
   /**
@@ -1130,20 +1142,33 @@ class PDFExcerptViewer {
     const horizontalResizer = this.getElement('horizontalResizer', true);
     if (horizontalResizer) {
       horizontalResizer.addEventListener('mousedown', (e) => {
-        this.isResizing = true;
+        this.isResizingHorizontal = true;
+        e.preventDefault();
+      });
+    }
+
+    // Vertical resizer (between Rating Dashboard and Excerpts)
+    const verticalResizer = this.getElement('verticalResizer', true);
+    if (verticalResizer) {
+      verticalResizer.addEventListener('mousedown', (e) => {
+        this.isResizingVertical = true;
         e.preventDefault();
       });
     }
 
     // Global mouse move and mouse up handlers
     document.addEventListener('mousemove', (e) => {
-      if (!this.isResizing) return;
-      this.handleHorizontalResize(e);
+      if (this.isResizingHorizontal) {
+        this.handleHorizontalResize(e);
+      } else if (this.isResizingVertical) {
+        this.handleVerticalResize(e);
+      }
     });
 
     document.addEventListener('mouseup', () => {
-      if (this.isResizing) {
-        this.isResizing = false;
+      if (this.isResizingHorizontal || this.isResizingVertical) {
+        this.isResizingHorizontal = false;
+        this.isResizingVertical = false;
         this.saveLayoutState();
       }
     });
@@ -1168,6 +1193,54 @@ class PDFExcerptViewer {
     this.layoutState.detailPanelWidth = 100 - pdfWidth;
 
     this.applyLayoutState();
+  }
+
+  /**
+   * Handle vertical panel resizing (Rating Dashboard vs Excerpts List)
+   */
+  handleVerticalResize(e) {
+    const detailPanelContent = document.querySelector('.detail-panel-content');
+    if (!detailPanelContent) return;
+
+    const contentRect = detailPanelContent.getBoundingClientRect();
+    const offsetY = e.clientY - contentRect.top;
+    const contentHeight = contentRect.height;
+
+    // Calculate percentage (with bounds)
+    let ratingHeight = (offsetY / contentHeight) * 100;
+    ratingHeight = Math.max(30, Math.min(70, ratingHeight)); // Limit between 30% and 70%
+
+    this.layoutState.ratingAreaHeight = ratingHeight;
+    this.layoutState.excerptListHeight = 100 - ratingHeight;
+
+    this.applyVerticalLayout();
+  }
+
+  /**
+   * Apply vertical layout to detail panel sections
+   */
+  applyVerticalLayout() {
+    // Get all detail sections that need vertical sizing
+    const detailSections = document.querySelectorAll('.detail-panel-content > .detail-section');
+    if (detailSections.length < 2) return;
+
+    // The last section is the excerpt list section
+    const excerptListSection = document.querySelector('#excerptListSection');
+
+    if (excerptListSection) {
+      // Set flex-basis for the excerpt list section
+      excerptListSection.style.flexBasis = `${this.layoutState.excerptListHeight}%`;
+      excerptListSection.style.flexGrow = '0';
+      excerptListSection.style.flexShrink = '0';
+    }
+
+    // Set all other sections to share the remaining space
+    const otherSections = Array.from(detailSections).filter(s => s.id !== 'excerptListSection');
+    otherSections.forEach(section => {
+      section.style.flexBasis = 'auto';
+      section.style.flexGrow = '0';
+      section.style.flexShrink = '0';
+    });
   }
 
   /**

@@ -127,7 +127,7 @@ async function openCreateBWSModal() {
   const minScore = document.getElementById('bws-min-score');
   if (minScore) minScore.value = '0.7';
   const tupleSize = document.getElementById('bws-tuple-size');
-  if (tupleSize) tupleSize.value = '3';
+  if (tupleSize) tupleSize.value = '4';
   const targetAppearances = document.getElementById('bws-target-appearances');
   if (targetAppearances) targetAppearances.value = '4';
   const designMethod = document.getElementById('bws-design-method');

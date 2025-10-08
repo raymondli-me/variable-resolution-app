@@ -1179,13 +1179,8 @@
           <div class="form-row">
             <div class="form-group">
               <label for="bws-tuple-size">Tuple Size:</label>
-              <select id="bws-tuple-size" class="form-control">
-                <option value="2">2 items (pairwise)</option>
-                <option value="3" selected>3 items</option>
-                <option value="4">4 items</option>
-                <option value="5">5 items</option>
-              </select>
-              <small>How many items to show per comparison</small>
+              <input type="text" id="bws-tuple-size" class="form-control" value="4" readonly style="background-color: #374151; cursor: not-allowed;">
+              <small>Fixed at 4 items per comparison for optimal analysis</small>
             </div>
 
             <div class="form-group">

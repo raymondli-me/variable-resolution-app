@@ -331,10 +331,10 @@ function registerPDFHandlers(getDatabase) {
     }
   });
 
-  ipcMain.handle('pdf:getExcerptRating', async (event, { excerptId, variableId }) => {
+  ipcMain.handle('pdf:getExcerptRating', async (event, { excerpt_id, variable_id }) => {
     try {
       const db = require('../database/db');
-      const rating = await db.getExcerptRating(excerptId, variableId);
+      const rating = await db.getExcerptRating(excerpt_id, variable_id);
 
       return {
         success: true,
@@ -370,10 +370,10 @@ function registerPDFHandlers(getDatabase) {
     }
   });
 
-  ipcMain.handle('pdf:getAIExcerptRating', async (event, { excerptId, variableId }) => {
+  ipcMain.handle('pdf:getAIExcerptRating', async (event, { excerpt_id, variable_id }) => {
     try {
       const db = require('../database/db');
-      const rating = await db.getAIExcerptRating(excerptId, variableId);
+      const rating = await db.getAIExcerptRating(excerpt_id, variable_id);
 
       return {
         success: true,
@@ -389,10 +389,10 @@ function registerPDFHandlers(getDatabase) {
     }
   });
 
-  ipcMain.handle('pdf:getAIRatingsForPDF', async (event, { pdfId, variableId }) => {
+  ipcMain.handle('pdf:getAIRatingsForPDF', async (event, { pdf_id, variable_id }) => {
     try {
       const db = require('../database/db');
-      const ratings = await db.getAIRatingsForPDF(pdfId, variableId);
+      const ratings = await db.getAIRatingsForPDF(pdf_id, variable_id);
 
       return {
         success: true,
@@ -408,10 +408,10 @@ function registerPDFHandlers(getDatabase) {
     }
   });
 
-  ipcMain.handle('pdf:getAIExcerptRatingHistory', async (event, { excerptId, variableId }) => {
+  ipcMain.handle('pdf:getAIExcerptRatingHistory', async (event, { excerpt_id, variable_id }) => {
     try {
       const db = require('../database/db');
-      const history = await db.getAIExcerptRatingHistory(excerptId, variableId);
+      const history = await db.getAIExcerptRatingHistory(excerpt_id, variable_id);
 
       return {
         success: true,
@@ -427,10 +427,10 @@ function registerPDFHandlers(getDatabase) {
     }
   });
 
-  ipcMain.handle('pdf:countAIRatingsForPDF', async (event, { pdfId, variableId }) => {
+  ipcMain.handle('pdf:countAIRatingsForPDF', async (event, { pdf_id, variable_id }) => {
     try {
       const db = require('../database/db');
-      const count = await db.countAIRatingsForPDF(pdfId, variableId);
+      const count = await db.countAIRatingsForPDF(pdf_id, variable_id);
 
       return {
         success: true,
@@ -446,10 +446,10 @@ function registerPDFHandlers(getDatabase) {
     }
   });
 
-  ipcMain.handle('pdf:countHumanRatingsForPDF', async (event, { pdfId, variableId }) => {
+  ipcMain.handle('pdf:countHumanRatingsForPDF', async (event, { pdf_id, variable_id }) => {
     try {
       const db = require('../database/db');
-      const count = await db.countHumanRatingsForPDF(pdfId, variableId);
+      const count = await db.countHumanRatingsForPDF(pdf_id, variable_id);
 
       return {
         success: true,
@@ -484,10 +484,10 @@ function registerPDFHandlers(getDatabase) {
     }
   });
 
-  ipcMain.handle('pdf:deleteExcerptRating', async (event, { excerptId, variableId }) => {
+  ipcMain.handle('pdf:deleteExcerptRating', async (event, { excerpt_id, variable_id }) => {
     try {
       const db = require('../database/db');
-      await db.deleteExcerptRating(excerptId, variableId);
+      await db.deleteExcerptRating(excerpt_id, variable_id);
 
       return {
         success: true

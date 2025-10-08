@@ -740,6 +740,33 @@ class PDFExcerptViewer {
       return;
     }
 
+    // Load existing AI rating from database
+    try {
+      const dbResult = await window.api.pdf.getAIExcerptRating({
+        excerpt_id: excerpt.id,
+        variable_id: this.selectedVariable.id
+      });
+
+      if (dbResult.success && dbResult.data) {
+        // Found existing AI rating in database
+        const rating = {
+          score: dbResult.data.score,
+          reasoning: dbResult.data.reasoning
+        };
+
+        // Cache it
+        this.aiRatingCache.set(cacheKey, rating);
+
+        // Display it
+        this.updateAICopilotDisplay(rating);
+        console.log('[PDFExcerptViewer] Loaded AI rating from database:', rating);
+        return;
+      }
+    } catch (error) {
+      console.error('[PDFExcerptViewer] Error loading AI rating from database:', error);
+      // Continue to generate new rating if database load fails
+    }
+
     // Show loading state
     this.showAICopilotLoading();
 

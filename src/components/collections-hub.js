@@ -1029,8 +1029,18 @@ class CollectionsHub {
       let variables = [];
       if (collectionGenre === 'pdf') {
         try {
-          const varsResult = await window.api.pdf.getRatingVariables(collectionId);
-          variables = varsResult || [];
+          // Load collection-specific variables
+          const collectionVars = await window.api.pdf.getRatingVariables(collectionId);
+
+          // Load global variables that apply to PDF collections
+          const globalVarsResult = await window.api.pdf.getGlobalRatingVariables();
+          const globalVars = globalVarsResult?.success ? globalVarsResult.data : [];
+          const pdfGlobalVars = globalVars.filter(v => v.genre === 'pdf' || v.genre === 'both');
+
+          // Combine both (collection-specific first, then global)
+          variables = [...(collectionVars || []), ...pdfGlobalVars];
+
+          console.log('[FilterCollection] Loaded variables:', variables.length, 'total');
         } catch (error) {
           console.error('Error loading variables:', error);
         }

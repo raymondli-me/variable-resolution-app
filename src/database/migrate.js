@@ -147,9 +147,31 @@ async function migrateDatabase() {
             console.log('[MIGRATION] Collection merge tables already exist');
           }
 
-          console.log('[MIGRATION] Migration complete!');
-          db.close(); // ✅ Close AFTER all operations complete
-          resolve();
+          // Step 4: Add collection_id column to bws_experiments table
+          db.all("PRAGMA table_info(bws_experiments)", (err, columns) => {
+            if (err) {
+              console.log('[MIGRATION] bws_experiments table does not exist yet, will be created on first use');
+            } else {
+              const hasCollectionId = columns.some(col => col.name === 'collection_id');
+
+              if (!hasCollectionId) {
+                console.log('[MIGRATION] Adding collection_id column to bws_experiments...');
+                db.run(`ALTER TABLE bws_experiments ADD COLUMN collection_id INTEGER`, (err) => {
+                  if (err && !err.message.includes('duplicate column')) {
+                    console.error('[MIGRATION] Error adding collection_id column:', err);
+                  } else {
+                    console.log('[MIGRATION] collection_id column added successfully');
+                  }
+                });
+              } else {
+                console.log('[MIGRATION] bws_experiments already has collection_id column');
+              }
+            }
+
+            console.log('[MIGRATION] Migration complete!');
+            db.close(); // ✅ Close AFTER all operations complete
+            resolve();
+          });
         });
       });
     });

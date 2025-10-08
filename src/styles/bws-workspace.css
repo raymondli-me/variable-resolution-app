@@ -1,0 +1,584 @@
+/**
+ * BWS Workspace - Four PDF Windows Layout
+ * Provides a clean, professional interface for comparing 4 PDF excerpts
+ */
+
+.bws-workspace-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-primary, #1f2937);
+  overflow: hidden;
+}
+
+/* Header section */
+.bws-workspace-header {
+  padding: 16px 24px;
+  background-color: var(--bg-secondary, #111827);
+  border-bottom: 1px solid var(--border-color, #374151);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bws-workspace-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary, #f9fafb);
+  margin: 0;
+}
+
+.bws-workspace-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* Main workspace area with 4 quadrants */
+.bws-workspace-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 16px;
+  padding: 16px;
+  min-height: 0;
+}
+
+/* Individual PDF quadrant */
+.bws-pdf-quadrant {
+  background-color: var(--bg-secondary, #111827);
+  border: 2px solid var(--border-color, #374151);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+  position: relative;
+}
+
+.bws-pdf-quadrant:hover {
+  border-color: var(--border-hover, #4b5563);
+}
+
+/* Quadrant header */
+.bws-quadrant-header {
+  padding: 12px 16px;
+  background-color: var(--bg-tertiary, #0f172a);
+  border-bottom: 1px solid var(--border-color, #374151);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bws-quadrant-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary, #9ca3af);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.bws-quadrant-controls {
+  display: flex;
+  gap: 8px;
+}
+
+/* PDF renderer placeholder */
+.bws-pdf-renderer {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-primary, #1f2937);
+  color: var(--text-secondary, #9ca3af);
+  font-size: 14px;
+  overflow: hidden;
+  position: relative;
+}
+
+.bws-pdf-placeholder {
+  text-align: center;
+  padding: 24px;
+}
+
+.bws-pdf-placeholder svg {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+  stroke: var(--text-secondary, #9ca3af);
+}
+
+.bws-pdf-placeholder p {
+  margin: 8px 0 0;
+  color: var(--text-tertiary, #6b7280);
+  font-size: 13px;
+}
+
+/* Quadrant position labels */
+.bws-pdf-quadrant:nth-child(1) .bws-quadrant-label::before {
+  content: "Position A • ";
+  color: var(--accent-blue, #60a5fa);
+}
+
+.bws-pdf-quadrant:nth-child(2) .bws-quadrant-label::before {
+  content: "Position B • ";
+  color: var(--accent-green, #34d399);
+}
+
+.bws-pdf-quadrant:nth-child(3) .bws-quadrant-label::before {
+  content: "Position C • ";
+  color: var(--accent-yellow, #fbbf24);
+}
+
+.bws-pdf-quadrant:nth-child(4) .bws-quadrant-label::before {
+  content: "Position D • ";
+  color: var(--accent-purple, #a78bfa);
+}
+
+/* Footer section */
+.bws-workspace-footer {
+  padding: 16px 24px;
+  background-color: var(--bg-secondary, #111827);
+  border-top: 1px solid var(--border-color, #374151);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bws-workspace-status {
+  font-size: 14px;
+  color: var(--text-secondary, #9ca3af);
+}
+
+/* Button styles */
+.bws-btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border-color, #374151);
+  border-radius: 6px;
+  background-color: var(--bg-tertiary, #0f172a);
+  color: var(--text-primary, #f9fafb);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.bws-btn:hover {
+  background-color: var(--bg-hover, #1e293b);
+  border-color: var(--border-hover, #4b5563);
+}
+
+.bws-btn:active {
+  transform: scale(0.98);
+}
+
+.bws-btn-primary {
+  background-color: var(--primary, #3b82f6);
+  border-color: var(--primary, #3b82f6);
+  color: white;
+}
+
+.bws-btn-primary:hover {
+  background-color: var(--primary-hover, #2563eb);
+  border-color: var(--primary-hover, #2563eb);
+}
+
+.bws-btn-icon {
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bws-btn-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Loading state */
+.bws-workspace-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 16px;
+  color: var(--text-secondary, #9ca3af);
+}
+
+/* Empty state */
+.bws-workspace-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  padding: 48px;
+}
+
+.bws-workspace-empty svg {
+  width: 96px;
+  height: 96px;
+  margin-bottom: 24px;
+  opacity: 0.3;
+  stroke: var(--text-secondary, #9ca3af);
+}
+
+.bws-workspace-empty h3 {
+  margin: 0 0 12px;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary, #f9fafb);
+}
+
+.bws-workspace-empty p {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-secondary, #9ca3af);
+  max-width: 400px;
+}
+
+/* Experiment Cards */
+.bws-experiment-card {
+  background-color: var(--bg-secondary, #111827);
+  border: 2px solid var(--border-color, #374151);
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: all 0.2s ease;
+}
+
+.bws-experiment-card:hover {
+  border-color: var(--border-hover, #4b5563);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.bws-experiment-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.bws-experiment-card-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #f9fafb);
+  flex: 1;
+}
+
+.bws-experiment-status {
+  padding: 4px 12px;
+  background-color: var(--bg-tertiary, #0f172a);
+  border: 1px solid var(--border-color, #374151);
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary, #9ca3af);
+  white-space: nowrap;
+}
+
+.bws-experiment-card-body {
+  display: flex;
+  gap: 20px;
+}
+
+.bws-experiment-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bws-stat-label {
+  font-size: 12px;
+  color: var(--text-tertiary, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.bws-stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary, #f9fafb);
+}
+
+.bws-experiment-card-footer {
+  display: flex;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.bws-experiment-card-footer .bws-btn {
+  flex: 1;
+}
+
+/* Excerpt text overlay */
+.bws-excerpt-text-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.85));
+  border-top: 1px solid var(--border-color, #374151);
+  max-height: 40%;
+  transition: max-height 0.3s ease;
+  z-index: 10;
+}
+
+.bws-excerpt-text-overlay.minimized {
+  max-height: 36px;
+}
+
+.bws-excerpt-text-header {
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-color, #374151);
+}
+
+.bws-excerpt-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #9ca3af);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.bws-excerpt-text-content {
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary, #f9fafb);
+  overflow-y: auto;
+  max-height: 150px;
+}
+
+.bws-excerpt-text-overlay.minimized .bws-excerpt-text-content {
+  display: none;
+}
+
+/* Rating visual feedback */
+.bws-pdf-quadrant {
+  cursor: pointer;
+  user-select: none;
+}
+
+.bws-pdf-quadrant:hover {
+  border-color: var(--border-hover, #6b7280);
+  transform: scale(1.01);
+  transition: all 0.15s ease;
+}
+
+/* Best selection - dashed green outline */
+.bws-pdf-quadrant.bws-rated-best {
+  border: 3px dashed #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+  background-color: rgba(16, 185, 129, 0.05);
+}
+
+/* Worst selection - dashed red outline */
+.bws-pdf-quadrant.bws-rated-worst {
+  border: 3px dashed #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+  background-color: rgba(239, 68, 68, 0.05);
+}
+
+/* Add rating indicator to quadrant header */
+.bws-pdf-quadrant.bws-rated-best .bws-quadrant-label::after {
+  content: " • BEST";
+  color: #10b981;
+  font-weight: 700;
+  margin-left: 8px;
+}
+
+.bws-pdf-quadrant.bws-rated-worst .bws-quadrant-label::after {
+  content: " • WORST";
+  color: #ef4444;
+  font-weight: 700;
+  margin-left: 8px;
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 1024px) {
+  .bws-workspace-main {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .bws-pdf-quadrant {
+    border-radius: 6px;
+  }
+}
+
+@media (max-width: 768px) {
+  .bws-workspace-main {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(4, 1fr);
+  }
+}
+
+/* Toggle switch styles */
+.bws-toggle-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.bws-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.bws-toggle-slider {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background-color: var(--border-color, #374151);
+  border-radius: 10px;
+  transition: background-color 0.3s;
+}
+
+.bws-toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  border-radius: 50%;
+  transition: transform 0.3s;
+}
+
+.bws-toggle-switch input:checked + .bws-toggle-slider {
+  background-color: var(--primary-color, #3b82f6);
+}
+
+.bws-toggle-switch input:checked + .bws-toggle-slider::before {
+  transform: translateX(16px);
+}
+
+/* Select dropdown */
+.bws-select {
+  padding: 6px 10px;
+  background: var(--bg-secondary, #1f2937);
+  color: var(--text-primary, #f9fafb);
+  border: 1px solid var(--border-color, #374151);
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+}
+
+.bws-select:focus {
+  border-color: var(--primary-color, #3b82f6);
+}
+
+/* Small button variant */
+.bws-btn-small {
+  padding: 6px 12px !important;
+  font-size: 12px !important;
+}
+
+/* Browser item current state */
+.bws-browser-item-current {
+  background: #374151 !important;
+  border: 2px solid #3b82f6 !important;
+}
+
+/* Success button variant */
+.bws-btn-success {
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+  border: 1px solid #059669 !important;
+}
+
+.bws-btn-success:hover:not(:disabled) {
+  background: linear-gradient(135deg, #34d399, #10b981) !important;
+  border-color: #10b981 !important;
+}
+
+/* AI Rating Visual Indicators */
+.bws-pdf-quadrant.ai-best {
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.5) !important;
+}
+
+.bws-pdf-quadrant.ai-best::before {
+  content: 'AI BEST';
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(34, 197, 94, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: bold;
+  z-index: 100;
+}
+
+.bws-pdf-quadrant.ai-worst {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.5) !important;
+}
+
+.bws-pdf-quadrant.ai-worst::before {
+  content: 'AI WORST';
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: bold;
+  z-index: 100;
+}
+
+/* Human Rating Visual Indicators */
+.bws-pdf-quadrant.human-best {
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.7) !important;
+  border: 2px solid rgba(16, 185, 129, 0.9) !important;
+}
+
+.bws-pdf-quadrant.human-best::after {
+  content: 'HUMAN BEST';
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(16, 185, 129, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: bold;
+  z-index: 100;
+}
+
+.bws-pdf-quadrant.human-worst {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.7) !important;
+  border: 2px solid rgba(239, 68, 68, 0.9) !important;
+}
+
+.bws-pdf-quadrant.human-worst::after {
+  content: 'HUMAN WORST';
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: bold;
+  z-index: 100;
+}

@@ -228,12 +228,19 @@ function showTab(tabName) {
 
 // View management
 function showView(viewName) {
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  // Hide all views
+  document.querySelectorAll('.view').forEach(v => {
+    v.classList.remove('active');
+    v.style.display = 'none';
+  });
+
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
+  // Show the requested view
   const view = document.getElementById(`${viewName}View`);
   if (view) {
     view.classList.add('active');
+    view.style.display = 'block';
     currentView = viewName;
   }
 
@@ -247,6 +254,8 @@ function showView(viewName) {
     // Small delay to ensure DOM is ready
     setTimeout(() => showTab('ratings'), 0);
   }
+
+  // BWS Workspace is initialized by openBWSWorkspace() with collection ID
 }
 
 // Settings
@@ -3366,6 +3375,28 @@ document.querySelectorAll('.nav-item').forEach(button => {
   });
 });
 
+// ==================== BWS Workspace ====================
+
+let bwsWorkspaceInstance = null;
+
+
+/**
+ * Open BWS Workspace
+ * Helper function to navigate to the BWS workspace view
+ * @param {number} collectionId - The ID of the collection to open BWS workspace for
+ */
+function openBWSWorkspace(collectionId) {
+  console.log('Opening BWS Workspace for collection:', collectionId);
+  showView('bwsWorkspace');
+
+  // Recreate workspace instance with the collection ID
+  if (bwsWorkspaceInstance) {
+    bwsWorkspaceInstance.destroy();
+  }
+
+  bwsWorkspaceInstance = new BWSWorkspace('bws-workspace-container', collectionId);
+}
+
 // Make functions available globally for onclick handlers
 window.exportCollection = exportCollection;
 window.exportCollectionCSV = exportCollectionCSV;
@@ -3376,3 +3407,6 @@ window.showView = showView;
 window.viewCollection = viewCollection;
 window.resumeCollectionFromGallery = resumeCollectionFromGallery;
 window.markCollectionComplete = markCollectionComplete;
+
+// BWS Workspace functions
+window.openBWSWorkspace = openBWSWorkspace;

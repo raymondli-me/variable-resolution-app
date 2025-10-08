@@ -25,6 +25,10 @@ function registerBWSHandlers(getDatabase, getMainWindow, getSettings, decrypt) {
     return await bwsService.getExperiment(experimentId);
   });
 
+  ipcMain.handle('bws:getExperimentsForCollection', async (event, { collectionId }) => {
+    return await bwsService.getExperimentsForCollection(collectionId);
+  });
+
   ipcMain.handle('bws:createExperiment', async (event, config) => {
     return await bwsService.createExperiment(config);
   });
@@ -75,6 +79,21 @@ function registerBWSHandlers(getDatabase, getMainWindow, getSettings, decrypt) {
 
   ipcMain.handle('bws:getTupleWithItems', async (event, { tupleId }) => {
     return await bwsService.getTupleWithItems(tupleId);
+  });
+
+  // Rating variables handlers
+  ipcMain.handle('bws:getRatingVariables', async () => {
+    return await bwsService.getRatingVariables();
+  });
+
+  // AI rating handlers for individual tuples
+  ipcMain.handle('bws:rateTupleWithAI', async (event, { tupleId, variableId, items }) => {
+    return await bwsService.rateTupleWithAI(tupleId, variableId, items);
+  });
+
+  // AI progress monitoring
+  ipcMain.handle('bws:getAIRatingProgress', async (event, { experimentId }) => {
+    return await bwsService.getAIRatingProgress(experimentId);
   });
 }
 

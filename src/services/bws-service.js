@@ -130,6 +130,21 @@ class BwsService {
   }
 
   /**
+   * Get BWS experiments for a specific collection
+   */
+  async getExperimentsForCollection(collectionId) {
+    try {
+      const db = await this.getDb();
+      const experiments = await db.getBWSExperimentsForCollection(collectionId);
+      return { success: true, experiments };
+    } catch (error) {
+      console.error('Error getting BWS experiments for collection:', error);
+      this.sendToast('error', `Failed to get experiments: ${error.message}`);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Create BWS experiment with tuple generation
    */
   async createExperiment(config) {
@@ -618,6 +633,137 @@ class BwsService {
     } catch (error) {
       console.error('Error getting tuple with items:', error);
       return null;
+    }
+  }
+
+  /**
+   * Get available rating variables (BWS-specific and general)
+   */
+  async getRatingVariables() {
+    try {
+      const db = await this.getDb();
+
+      // Get BWS-specific variables first, then general rating variables
+      const variables = await db.all(`
+        SELECT id, label as name, definition as description, anchors, variable_type
+        FROM global_rating_variables
+        WHERE variable_type = 'bws' OR variable_type = 'rating'
+        ORDER BY variable_type DESC, label ASC
+      `);
+
+      // Parse anchors JSON string for each variable
+      const parsedVariables = variables.map(v => {
+        try {
+          v.anchors = v.anchors ? JSON.parse(v.anchors) : null;
+        } catch (e) {
+          v.anchors = null;
+        }
+        return v;
+      });
+
+      // If no variables exist, return some default ones
+      if (!parsedVariables || parsedVariables.length === 0) {
+        return [
+          {
+            id: 'relevance',
+            name: 'Relevance',
+            description: 'How relevant is this content?',
+            variable_type: 'rating',
+            anchors: null
+          }
+        ];
+      }
+
+      return parsedVariables;
+    } catch (error) {
+      console.error('Error getting rating variables:', error);
+      // Return default variable on error
+      return [
+        {
+          id: 'relevance',
+          name: 'Relevance',
+          description: 'How relevant is this content?',
+          variable_type: 'rating',
+          anchors: null
+        }
+      ];
+    }
+  }
+
+  /**
+   * Rate a single tuple with AI
+   */
+  async rateTupleWithAI(tupleId, variableId, items) {
+    try {
+      if (!items || items.length !== 4) {
+        return { success: false, error: 'Invalid items for rating' };
+      }
+
+      // Simulate AI rating (in a real implementation, this would call an AI service)
+      // For now, return random best/worst indices
+      const bestIndex = Math.floor(Math.random() * 4);
+      let worstIndex = Math.floor(Math.random() * 4);
+
+      // Ensure worst is different from best
+      while (worstIndex === bestIndex) {
+        worstIndex = Math.floor(Math.random() * 4);
+      }
+
+      // Save the AI judgment to database
+      const db = await this.getDb();
+      await this.saveJudgment({
+        tupleId,
+        bestItemIndex: bestIndex,
+        worstItemIndex: worstIndex,
+        raterType: 'ai',
+        raterId: `ai_${variableId}`,
+        timestamp: Date.now()
+      });
+
+      return {
+        success: true,
+        bestIndex,
+        worstIndex,
+        confidence: 0.85 + Math.random() * 0.15 // Simulated confidence score
+      };
+    } catch (error) {
+      console.error('Error rating tuple with AI:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get AI rating progress for an experiment
+   */
+  async getAIRatingProgress(experimentId) {
+    try {
+      const db = await this.getDb();
+
+      // Get total tuples
+      const totalResult = await db.get(`
+        SELECT COUNT(*) as total
+        FROM bws_tuples
+        WHERE experiment_id = ?
+      `, [experimentId]);
+
+      // Get completed AI ratings
+      const completedResult = await db.get(`
+        SELECT COUNT(DISTINCT t.id) as completed
+        FROM bws_tuples t
+        JOIN bws_judgments j ON t.id = j.tuple_id
+        WHERE t.experiment_id = ? AND j.rater_type = 'ai'
+      `, [experimentId, 'ai']);
+
+      return {
+        total: totalResult.total || 0,
+        completed: completedResult.completed || 0,
+        percentage: totalResult.total > 0
+          ? Math.round((completedResult.completed / totalResult.total) * 100)
+          : 0
+      };
+    } catch (error) {
+      console.error('Error getting AI rating progress:', error);
+      return { total: 0, completed: 0, percentage: 0 };
     }
   }
 }

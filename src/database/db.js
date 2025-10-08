@@ -1015,6 +1015,7 @@ class Database {
     const {
       name,
       rating_project_id,
+      collection_id,
       item_type,
       tuple_size,
       tuple_count,
@@ -1027,11 +1028,11 @@ class Database {
 
     const result = await this.run(`
       INSERT INTO bws_experiments (
-        name, rating_project_id, item_type, tuple_size, tuple_count,
+        name, rating_project_id, collection_id, item_type, tuple_size, tuple_count,
         design_method, scoring_method, rater_type, research_intent, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      name, rating_project_id, item_type, tuple_size, tuple_count,
+      name, rating_project_id, collection_id, item_type, tuple_size, tuple_count,
       design_method, scoring_method, rater_type, research_intent, status
     ]);
 
@@ -1053,6 +1054,24 @@ class Database {
       LEFT JOIN rating_projects rp ON e.rating_project_id = rp.id
       ORDER BY e.created_at DESC
     `);
+  }
+
+  /**
+   * Get BWS experiments for a specific collection
+   */
+  async getBWSExperimentsForCollection(collectionId) {
+    return await this.all(`
+      SELECT
+        e.*,
+        rp.project_name as rating_project_name,
+        COALESCE(e.collection_id, rp.collection_id) as collection_id,
+        (SELECT COUNT(*) FROM bws_tuples WHERE experiment_id = e.id) as tuples_generated,
+        (SELECT COUNT(*) FROM bws_judgments j JOIN bws_tuples t ON j.tuple_id = t.id WHERE t.experiment_id = e.id) as judgments_count
+      FROM bws_experiments e
+      LEFT JOIN rating_projects rp ON e.rating_project_id = rp.id
+      WHERE e.collection_id = ? OR rp.collection_id = ?
+      ORDER BY e.created_at DESC
+    `, [collectionId, collectionId]);
   }
 
   /**

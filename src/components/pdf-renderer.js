@@ -16,6 +16,9 @@ class PDFRenderer {
     this.renderTask = null; // Track ongoing render task for cancellation
     this.canvasWrapper = null; // Wrapper for stacking canvases
 
+    // Add unique ID for this renderer instance
+    this.id = `renderer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
     this.createCanvas();
   }
 
@@ -241,7 +244,10 @@ class PDFRenderer {
    */
   dispatchEvent(eventName, data) {
     const event = new CustomEvent('pdfRenderer:' + eventName, {
-      detail: data
+      detail: {
+        ...data,
+        rendererId: this.id  // Include renderer ID for filtering
+      }
     });
     document.dispatchEvent(event);
   }

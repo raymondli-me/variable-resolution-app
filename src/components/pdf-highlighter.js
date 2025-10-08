@@ -70,26 +70,32 @@ class PDFHighlighter {
    * Listen to PDF renderer events
    */
   setupEventListeners() {
-    // Redraw highlights when page is rendered
-    document.addEventListener('pdfRenderer:pageRendered', (event) => {
-      this.syncCanvasSize();
-      this.drawHighlights();
-    });
+    // Store bound handlers as instance properties so we can remove them later
+    this.pageRenderedHandler = (event) => {
+      // Only respond if this event is for our renderer
+      if (event.detail && event.detail.rendererId === this.renderer.id) {
+        this.syncCanvasSize();
+        this.drawHighlights();
+      }
+    };
 
-    // Handle clicks on highlights
-    this.highlightCanvas.addEventListener('click', (event) => {
+    this.clickHandler = (event) => {
       this.handleClick(event);
-    });
+    };
 
-    // Handle mouse movement for tooltips
-    this.highlightCanvas.addEventListener('mousemove', (event) => {
+    this.mouseMoveHandler = (event) => {
       this.handleMouseMove(event);
-    });
+    };
 
-    // Hide tooltip when mouse leaves canvas
-    this.highlightCanvas.addEventListener('mouseleave', () => {
+    this.mouseLeaveHandler = () => {
       this.hideTooltip();
-    });
+    };
+
+    // Add listeners
+    document.addEventListener('pdfRenderer:pageRendered', this.pageRenderedHandler);
+    this.highlightCanvas.addEventListener('click', this.clickHandler);
+    this.highlightCanvas.addEventListener('mousemove', this.mouseMoveHandler);
+    this.highlightCanvas.addEventListener('mouseleave', this.mouseLeaveHandler);
   }
 
   /**
@@ -108,6 +114,37 @@ class PDFHighlighter {
   loadExcerpts(excerpts) {
     this.excerpts = excerpts;
     this.drawHighlights();
+  }
+
+  /**
+   * Clean up resources - clear data but keep DOM intact for reuse
+   */
+  cleanup() {
+    // Clear excerpts to stop drawing old highlights
+    this.excerpts = [];
+
+    // Clear canvas
+    if (this.highlightCtx) {
+      this.highlightCtx.clearRect(0, 0, this.highlightCanvas.width, this.highlightCanvas.height);
+    }
+
+    // Remove ALL event listeners to stop responding to any events
+    if (this.pageRenderedHandler) {
+      document.removeEventListener('pdfRenderer:pageRendered', this.pageRenderedHandler);
+    }
+    if (this.clickHandler) {
+      this.highlightCanvas.removeEventListener('click', this.clickHandler);
+    }
+    if (this.mouseMoveHandler) {
+      this.highlightCanvas.removeEventListener('mousemove', this.mouseMoveHandler);
+    }
+    if (this.mouseLeaveHandler) {
+      this.highlightCanvas.removeEventListener('mouseleave', this.mouseLeaveHandler);
+    }
+
+    // Hide and clear tooltip
+    this.hideTooltip();
+    this.currentHoverExcerpt = null;
   }
 
   /**

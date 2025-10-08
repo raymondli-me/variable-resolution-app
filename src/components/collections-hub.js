@@ -262,14 +262,14 @@ class CollectionsHub {
       { label: 'Rate Collection', action: 'rate', icon: '⭐' },
     ];
 
-    // Add genre-specific BWS options
+    // Add PDF-specific options
     if (isPDFCollection) {
       menuItems.push({ label: 'Manage Variables', action: 'manage-variables', icon: '📝' });
-      menuItems.push({ label: 'BWS Experiment (PDF)', action: 'bws-pdf', icon: '📊' });
-    } else {
-      // Video collection - keep old BWS for later revival
-      menuItems.push({ label: 'BWS Experiment (Video)', action: 'bws-video', icon: '📊', disabled: true });
     }
+
+    // Add BWS options - PDF workspace appears first
+    menuItems.push({ label: 'BWS Workspace (PDF)', action: 'open-bws-workspace', icon: '📊' });
+    menuItems.push({ label: 'BWS Experiment (Video)', action: 'bws-video', icon: '📊', disabled: true });
 
     // Add remaining common options
     menuItems.push(
@@ -333,6 +333,14 @@ class CollectionsHub {
         break;
       case 'bws-pdf':
         await this.showCreatePDFBwsModal(collectionId);
+        break;
+      case 'open-bws-workspace':
+        // Open the BWS workspace view for this collection
+        if (window.openBWSWorkspace) {
+          window.openBWSWorkspace(collectionId);
+        } else {
+          console.error('openBWSWorkspace function not found');
+        }
         break;
       case 'bws-video':
         // Old video BWS - will be revived later

@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="src/styles/pdf-renderer.css">
     <link rel="stylesheet" href="src/styles/pdf-gallery-viewer.css">
     <link rel="stylesheet" href="src/styles/collections-hub.css">
+  <link rel="stylesheet" href="src/styles/bws-workspace.css">
   </head>
 <body>
   <div id="app">
@@ -715,6 +716,12 @@
             </div>
           </div>
         </div>
+
+        <!-- BWS Workspace View -->
+        <div id="bwsWorkspaceView" class="view" style="display: none;">
+          <!-- BWS Workspace Container - Rendered by JavaScript -->
+          <div id="bws-workspace-container"></div>
+        </div>
       </section>
     </main>
 
@@ -910,6 +917,9 @@
 
   <!-- PDF Services -->
   <script src="src/services/pdf-page-image-generator.js"></script>
+
+  <!-- BWS Workspace Component -->
+  <script src="src/components/bws-workspace.js"></script>
 
   <script src="src/bws-manager.js"></script>
   <script src="src/renderer-advanced.js"></script>

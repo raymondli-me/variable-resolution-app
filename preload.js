@@ -135,6 +135,7 @@ contextBridge.exposeInMainWorld('api', {
   bws: {
     getAllExperiments: () => ipcRenderer.invoke('bws:getAllExperiments'),
     getExperiment: (params) => ipcRenderer.invoke('bws:getExperiment', params),
+    getExperimentsForCollection: (params) => ipcRenderer.invoke('bws:getExperimentsForCollection', params),
     createExperiment: (config) => ipcRenderer.invoke('bws:createExperiment', config),
     updateExperiment: (params) => ipcRenderer.invoke('bws:updateExperiment', params),
     getNextTuple: (params) => ipcRenderer.invoke('bws:getNextTuple', params),
@@ -147,7 +148,10 @@ contextBridge.exposeInMainWorld('api', {
     // List view methods
     getAllTuples: (params) => ipcRenderer.invoke('bws:getAllTuples', params),
     getJudgments: (params) => ipcRenderer.invoke('bws:getJudgments', params),
-    getTupleWithItems: (params) => ipcRenderer.invoke('bws:getTupleWithItems', params)
+    getTupleWithItems: (params) => ipcRenderer.invoke('bws:getTupleWithItems', params),
+    getRatingVariables: () => ipcRenderer.invoke('bws:getRatingVariables'),
+    rateTupleWithAI: (params) => ipcRenderer.invoke('bws:rateTupleWithAI', params),
+    getAIRatingProgress: (params) => ipcRenderer.invoke('bws:getAIRatingProgress', params)
   },
 
   // Database operations (direct access to DB methods)

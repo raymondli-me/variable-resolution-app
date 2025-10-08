@@ -16,15 +16,15 @@ With the core rating system now stable and functional, we are ready to implement
 
 ## Part II: The Roadmap - A Series of Epics
 
-### EPIC 1: BWS Variable Management
+### EPIC 1: BWS Variable Management (Complete)
 
--   **Ticket #501:** Enhance "Manage Variables" Modal. Add a new "Variable Type: BWS" option. When selected, the form should change to accept "Anchor for Best" and "Anchor for Worst" instead of a numerical scale.
--   **Ticket #502:** Update Backend for BWS Variables. The `global_rating_variables` table and its CRUD operations need to support this new variable type, storing the "Best" and "Worst" anchors.
+-   **Ticket #501:** Enhance "Manage Variables" Modal. (Complete)
+-   **Ticket #502:** Update Backend for BWS Variables. (Complete)
 
-### EPIC 2: BWS Experiment Creation & Setup
+### EPIC 2: BWS Experiment Creation & Setup (Complete)
 
--   **Ticket #503:** Create "Create BWS Experiment" Modal. This modal will be launched from the collection context menu. It will allow the user to select a BWS variable, choose a collection, and configure the experiment (e.g., tuple size, number of comparisons).
--   **Ticket #504:** Implement BWS Tuple Generation. The backend needs to generate comparison sets (tuples) of PDF excerpts based on the selected collection and BWS variable.
+-   **Ticket #503:** Create "Create BWS Experiment" Modal. (Complete)
+-   **Ticket #504:** Implement BWS Tuple Generation. (Complete)
 
 ### EPIC 3: The Interactive BWS Workspace UI
 

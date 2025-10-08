@@ -29,6 +29,7 @@ class PDFExcerptViewer {
     this.selectedVariable = null;
     this.selectedDepth = 'brief';
     this.autoSaveTimeout = null;
+    this.progressUpdateTimeout = null;
 
     // AI rating cache: Map<"excerptId_variableId", rating>
     this.aiRatingCache = new Map();
@@ -187,7 +188,13 @@ class PDFExcerptViewer {
 
             <!-- Excerpt List Section (at bottom of rating panel) -->
             <div class="detail-section" id="excerptListSection" style="flex: 1; min-height: 200px; display: flex; flex-direction: column;">
-              <h4>Excerpts</h4>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h4 style="margin: 0;">Excerpts</h4>
+                <div id="ratingProgress" class="rating-progress-indicator" style="display: flex; gap: 12px; font-size: 11px; color: #9ca3af;">
+                  <span id="humanProgress" title="Human ratings">👤 <span style="color: #3b82f6; font-weight: 600;">0/0</span></span>
+                  <span id="aiProgress" title="AI ratings">🤖 <span style="color: #10b981; font-weight: 600;">0/0</span></span>
+                </div>
+              </div>
               <div class="excerpt-list-panel" id="excerptListPanel" style="flex: 1; margin: 0; border: none; background: transparent;">
                 <!-- Search Bar -->
                 <div class="excerpt-search" style="padding: 8px; background: #111827; border-radius: 4px;">
@@ -370,6 +377,9 @@ class PDFExcerptViewer {
 
       // Render excerpts list
       this.renderExcerpts();
+
+      // Update rating progress indicators
+      this.throttledUpdateProgress();
 
     } catch (error) {
       console.error('[PDFExcerptViewer] Error loading excerpts:', error);
@@ -763,6 +773,9 @@ class PDFExcerptViewer {
         this.updateAICopilotDisplay(result.rating);
 
         console.log('[PDFExcerptViewer] AI rating received and cached:', result.rating);
+
+        // Update rating progress after AI rating
+        this.throttledUpdateProgress();
       } else {
         this.showAICopilotError(result.error || 'Failed to get AI rating');
       }
@@ -1519,6 +1532,9 @@ class PDFExcerptViewer {
       if (this.currentExcerpt) {
         this.triggerAICopilotRating(this.currentExcerpt);
       }
+
+      // Update rating progress for new variable
+      this.throttledUpdateProgress();
     }
   }
 
@@ -1789,6 +1805,9 @@ class PDFExcerptViewer {
         setTimeout(() => {
           this.updateAutoSaveStatus('Auto-save enabled');
         }, 2000);
+
+        // Update rating progress after successful save
+        this.throttledUpdateProgress();
       } else {
         this.updateAutoSaveStatus('Save failed');
       }
@@ -1806,6 +1825,75 @@ class PDFExcerptViewer {
     if (statusEl) {
       statusEl.textContent = message;
     }
+  }
+
+  // ============================================
+  // RATING PROGRESS METHODS
+  // ============================================
+
+  /**
+   * Update rating progress indicators
+   */
+  async updateRatingProgress() {
+    if (!this.selectedVariable || !this.allExcerpts || this.allExcerpts.length === 0) {
+      return;
+    }
+
+    try {
+      // Count excerpts with human ratings
+      let humanRatedCount = 0;
+      let aiRatedCount = 0;
+      const totalExcerpts = this.allExcerpts.length;
+
+      // Check each excerpt for ratings
+      for (const excerpt of this.allExcerpts) {
+        // Check for human rating in database
+        const humanRatingResult = await window.api.pdf.getExcerptRating({
+          excerpt_id: excerpt.id,
+          variable_id: this.selectedVariable.id
+        });
+
+        if (humanRatingResult.success && humanRatingResult.data) {
+          humanRatedCount++;
+        }
+
+        // Check for AI rating in cache
+        const aiCacheKey = `${excerpt.id}_${this.selectedVariable.id}`;
+        if (this.aiRatingCache.has(aiCacheKey)) {
+          aiRatedCount++;
+        }
+      }
+
+      // Update UI
+      const humanProgressEl = document.querySelector('#humanProgress span');
+      const aiProgressEl = document.querySelector('#aiProgress span');
+
+      if (humanProgressEl) {
+        const humanPercent = totalExcerpts > 0 ? Math.round((humanRatedCount / totalExcerpts) * 100) : 0;
+        humanProgressEl.textContent = `${humanRatedCount}/${totalExcerpts} (${humanPercent}%)`;
+      }
+
+      if (aiProgressEl) {
+        const aiPercent = totalExcerpts > 0 ? Math.round((aiRatedCount / totalExcerpts) * 100) : 0;
+        aiProgressEl.textContent = `${aiRatedCount}/${totalExcerpts} (${aiPercent}%)`;
+      }
+
+    } catch (error) {
+      console.error('[PDFExcerptViewer] Error updating rating progress:', error);
+    }
+  }
+
+  /**
+   * Update rating progress (throttled to avoid excessive database queries)
+   */
+  throttledUpdateProgress() {
+    if (this.progressUpdateTimeout) {
+      clearTimeout(this.progressUpdateTimeout);
+    }
+
+    this.progressUpdateTimeout = setTimeout(() => {
+      this.updateRatingProgress();
+    }, 500);
   }
 }
 

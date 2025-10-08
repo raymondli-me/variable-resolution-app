@@ -40,7 +40,7 @@ Your task is to implement the "Create BWS Experiment" modal:
 2.  **Configuration:** The modal should allow the user to configure a BWS experiment. At a minimum, it needs fields for:
     -   Selecting a **BWS Variable** (from the global variables).
     -   Selecting a **Collection** (pre-filled from the context menu).
-    -   **Tuple Size** (e.g., 2-5 items per comparison).
+    -   **Tuple Size** (fixed at 4 items per comparison for UI consistency).
     -   **Number of Comparisons** (or target appearances per item).
 3.  **Backend Integration (Stub):** For now, clicking "Create Experiment" should simply `console.log` the experiment configuration.
 

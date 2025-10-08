@@ -1851,49 +1851,30 @@ class PDFExcerptViewer {
   // ============================================
 
   /**
-   * Update rating progress indicators
+   * Update rating progress indicators (fast SQL COUNT queries)
    */
   async updateRatingProgress() {
-    if (!this.selectedVariable || !this.allExcerpts || this.allExcerpts.length === 0) {
+    if (!this.selectedVariable || !this.currentPDF || !this.allExcerpts || this.allExcerpts.length === 0) {
       return;
     }
 
     try {
-      // Count excerpts with human ratings
-      let humanRatedCount = 0;
-      let aiRatedCount = 0;
       const totalExcerpts = this.allExcerpts.length;
 
-      // Check each excerpt for ratings
-      for (const excerpt of this.allExcerpts) {
-        // Check for human rating in database
-        const humanRatingResult = await window.api.pdf.getExcerptRating({
-          excerpt_id: excerpt.id,
+      // Use efficient SQL COUNT queries instead of looping through all excerpts
+      const [humanResult, aiResult] = await Promise.all([
+        window.api.pdf.countHumanRatingsForPDF({
+          pdf_id: this.currentPDF.id,
           variable_id: this.selectedVariable.id
-        });
-
-        if (humanRatingResult.success && humanRatingResult.data) {
-          humanRatedCount++;
-        }
-
-        // Check for AI rating in database (not just cache for persistence)
-        const aiRatingResult = await window.api.pdf.getAIExcerptRating({
-          excerpt_id: excerpt.id,
+        }),
+        window.api.pdf.countAIRatingsForPDF({
+          pdf_id: this.currentPDF.id,
           variable_id: this.selectedVariable.id
-        });
+        })
+      ]);
 
-        if (aiRatingResult.success && aiRatingResult.data) {
-          aiRatedCount++;
-          // Also populate cache for quick access
-          const cacheKey = `${excerpt.id}_${this.selectedVariable.id}`;
-          if (!this.aiRatingCache.has(cacheKey)) {
-            this.aiRatingCache.set(cacheKey, {
-              score: aiRatingResult.data.score,
-              reasoning: aiRatingResult.data.reasoning
-            });
-          }
-        }
-      }
+      const humanRatedCount = humanResult.success ? humanResult.count : 0;
+      const aiRatedCount = aiResult.success ? aiResult.count : 0;
 
       // Update UI
       const humanProgressEl = document.querySelector('#humanProgress span');
@@ -1908,6 +1889,8 @@ class PDFExcerptViewer {
         const aiPercent = totalExcerpts > 0 ? Math.round((aiRatedCount / totalExcerpts) * 100) : 0;
         aiProgressEl.textContent = `${aiRatedCount}/${totalExcerpts} (${aiPercent}%)`;
       }
+
+      console.log(`[PDFExcerptViewer] Progress updated: Human ${humanRatedCount}/${totalExcerpts}, AI ${aiRatedCount}/${totalExcerpts}`);
 
     } catch (error) {
       console.error('[PDFExcerptViewer] Error updating rating progress:', error);

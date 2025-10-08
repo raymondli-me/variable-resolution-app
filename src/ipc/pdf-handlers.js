@@ -427,6 +427,44 @@ function registerPDFHandlers(getDatabase) {
     }
   });
 
+  ipcMain.handle('pdf:countAIRatingsForPDF', async (event, { pdfId, variableId }) => {
+    try {
+      const db = require('../database/db');
+      const count = await db.countAIRatingsForPDF(pdfId, variableId);
+
+      return {
+        success: true,
+        count
+      };
+
+    } catch (error) {
+      console.error('Count AI ratings for PDF error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
+  ipcMain.handle('pdf:countHumanRatingsForPDF', async (event, { pdfId, variableId }) => {
+    try {
+      const db = require('../database/db');
+      const count = await db.countHumanRatingsForPDF(pdfId, variableId);
+
+      return {
+        success: true,
+        count
+      };
+
+    } catch (error) {
+      console.error('Count human ratings for PDF error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
   ipcMain.handle('pdf:getRatingsByVariable', async (event, variableId) => {
     try {
       const db = require('../database/db');

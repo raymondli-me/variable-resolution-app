@@ -2140,6 +2140,34 @@ class Database {
     `, [pdfId, variableId]);
   }
 
+  /**
+   * Count how many excerpts have AI ratings for a PDF and variable
+   */
+  async countAIRatingsForPDF(pdfId, variableId) {
+    const result = await this.get(`
+      SELECT COUNT(DISTINCT air.excerpt_id) as count
+      FROM ai_excerpt_ratings air
+      JOIN pdf_excerpts pe ON air.excerpt_id = pe.id
+      WHERE pe.pdf_id = ? AND air.variable_id = ?
+    `, [pdfId, variableId]);
+
+    return result ? result.count : 0;
+  }
+
+  /**
+   * Count how many excerpts have human ratings for a PDF and variable
+   */
+  async countHumanRatingsForPDF(pdfId, variableId) {
+    const result = await this.get(`
+      SELECT COUNT(DISTINCT er.excerpt_id) as count
+      FROM excerpt_ratings er
+      JOIN pdf_excerpts pe ON er.excerpt_id = pe.id
+      WHERE pe.pdf_id = ? AND er.variable_id = ?
+    `, [pdfId, variableId]);
+
+    return result ? result.count : 0;
+  }
+
   // ============================================
   // GLOBAL RATING VARIABLES METHODS
   // ============================================
